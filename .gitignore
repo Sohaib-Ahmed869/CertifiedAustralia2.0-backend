@@ -1,0 +1,8 @@
+.env
+.env.*
+keys/
+*.key
+*.pem
+service-account-key.json
+node_modules/
+certifiedaustraliaportal-bd53e53afe5f.json

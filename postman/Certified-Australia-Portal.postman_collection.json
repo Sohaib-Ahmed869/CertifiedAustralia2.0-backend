@@ -1,0 +1,388 @@
+{
+  "info": {
+    "_postman_id": "9f7d8e2f-0c45-4d55-9f07-111111111111",
+    "name": "Certified Australia Portal API",
+    "description": "Collection for exercising the Certified Australia backend: catalog, application, payment, and task flows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Get Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@certified.io\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Admin\",\n  \"lastName\": \"User\",\n  \"phone\": \"0400000000\",\n  \"role\": \"Admin\",\n  \"status\": \"active\",\n  \"emailVerified\": true,\n  \"mfaEnabled\": true,\n  \"portalAccess\": [\"admin\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            }
+          }
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        {
+          "name": "Create Industry",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Construction\",\n  \"description\": \"Building and construction related qualifications\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/industries",
+              "host": ["{{baseUrl}}"],
+              "path": ["industries"]
+            }
+          }
+        },
+        {
+          "name": "Create Qualification",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Certificate III in Carpentry\",\n  \"industryId\": \"{{industryId}}\",\n  \"caPrice\": 5000,\n  \"rtoCosts\": [\n    {\n      \"rtoName\": \"Brisbane Training Institute\",\n      \"rtoCost\": 1200\n    },\n    {\n      \"rtoName\": \"Sydney RTO Academy\",\n      \"rtoCost\": 1500\n    },\n    {\n      \"rtoName\": \"Melbourne Construction College\",\n      \"rtoCost\": 1100\n    }\n  ],\n  \"status\": \"active\",\n  \"enableUnitByUnitUpload\": false,\n  \"requiredDocuments\": [\n    \"Identity Verification\",\n    \"Work Experience Certificate\",\n    \"Educational Qualifications\",\n    \"Reference Letter\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/qualifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["qualifications"]
+            }
+          }
+        },
+        {
+          "name": "Create Checklist",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"qualificationId\": \"{{qualificationId}}\",\n  \"units\": [\n    {\"code\": \"CPCCWHS2001\", \"name\": \"Apply WHS requirements\", \"description\": \"Apply workplace health and safety\"},\n    {\"code\": \"CPCCCA3001\", \"name\": \"Carry out general demolition of minor building structures\", \"description\": \"General demolition tasks\"}\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/checklists",
+              "host": ["{{baseUrl}}"],
+              "path": ["checklists"]
+            }
+          }
+        },
+        {
+          "name": "Create Reference Letter Template",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"qualificationId\": \"{{qualificationId}}\",\n  \"fileName\": \"reference-letter-template.docx\",\n  \"fileType\": \"docx\",\n  \"googleDriveFileId\": \"drive-file-id-reference-template\",\n  \"googleDriveLink\": \"https://drive.google.com/file/d/drive-file-id-reference-template/view\",\n  \"version\": 1,\n  \"notes\": \"Reference letter template stored in Google Drive\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reference-letter-templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["reference-letter-templates"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Applications",
+      "item": [
+        {
+          "name": "Create Application",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"industryId\": \"{{industryId}}\",\n  \"qualificationId\": \"{{qualificationId}}\",\n  \"leadStatus\": \"new\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications"]
+            }
+          }
+        },
+        {
+          "name": "Assign Agent",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignedAgentId\": \"{{userId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/assign-agent",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "assign-agent"]
+            }
+          }
+        },
+        {
+          "name": "Assign RTO",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignedRTOId\": \"{{userId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/assign-rto",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "assign-rto"]
+            }
+          }
+        },
+        {
+          "name": "Create Screening Form",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"industryId\": \"{{industryId}}\",\n  \"qualificationId\": \"{{qualificationId}}\",\n  \"yearsOfExperience\": \"3-4 years\",\n  \"experienceLocation\": \"Australia\",\n  \"state\": \"NSW\",\n  \"hasFormalQualifications\": true,\n  \"formalQualifications\": [\"Certificate III in Business Administration\", \"Diploma of Management\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/screening",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "screening"]
+            }
+          }
+        },
+        {
+          "name": "Create Intake Form",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"middleName\": \"M\",\n  \"surname\": \"Doe\",\n  \"usi\": \"ABC12345678\",\n  \"gender\": \"Male\",\n  \"dateOfBirth\": \"1990-01-01\",\n  \"streetAddress\": \"123 Main Street\",\n  \"suburb\": \"Sydney\",\n  \"postcode\": \"2000\",\n  \"state\": \"NSW\",\n  \"phoneNumber\": \"+61400000000\",\n  \"email\": \"student@example.com\",\n  \"countryOfBirth\": \"Pakistan\",\n  \"englishLevel\": \"Fluent\",\n  \"isAustralianCitizen\": false,\n  \"isAboriginalOrTorresStrait\": false,\n  \"hasDisability\": false,\n  \"previousQualifications\": \"Bachelor of Science\",\n  \"employmentStatus\": \"Employed\",\n  \"businessName\": \"None\",\n  \"position\": \"Founder/ Owner\",\n  \"employerLegalName\": \"Registered business name\",\n  \"employerPhone\": \"(02) 1234 5678\",\n  \"employerAddress\": \"Askari 14\",\n  \"hasCreditToTransfer\": true,\n  \"creditQualificationName\": \"Diploma of Project Management\",\n  \"creditYearCompleted\": 2022\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/intake",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "intake"]
+            }
+          }
+        },
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"passport.pdf\",\n  \"fileType\": \"pdf\",\n  \"googleDriveFileId\": \"drive-file-id-passport\",\n  \"googleDriveLink\": \"https://drive.google.com/file/d/drive-file-id-passport/view\",\n  \"documentType\": \"Identity Verification\",\n  \"qualificationUnitCode\": \"\",\n  \"uploadedBy\": \"{{userId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "documents"]
+            }
+          }
+        },
+        {
+          "name": "Issue Certificate",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"issuedBy\": \"{{userId}}\",\n  \"certificateLink\": \"https://drive.google.com/file/d/certificate-drive-id/view\",\n  \"googleDriveFileId\": \"certificate-drive-id\",\n  \"trackingNumber\": \"AP123456789AU\",\n  \"trackingLink\": \"https://auspost.com.au/mypost/track/#/details/AP123456789AU\",\n  \"status\": \"issued\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/certificate",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "certificate"]
+            }
+          }
+        },
+        {
+          "name": "Add Note",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Application ready for review\",\n  \"addedBy\": \"{{userId}}\",\n  \"visibility\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{applicationId}}/notes",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "{{applicationId}}", "notes"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment Plan",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{applicationId}}\",\n  \"studentId\": \"{{studentId}}\",\n  \"totalAmount\": 5000,\n  \"discountApplied\": 0,\n  \"directDebitEnabled\": true,\n  \"directDebitAccountDetails\": {\n    \"accountHolderName\": \"John Doe\",\n    \"accountNumber\": \"12345678\",\n    \"bsb\": \"062000\"\n  },\n  \"installments\": [\n    {\"index\": 1, \"amount\": 1000, \"dueDate\": \"2026-05-01\"},\n    {\"index\": 2, \"amount\": 2000, \"dueDate\": \"2026-06-01\"},\n    {\"index\": 3, \"amount\": 2000, \"dueDate\": \"2026-07-01\"}\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/plans",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "plans"]
+            }
+          }
+        },
+        {
+          "name": "Apply Plan Payment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1000,\n  \"type\": \"plan\",\n  \"paymentMethod\": \"manual\",\n  \"manualPaymentReference\": \"{{manualPaymentReference}}\",\n  \"manualPaymentReason\": \"{{manualPaymentReason}}\",\n  \"notes\": \"First installment paid manually\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/plans/{{paymentPlanId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "plans", "{{paymentPlanId}}", "payments"]
+            }
+          }
+        },
+        {
+          "name": "Create Square Payment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{applicationId}}\",\n  \"studentId\": \"{{studentId}}\",\n  \"amount\": 3500,\n  \"type\": \"upfront\",\n  \"paymentMethod\": \"square\",\n  \"squareSourceId\": \"{{squareSourceId}}\",\n  \"notes\": \"Upfront payment using Square sandbox\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            }
+          }
+        },
+        {
+          "name": "Create Manual Payment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{applicationId}}\",\n  \"studentId\": \"{{studentId}}\",\n  \"amount\": 500,\n  \"type\": \"manualMarkPaid\",\n  \"paymentMethod\": \"manual\",\n  \"manualPaymentReference\": \"{{manualPaymentReference}}\",\n  \"manualPaymentReason\": \"{{manualPaymentReason}}\",\n  \"notes\": \"Manual part payment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            }
+          }
+        },
+        {
+          "name": "Create Refund",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{applicationId}}\",\n  \"studentId\": \"{{studentId}}\",\n  \"amount\": 200,\n  \"type\": \"refund\",\n  \"paymentMethod\": \"manual\",\n  \"manualPaymentReference\": \"REFUND-001\",\n  \"manualPaymentReason\": \"Partial refund\",\n  \"notes\": \"Refund against original payment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "Create General Task",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scopeType\": \"general\",\n  \"title\": \"Follow up with supplier\",\n  \"description\": \"Call the supplier about missing paperwork\",\n  \"priority\": \"medium\",\n  \"assignedTo\": \"{{userId}}\",\n  \"createdBy\": \"{{userId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks"]
+            }
+          }
+        },
+        {
+          "name": "List Tasks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tasks?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

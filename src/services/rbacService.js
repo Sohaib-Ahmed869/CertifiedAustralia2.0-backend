@@ -1,0 +1,86 @@
+const User = require('../models/User');
+const AppError = require('../utils/AppError');
+const {
+  ROLE_DEFAULTS,
+  PERMISSION_KEYS,
+  getEffectivePermissions,
+  validatePermissionKeys,
+} = require('../config/permissions');
+
+const getDefaults = () => {
+  return { roles: ROLE_DEFAULTS, permissionKeys: PERMISSION_KEYS };
+};
+
+const getUserPermissions = async (userId) => {
+  const user = await User.findById(userId).select('role permissions permissionsUpdatedAt permissionsUpdatedBy');
+  if (!user) throw new AppError('User not found', 404);
+
+  const effective = getEffectivePermissions(user);
+
+  return {
+    permissions: effective,
+    role: user.role,
+    customOverrides: user.permissions instanceof Map
+      ? Object.fromEntries(user.permissions)
+      : (user.permissions || {}),
+    updatedAt: user.permissionsUpdatedAt,
+    updatedBy: user.permissionsUpdatedBy,
+  };
+};
+
+const updateUserPermissions = async (userId, permissions, updatedBy) => {
+  const user = await User.findById(userId);
+  if (!user) throw new AppError('User not found', 404);
+
+  // Validate permission keys
+  const invalid = validatePermissionKeys(permissions);
+  if (invalid.length > 0) {
+    throw new AppError(`Invalid permission keys: ${invalid.join(', ')}`, 400);
+  }
+
+  // Set per-user overrides
+  if (!user.permissions) {
+    user.permissions = new Map();
+  }
+
+  Object.entries(permissions).forEach(([key, value]) => {
+    if (value === null) {
+      // null means "reset to default" — remove the override
+      user.permissions.delete(key);
+    } else {
+      user.permissions.set(key, Boolean(value));
+    }
+  });
+
+  user.permissionsUpdatedAt = new Date();
+  user.permissionsUpdatedBy = updatedBy;
+  user.markModified('permissions');
+  await user.save({ validateBeforeSave: false });
+
+  const effective = getEffectivePermissions(user);
+
+  return {
+    permissions: effective,
+    role: user.role,
+    customOverrides: Object.fromEntries(user.permissions),
+    updatedAt: user.permissionsUpdatedAt,
+    updatedBy: user.permissionsUpdatedBy,
+  };
+};
+
+const pollPermissions = async (userId) => {
+  const user = await User.findById(userId)
+    .select('permissionsUpdatedAt')
+    .lean();
+
+  if (!user) throw new AppError('User not found', 404);
+
+  return { permissionsUpdatedAt: user.permissionsUpdatedAt || null };
+};
+
+module.exports = {
+  getDefaults,
+  getUserPermissions,
+  updateUserPermissions,
+  pollPermissions,
+};

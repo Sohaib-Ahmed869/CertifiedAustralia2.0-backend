@@ -1,0 +1,32 @@
+{
+  "name": "certified-australia-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Certified Australia portal backend API",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.1",
+    "googleapis": "^156.0.0",
+    "helmet": "^7.1.0",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.6.3",
+    "morgan": "^1.10.0",
+    "multer": "^2.1.1",
+    "nodemailer": "^8.0.10",
+    "speakeasy": "^2.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
