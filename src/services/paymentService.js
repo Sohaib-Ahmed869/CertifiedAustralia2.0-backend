@@ -5,6 +5,7 @@ const { createSquarePayment } = require('./squareService');
 const Payment = require('../models/Payment');
 const PaymentPlan = require('../models/PaymentPlan');
 const Application = require('../models/Application');
+const { tryAutoStartTimer } = require('./applicationService');
 
 const paymentCrud = buildCrud(Payment, {
   populate: ['applicationId', 'studentId', 'paymentPlanId', 'authorizedBy', 'approvedByMFA'],
@@ -117,6 +118,9 @@ const createPaymentRecord = async (data) => {
       }
 
       await application.save();
+
+      // Check if all 3 student obligations are met — auto-start 21-day timer
+      await tryAutoStartTimer(application._id);
     }
   }
 
@@ -159,6 +163,9 @@ const applyPaymentToPlan = async (paymentPlanId, data) => {
 
   await allocateToPlan(paymentPlan, payment._id, data.amount);
   await paymentPlan.save();
+
+  // Check if all 3 student obligations are met — auto-start 21-day timer
+  await tryAutoStartTimer(paymentPlan.applicationId);
 
   return {
     payment: await refreshPayment(payment._id),

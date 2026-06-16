@@ -23,6 +23,20 @@ const buildCrud = (Model, options = {}) => {
       delete filter.sort;
       delete filter.populate;
 
+      // Handle callAttempts filter (contactAttempts on Application model)
+      if (filter.callAttempts !== undefined) {
+        const val = filter.callAttempts;
+        delete filter.callAttempts;
+        if (val === '5+') {
+          filter.contactAttempts = { $gte: 5 };
+        } else {
+          filter.contactAttempts = Number(val);
+        }
+      }
+
+      // Strip state filter — not a direct field on Application (handled via ScreeningForm)
+      delete filter.state;
+
       // Handle text search — convert `search` param to a regex on name/email/title fields
       const searchTerm = filter.search;
       delete filter.search;

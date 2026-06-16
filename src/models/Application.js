@@ -36,6 +36,7 @@ const applicationSchema = new mongoose.Schema(
         'OnPlan',
         'IntakeComplete',
         'DocumentsSubmitted',
+        'StudentCompleted',
         'UnderAdminReview',
         'ResubmissionRequested',
         'Resubmitted',

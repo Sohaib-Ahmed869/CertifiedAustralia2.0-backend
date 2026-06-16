@@ -6,6 +6,45 @@ const IntakeForm = require('../models/IntakeForm');
 const ScreeningForm = require('../models/ScreeningForm');
 const Document = require('../models/Document');
 const Certificate = require('../models/Certificate');
+const Payment = require('../models/Payment');
+
+/**
+ * Auto-start the 21-day KPI timer when all 3 student obligations are met:
+ *   1. Payment received (at least one completed payment)
+ *   2. Intake form submitted
+ *   3. At least one document uploaded
+ *
+ * Skips if the timer has already been started.
+ */
+const tryAutoStartTimer = async (applicationId) => {
+  const app = await Application.findById(applicationId);
+  if (!app) return;
+
+  // Already started — don't restart
+  if (app.studentCompletionDate) return;
+
+  // Check condition 1: has completed payment
+  const hasPaid = app.paymentIds && app.paymentIds.length > 0
+    ? await Payment.exists({
+        _id: { $in: app.paymentIds },
+        status: 'completed',
+        type: { $in: ['upfront', 'plan', 'manualMarkPaid'] },
+      })
+    : false;
+  if (!hasPaid) return;
+
+  // Check condition 2: intake form submitted
+  if (!app.intakeFormId) return;
+
+  // Check condition 3: at least one document uploaded
+  if (!app.documentIds || app.documentIds.length === 0) return;
+
+  // All 3 conditions met — mark student as completed and start 21-day timer
+  app.status = 'StudentCompleted';
+  app.studentCompletionDate = new Date();
+  app.rtoCompletionDeadline = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
+  await app.save();
+};
 
 const applicationCrud = buildCrud(Application, {
   populate: [
@@ -134,6 +173,9 @@ const createIntakeForm = async (applicationId, data) => {
   }
   await application.save();
 
+  // Check if all 3 student obligations are met — auto-start 21-day timer
+  await tryAutoStartTimer(application._id);
+
   return intakeFormCrud.getById(intakeForm._id);
 };
 
@@ -174,6 +216,9 @@ const uploadDocument = async (applicationId, data) => {
   application.documentIds = application.documentIds || [];
   application.documentIds.push(document._id);
   await application.save();
+
+  // Check if all 3 student obligations are met — auto-start 21-day timer
+  await tryAutoStartTimer(application._id);
 
   return documentCrud.getById(document._id);
 };
@@ -586,7 +631,21 @@ const exportCsv = async (filters) => {
 };
 
 module.exports = {
-  applications: applicationCrud,
+  applications: {
+    ...applicationCrud,
+    // Override list to support state filter via ScreeningForm lookup
+    async list(query = {}) {
+      if (query.state) {
+        const stateVal = query.state;
+        delete query.state;
+        // Find screening forms for the given state
+        const screeningForms = await ScreeningForm.find({ state: stateVal }).select('applicationId').lean();
+        const appIds = screeningForms.map((sf) => sf.applicationId);
+        query._id = { $in: appIds };
+      }
+      return applicationCrud.list(query);
+    },
+  },
   intakeForms: intakeFormCrud,
   screeningForms: screeningFormCrud,
   documents: documentCrud,
@@ -604,4 +663,5 @@ module.exports = {
   updateTimer,
   getStats,
   exportCsv,
+  tryAutoStartTimer,
 };
