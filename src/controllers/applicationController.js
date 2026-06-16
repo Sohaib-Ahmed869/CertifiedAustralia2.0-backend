@@ -77,7 +77,7 @@ module.exports = {
   }),
 
   getStats: asyncHandler(async (req, res) => {
-    const stats = await service.getStats();
+    const stats = await service.getStats(req.query);
     res.status(200).json({ stats });
   }),
 

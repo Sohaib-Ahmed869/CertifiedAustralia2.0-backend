@@ -21,6 +21,22 @@ const buildCrud = (Model, options = {}) => {
       delete filter.page;
       delete filter.limit;
       delete filter.sort;
+      delete filter.populate;
+
+      // Handle text search — convert `search` param to a regex on name/email/title fields
+      const searchTerm = filter.search;
+      delete filter.search;
+      if (searchTerm) {
+        const regex = { $regex: searchTerm, $options: 'i' };
+        filter.$or = [
+          { name: regex },
+          { title: regex },
+          { email: regex },
+          { firstName: regex },
+          { lastName: regex },
+          { applicationId: regex },
+        ];
+      }
 
       const mongoQuery = applyPopulate(Model.find(filter).sort(sort))
         .skip((page - 1) * limit)

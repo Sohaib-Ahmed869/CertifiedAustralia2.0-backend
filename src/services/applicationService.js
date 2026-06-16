@@ -264,21 +264,78 @@ const updateTimer = async (applicationId, timerData) => {
   return refreshApplication(application._id);
 };
 
-const getStats = async () => {
+const getStats = async (query = {}) => {
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [byStatus, byAgent, totalCount, unassignedCount, thisMonthCount, recentActivity] =
-    await Promise.all([
-      // Count by status
+  const User = require('../models/User');
+  const Certificate = require('../models/Certificate');
+
+  // Period filter — compute dateFrom based on preset
+  let periodFrom = null;
+  const period = query.period || 'all';
+  if (period === 'today') {
+    periodFrom = new Date(now); periodFrom.setHours(0, 0, 0, 0);
+  } else if (period === 'yesterday') {
+    periodFrom = new Date(now); periodFrom.setDate(periodFrom.getDate() - 1); periodFrom.setHours(0, 0, 0, 0);
+  } else if (period === 'this_week') {
+    periodFrom = new Date(now); periodFrom.setDate(periodFrom.getDate() - periodFrom.getDay() + 1); periodFrom.setHours(0, 0, 0, 0);
+  } else if (period === 'last_week') {
+    periodFrom = new Date(now); periodFrom.setDate(periodFrom.getDate() - periodFrom.getDay() - 6); periodFrom.setHours(0, 0, 0, 0);
+  } else if (period === 'last_30') {
+    periodFrom = new Date(now); periodFrom.setDate(periodFrom.getDate() - 29); periodFrom.setHours(0, 0, 0, 0);
+  } else if (period === 'custom' && query.from) {
+    periodFrom = new Date(query.from);
+  }
+  let periodTo = null;
+  if (period === 'yesterday') {
+    periodTo = new Date(now); periodTo.setHours(0, 0, 0, 0);
+  } else if (period === 'last_week') {
+    periodTo = new Date(now); periodTo.setDate(periodTo.getDate() - periodTo.getDay() + 1); periodTo.setHours(0, 0, 0, 0);
+  } else if (period === 'custom' && query.to) {
+    periodTo = new Date(query.to); periodTo.setDate(periodTo.getDate() + 1);
+  }
+
+  // Build match filter for period-scoped queries
+  const periodMatch = {};
+  if (periodFrom) periodMatch.createdAt = { $gte: periodFrom };
+  if (periodTo) periodMatch.createdAt = { ...periodMatch.createdAt, $lt: periodTo };
+
+  // 7-day window for daily chart (Mon–Sun current week)
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+
+  // 12-month window for trend chart
+  const twelveMonthsAgo = new Date(now);
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+  twelveMonthsAgo.setDate(1);
+  twelveMonthsAgo.setHours(0, 0, 0, 0);
+
+  const PAID_STATUSES = [
+    'Paid', 'OnPlan', 'IntakeComplete', 'DocumentsSubmitted',
+    'UnderAdminReview', 'ResubmissionRequested', 'Resubmitted',
+    'SentToRTO', 'UnderRTOReview', 'FeedbackRelayed',
+    'AwaitingRTOCompletion', 'RTOCompleted', 'RTOPaid',
+    'CertificateIssued', 'InDelivery', 'Delivered',
+  ];
+
+  const [
+    byStatus, byAgent, totalCount, unassignedCount,
+    thisMonthCount, recentActivity, dailyApps,
+    agentCount, certificateCount, studentCount,
+    topQualifications, byColor, monthlyTrend,
+  ] = await Promise.all([
+      // Count by status (period-filtered)
       Application.aggregate([
+        ...(Object.keys(periodMatch).length ? [{ $match: periodMatch }] : []),
         { $group: { _id: '$status', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
       ]),
 
-      // Count by agent (populated with agent name)
+      // Count by agent (period-filtered)
       Application.aggregate([
-        { $match: { assignedAgentId: { $ne: null } } },
+        { $match: { assignedAgentId: { $ne: null }, ...periodMatch } },
         { $group: { _id: '$assignedAgentId', count: { $sum: 1 } } },
         {
           $lookup: {
@@ -306,16 +363,11 @@ const getStats = async () => {
         { $sort: { count: -1 } },
       ]),
 
-      // Total count
-      Application.countDocuments(),
-
-      // Unassigned count
-      Application.countDocuments({ assignedAgentId: null }),
-
-      // This month count
+      Application.countDocuments(periodMatch),
+      Application.countDocuments({ assignedAgentId: null, ...periodMatch }),
       Application.countDocuments({ createdAt: { $gte: firstDayOfMonth } }),
 
-      // Recent activity (last 5 updated applications)
+      // Recent activity
       Application.find()
         .sort({ updatedAt: -1 })
         .limit(5)
@@ -323,13 +375,135 @@ const getStats = async () => {
         .populate('studentId', 'firstName lastName email')
         .populate('assignedAgentId', 'firstName lastName')
         .lean(),
+
+      // Daily application counts (last 14 days) — paid vs pending per day
+      Application.aggregate([
+        { $match: { createdAt: { $gte: sevenDaysAgo } } },
+        {
+          $group: {
+            _id: {
+              date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+              isPaid: { $cond: [{ $in: ['$status', PAID_STATUSES] }, true, false] },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { '_id.date': 1 } },
+      ]),
+
+      User.countDocuments({ role: 'Agent', status: 'active' }),
+      Certificate.countDocuments(),
+
+      // Unique student count
+      Application.distinct('studentId').then((ids) => ids.length),
+
+      // Top qualifications (top 8)
+      Application.aggregate([
+        { $group: { _id: '$qualificationId', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 8 },
+        {
+          $lookup: {
+            from: 'qualifications',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'qualification',
+          },
+        },
+        { $unwind: { path: '$qualification', preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            _id: 1,
+            count: 1,
+            name: { $ifNull: ['$qualification.name', 'Unknown'] },
+            code: { $ifNull: ['$qualification.code', ''] },
+          },
+        },
+      ]),
+
+      // Lead status color distribution
+      Application.aggregate([
+        { $group: { _id: { $ifNull: ['$color', ''] }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+
+      // Monthly application trend (last 12 months) — count + revenue
+      Application.aggregate([
+        { $match: { createdAt: { $gte: twelveMonthsAgo } } },
+        {
+          $group: {
+            _id: {
+              year: { $year: '$createdAt' },
+              month: { $month: '$createdAt' },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { '_id.year': 1, '_id.month': 1 } },
+      ]),
     ]);
+
+  // Build byStatus map
+  const byStatusMap = {};
+  byStatus.forEach((s) => { byStatusMap[s._id] = s.count; });
+
+  // Build daily data — fill all 14 days, include day-of-week label
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dailyData = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(sevenDaysAgo);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().split('T')[0];
+    const dayPaid = dailyApps.find((r) => r._id.date === dateStr && r._id.isPaid) || { count: 0 };
+    const dayPending = dailyApps.find((r) => r._id.date === dateStr && !r._id.isPaid) || { count: 0 };
+    dailyData.push({
+      date: dateStr,
+      day: DAYS[d.getDay()],
+      dayDate: `${d.getDate()} ${d.toLocaleString('en-AU', { month: 'short' })}`,
+      paid: dayPaid.count,
+      pending: dayPending.count,
+    });
+  }
+
+  // Build monthly trend data — fill all 12 months
+  const Payment = require('../models/Payment');
+  const monthlyRevenue = await Payment.aggregate([
+    { $match: { status: 'completed', createdAt: { $gte: twelveMonthsAgo } } },
+    {
+      $group: {
+        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+        revenue: { $sum: '$amount' },
+      },
+    },
+  ]);
+  const revenueMap = {};
+  monthlyRevenue.forEach((r) => {
+    revenueMap[`${r._id.year}-${r._id.month}`] = r.revenue;
+  });
+
+  const trendData = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(twelveMonthsAgo);
+    d.setMonth(d.getMonth() + i);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const mt = monthlyTrend.find((t) => t._id.year === y && t._id.month === m);
+    trendData.push({
+      year: y,
+      month: m,
+      label: d.toLocaleString('en-AU', { month: 'short' }),
+      applications: mt ? mt.count : 0,
+      revenue: revenueMap[`${y}-${m}`] || 0,
+    });
+  }
 
   return {
     total: totalCount,
     unassigned: unassignedCount,
     thisMonth: thisMonthCount,
+    studentCount,
     byStatus: byStatus.map((s) => ({ status: s._id, count: s.count })),
+    byStatusMap,
     byAgent: byAgent.map((a) => ({
       agentId: a._id,
       agentName: a.agentName.trim(),
@@ -337,6 +511,16 @@ const getStats = async () => {
       count: a.count,
     })),
     recentActivity,
+    dailyData,
+    trendData,
+    topQualifications: topQualifications.map((q) => ({
+      name: q.name,
+      code: q.code,
+      count: q.count,
+    })),
+    colorDistribution: byColor.map((c) => ({ color: c._id || '', count: c.count })),
+    agentCount,
+    certificateCount,
   };
 };
 

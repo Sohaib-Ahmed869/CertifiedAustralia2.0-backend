@@ -315,9 +315,27 @@ const getStats = async () => {
   const overdueData = overdueInstallments[0] || { count: 0, totalOutstanding: 0 };
   const rtoData = rtoPayables[0] || { total: 0, count: 0 };
 
+  // Payment plan totals
+  const [planTotals] = await Promise.all([
+    PaymentPlan.aggregate([
+      {
+        $group: {
+          _id: null,
+          planTotal: { $sum: '$totalAmount' },
+          planPaid: { $sum: '$totalPaidAmount' },
+          planCount: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+
+  const planData = planTotals[0] || { planTotal: 0, planPaid: 0, planCount: 0 };
+
   return {
     totalRevenue: (statusMap.completed || { total: 0 }).total,
     outstandingBalance: (statusMap.pending || { total: 0 }).total,
+    completedCount: (statusMap.completed || { count: 0 }).count,
+    pendingCount: (statusMap.pending || { count: 0 }).count,
     revenueByType: revenueByType.map((r) => ({
       type: r._id,
       total: r.total,
@@ -331,6 +349,9 @@ const getStats = async () => {
     overdueOutstanding: overdueData.totalOutstanding,
     rtoPayables: rtoData.total,
     rtoPayablesCount: rtoData.count,
+    planTotal: planData.planTotal,
+    planOutstanding: planData.planTotal - planData.planPaid,
+    planCount: planData.planCount,
   };
 };
 

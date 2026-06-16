@@ -9,6 +9,11 @@ const rbacRoutes = require('./rbacRoutes');
 const ticketRoutes = require('./ticketRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const emailTemplateRoutes = require('./emailTemplateRoutes');
+const ceoDashboardRoutes = require('./ceoDashboardRoutes');
+const dynamicFormRoutes = require('./dynamicFormRoutes');
+const schedulerRoutes = require('./schedulerRoutes');
+const agentTargetRoutes = require('./agentTargetRoutes');
+const calendarRoutes = require('./calendarRoutes');
 const applicationController = require('../controllers/applicationController');
 
 const router = express.Router();
@@ -23,6 +28,11 @@ router.use('/rbac', rbacRoutes);
 router.use('/tickets', ticketRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/email-templates', emailTemplateRoutes);
+router.use('/ceo-dashboard', ceoDashboardRoutes);
+router.use('/dynamic-forms', dynamicFormRoutes);
+router.use('/scheduler', schedulerRoutes);
+router.use('/agent-targets', agentTargetRoutes);
+router.use('/calendar', calendarRoutes);
 
 // Standalone intake form access (read-only)
 router.get('/intake-forms/:id', applicationController.intakeForms.getById);

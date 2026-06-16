@@ -40,6 +40,22 @@ const taskSchema = new mongoose.Schema(
     },
     dueDate: Date,
     completedAt: Date,
+    checklist: [
+      {
+        text: { type: String, required: true },
+        completed: { type: Boolean, default: false },
+        _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
+      },
+    ],
+    comments: [
+      {
+        text: { type: String, required: true },
+        author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        authorName: String,
+        createdAt: { type: Date, default: Date.now },
+        _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
+      },
+    ],
     createdAt: {
       type: Date,
       default: Date.now,
