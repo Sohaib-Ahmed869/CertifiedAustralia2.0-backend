@@ -36,8 +36,10 @@ const markAllRead = async (userId) => {
   return { message: 'All notifications marked as read' };
 };
 
-const getUnreadCount = async (userId) => {
-  const count = await Notification.countDocuments({ userId, read: false });
+const getUnreadCount = async (userId, typeFilter) => {
+  const query = { userId, read: false };
+  if (typeFilter) query.type = { $in: typeFilter };
+  const count = await Notification.countDocuments(query);
   return { count };
 };
 

@@ -1,7 +1,7 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mongoose = require('mongoose');
-const Industry = require('./models/Industry');
-const Qualification = require('./models/Qualification');
+const Industry = require('../src/models/Industry');
+const Qualification = require('../src/models/Qualification');
 const seedData = require('./seed-data.json');
 
 async function seed() {

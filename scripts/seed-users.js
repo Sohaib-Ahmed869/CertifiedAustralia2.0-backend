@@ -1,7 +1,7 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mongoose = require('mongoose');
 const speakeasy = require('speakeasy');
-const User = require('./models/User');
+const User = require('../src/models/User');
 
 const users = [
   {
