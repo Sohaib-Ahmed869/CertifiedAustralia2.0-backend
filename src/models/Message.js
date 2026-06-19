@@ -42,8 +42,13 @@ const messageSchema = new mongoose.Schema(
 
     attachments: [attachmentSchema],
 
-    // @mentions
+    // @mentions (individual users)
     mentions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    // Special mentions (@all, @here)
+    specialMentions: {
+      all: { type: Boolean, default: false },
+      here: { type: Boolean, default: false },
+    },
 
     // Emoji reactions
     reactions: [reactionSchema],

@@ -171,4 +171,26 @@ module.exports = {
     const result = await chatService.getThreadCounts(req.params.id);
     res.json(result);
   }),
+
+  // ── Files, Links, Mentions, Favourites ──
+
+  getChannelFiles: asyncHandler(async (req, res) => {
+    const items = await chatService.getChannelFiles(req.params.id, req.user._id);
+    res.json({ items });
+  }),
+
+  getChannelLinks: asyncHandler(async (req, res) => {
+    const items = await chatService.getChannelLinks(req.params.id, req.user._id);
+    res.json({ items });
+  }),
+
+  getUserMentions: asyncHandler(async (req, res) => {
+    const items = await chatService.getUserMentions(req.user._id);
+    res.json({ items });
+  }),
+
+  getFavourites: asyncHandler(async (req, res) => {
+    const items = await chatService.getFavourites(req.user._id);
+    res.json({ items });
+  }),
 };

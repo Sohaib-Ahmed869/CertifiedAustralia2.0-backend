@@ -4,11 +4,11 @@ const service = require('../services/notificationService');
 
 const notifications = createCrudController(service.notifications);
 
-// Notification types each role should see
+// Notification types each role should see (Admin/CEO see all — no entry needed)
 const ROLE_NOTIFICATION_TYPES = {
-  InternalRTO: ['application_assigned', 'status_changed', 'feedback_received', 'document_reviewed'],
+  InternalRTO: ['application_assigned', 'status_changed', 'feedback_received', 'document_reviewed', 'general'],
   Support: ['ticket_update', 'general'],
-  Agent: ['application_assigned', 'status_changed', 'payment_received', 'general'],
+  Agent: ['application_assigned', 'status_changed', 'payment_received', 'permission_changed', 'chat_message', 'chat_mention', 'general'],
 };
 
 module.exports = {

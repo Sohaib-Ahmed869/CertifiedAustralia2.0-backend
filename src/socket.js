@@ -75,6 +75,7 @@ const setupSocket = (httpServer) => {
           type: data.type || 'text',
           attachments: data.attachments || [],
           mentions: data.mentions || [],
+          specialMentions: data.specialMentions || {},
           replyTo: data.replyTo,
         });
 
@@ -83,13 +84,17 @@ const setupSocket = (httpServer) => {
           conversationId: data.conversationId,
         });
 
-        // Push unread updates to other participants (skip muted)
+        // Push unread updates + notifications
         const conv = await require('./models/Conversation').findById(data.conversationId).lean();
         if (conv) {
+          const { notifyConversationParticipants, notifyMany } = require('./services/notificationService');
+          const contentPreview = (data.content || '').replace(/<[^>]*>/g, '').slice(0, 80);
+          const isDm = conv.type === 'dm';
+
+          // Push unread socket events
           for (const p of conv.participants) {
             const pId = String(p.userId);
             if (pId === userId) continue;
-            // Skip unread push if user has muted this conversation
             const muted = p.mutedUntil && new Date(p.mutedUntil) > new Date();
             if (muted) continue;
             const unread = await chatService.getUnreadTotal(pId);
@@ -97,6 +102,40 @@ const setupSocket = (httpServer) => {
               conversationId: data.conversationId,
               totalUnread: unread.count,
             });
+          }
+
+          // Notify all participants (respects mute)
+          await notifyConversationParticipants(conv, userId, {
+            type: 'chat_message',
+            title: isDm ? userName : `#${conv.name || 'Channel'}`,
+            message: contentPreview || '📎 Sent a file',
+            link: `/admin/chat?conversation=${data.conversationId}`,
+            relatedId: message._id,
+          });
+
+          // Mention notifications (@all, @here, individual)
+          const mentionedIds = [];
+          if (data.specialMentions?.all) {
+            conv.participants.forEach((p) => mentionedIds.push(String(p.userId)));
+          }
+          if (data.specialMentions?.here) {
+            const onlinePresences = await ChatPresence.find({ status: 'online' }).lean();
+            const onlineIds = new Set(onlinePresences.map((pr) => String(pr.userId)));
+            conv.participants.forEach((p) => {
+              if (onlineIds.has(String(p.userId))) mentionedIds.push(String(p.userId));
+            });
+          }
+          if (data.mentions?.length) {
+            data.mentions.forEach((mId) => mentionedIds.push(String(mId)));
+          }
+          if (mentionedIds.length > 0) {
+            await notifyMany(mentionedIds, {
+              type: 'chat_mention',
+              title: `${userName} mentioned you`,
+              message: contentPreview,
+              link: `/admin/chat?conversation=${data.conversationId}&message=${message._id}`,
+              relatedId: message._id,
+            }, userId);
           }
         }
       } catch (err) {

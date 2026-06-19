@@ -37,6 +37,8 @@ router.patch('/conversations/:id/label', controller.setLabel);
 router.delete('/conversations/:id/label', controller.removeLabel);
 router.patch('/conversations/:id/rename', controller.renameChannel);
 router.get('/conversations/:id/pinned', controller.getPinnedMessages);
+router.get('/conversations/:id/files', controller.getChannelFiles);
+router.get('/conversations/:id/links', controller.getChannelLinks);
 
 // ── Messages ──
 router.get('/conversations/:id/messages', controller.getMessages);
@@ -53,5 +55,9 @@ router.patch('/messages/:id/pin', controller.toggleMessagePin);
 router.post('/messages/:id/forward', controller.forwardMessage);
 router.get('/messages/:id/thread', controller.getThreadReplies);
 router.get('/conversations/:id/thread-counts', controller.getThreadCounts);
+
+// Mentions & Favourites (before /:id params)
+router.get('/mentions', controller.getUserMentions);
+router.get('/favourites', controller.getFavourites);
 
 module.exports = router;

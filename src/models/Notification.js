@@ -20,6 +20,8 @@ const notificationSchema = new mongoose.Schema(
         'payment_received',
         'permission_changed',
         'certificate_issued',
+        'chat_mention',
+        'chat_message',
         'general',
       ],
       default: 'general',

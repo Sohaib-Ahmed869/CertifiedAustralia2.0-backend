@@ -216,6 +216,7 @@ const sendMessage = async (conversationId, senderId, data) => {
     content: data.content || '',
     attachments: data.attachments || [],
     mentions: data.mentions || [],
+    specialMentions: data.specialMentions || {},
     replyTo: data.replyTo || undefined,
   });
 
@@ -538,6 +539,105 @@ const getThreadCounts = async (conversationId) => {
   return map;
 };
 
+// ── Channel files & links ──
+
+const getChannelFiles = async (conversationId, userId) => {
+  const conv = await Conversation.findById(conversationId).lean();
+  if (!conv) throw new AppError('Conversation not found', 404);
+  if (!conv.participants.some((p) => String(p.userId) === String(userId))) {
+    throw new AppError('Not a member', 403);
+  }
+
+  const messages = await Message.find({
+    conversationId,
+    'attachments.0': { $exists: true },
+    deleted: { $ne: true },
+  })
+    .populate('senderId', 'firstName lastName')
+    .select('attachments senderId createdAt')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const files = [];
+  for (const msg of messages) {
+    for (const att of msg.attachments) {
+      files.push({
+        ...att,
+        uploadedBy: msg.senderId ? `${msg.senderId.firstName || ''} ${msg.senderId.lastName || ''}`.trim() : '',
+        uploadedAt: msg.createdAt,
+        messageId: msg._id,
+      });
+    }
+  }
+  return files;
+};
+
+const getChannelLinks = async (conversationId, userId) => {
+  const conv = await Conversation.findById(conversationId).lean();
+  if (!conv) throw new AppError('Conversation not found', 404);
+  if (!conv.participants.some((p) => String(p.userId) === String(userId))) {
+    throw new AppError('Not a member', 403);
+  }
+
+  const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
+  const messages = await Message.find({
+    conversationId,
+    content: { $regex: 'https?://' },
+    deleted: { $ne: true },
+  })
+    .populate('senderId', 'firstName lastName')
+    .select('content senderId createdAt')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const links = [];
+  for (const msg of messages) {
+    const matches = msg.content.match(urlRegex) || [];
+    for (const url of matches) {
+      links.push({
+        url,
+        sharedBy: msg.senderId ? `${msg.senderId.firstName || ''} ${msg.senderId.lastName || ''}`.trim() : '',
+        sharedAt: msg.createdAt,
+        messageId: msg._id,
+      });
+    }
+  }
+  return links;
+};
+
+// ── Mentions for current user ──
+
+const getUserMentions = async (userId) => {
+  return Message.find({
+    mentions: userId,
+    senderId: { $ne: userId },
+    deleted: { $ne: true },
+  })
+    .populate('senderId', 'firstName lastName email')
+    .populate('conversationId', 'type name')
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+};
+
+// ── Favourited conversations ──
+
+const getFavourites = async (userId) => {
+  const convos = await Conversation.find({
+    'participants.userId': userId,
+    'participants.favourited': true,
+    archived: { $ne: true },
+  })
+    .populate('participants.userId', 'firstName lastName email role')
+    .sort({ 'lastMessage.sentAt': -1 })
+    .lean();
+
+  // Filter to only return convos where THIS user's participant entry is favourited
+  return convos.filter((c) =>
+    c.participants.some((p) => String(p.userId?._id || p.userId) === String(userId) && p.favourited)
+  );
+};
+
 const isMuted = async (conversationId, userId) => {
   const conv = await Conversation.findById(conversationId).select('participants').lean();
   if (!conv) return false;
@@ -576,5 +676,9 @@ module.exports = {
   forwardMessage,
   getThreadReplies,
   getThreadCounts,
+  getChannelFiles,
+  getChannelLinks,
+  getUserMentions,
+  getFavourites,
   isMuted,
 };
