@@ -1,7 +1,12 @@
+const fs = require('fs');
+const crypto = require('crypto');
 const { Parser } = require('json2csv');
 const asyncHandler = require('../utils/asyncHandler');
+const AppError = require('../utils/AppError');
 const createCrudController = require('./crudController');
 const service = require('../services/applicationService');
+const Application = require('../models/Application');
+const driveService = require('../services/googleDriveService');
 
 const applications = createCrudController(service.applications);
 const intakeForms = createCrudController(service.intakeForms);
@@ -30,6 +35,17 @@ module.exports = {
     const result = await service.assignRTO(req.params.id, req.body.assignedRTOId);
     res.status(200).json({ item: result });
   }),
+  sendToRTOPortal: asyncHandler(async (req, res) => {
+    const result = await service.sendToRTOPortal(req.params.id, req.body.rtoUserId);
+    res.status(200).json({ item: result });
+  }),
+  sendRTOSubmission: asyncHandler(async (req, res) => {
+    const result = await service.sendRTOSubmission(req.params.id, {
+      rtoEmail: req.body.rtoEmail,
+      rtoName: req.body.rtoName,
+    });
+    res.status(200).json({ item: result });
+  }),
   updateStatus: asyncHandler(async (req, res) => {
     const result = await service.updateStatus(req.params.id, req.body.status);
     res.status(200).json({ item: result });
@@ -54,8 +70,52 @@ module.exports = {
     const result = await service.uploadDocument(req.params.id, req.body);
     res.status(201).json({ item: result });
   }),
-  issueCertificate: asyncHandler(async (req, res) => {
-    const result = await service.issueCertificate(req.params.id, req.body);
+  uploadCertificate: asyncHandler(async (req, res) => {
+    const appId = req.params.id;
+
+    if (!req.file) throw new AppError('Certificate file is required', 400);
+
+    const application = await Application.findById(appId).populate('studentId');
+    if (!application) {
+      fs.unlink(req.file.path, () => {});
+      throw new AppError('Application not found', 404);
+    }
+
+    // Ensure Google Drive folder exists
+    let folderId = application.googleDriveFolderId;
+    if (!folderId) {
+      const s = application.studentId;
+      const studentName = s ? `${s.firstName || ''} ${s.lastName || ''}`.trim() : '';
+      const folder = await driveService.createApplicationFolder({
+        applicationId: application.applicationId,
+        studentName,
+      });
+      folderId = folder.id;
+      application.googleDriveFolderId = folderId;
+      await application.save();
+    }
+
+    // Upload to Google Drive
+    const driveName = `Certificate_${crypto.randomUUID()}_${req.file.originalname}`;
+    const driveFile = await driveService.uploadFileFromDisk({
+      filePath: req.file.path,
+      fileName: driveName,
+      mimeType: req.file.mimetype,
+      folderId,
+    });
+
+    // Cleanup temp file
+    fs.unlink(req.file.path, () => {});
+
+    const certData = {
+      certificateLink: driveFile.webViewLink,
+      googleDriveFileId: driveFile.id,
+      issuedBy: req.user._id,
+      trackingNumber: req.body.trackingId || null,
+      trackingLink: req.body.trackingLink || null,
+    };
+
+    const result = await service.issueCertificate(appId, certData);
     res.status(201).json({ item: result });
   }),
   addNote: asyncHandler(async (req, res) => {

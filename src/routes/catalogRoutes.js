@@ -1,5 +1,6 @@
 const express = require('express');
 const controller = require('../controllers/catalogController');
+const upload = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -21,6 +22,10 @@ router.route('/qualifications/:id')
   .patch(controller.updateQualification)
   .delete(controller.deleteQualification);
 
+// Custom checklist endpoints — declared before /:id to avoid param collision
+router.get('/checklists/by-qualification/:qualificationId', controller.getChecklistByQualification);
+router.put('/checklists/by-qualification/:qualificationId', controller.upsertChecklist);
+
 router.route('/checklists')
   .get(controller.checklists.list)
   .post(controller.createChecklist);
@@ -29,6 +34,10 @@ router.route('/checklists/:id')
   .get(controller.checklists.getById)
   .patch(controller.updateChecklist)
   .delete(controller.deleteChecklist);
+
+// Custom reference letter template endpoints — declared before /:id
+router.get('/reference-letter-templates/by-qualification/:qualificationId', controller.getTemplateByQualification);
+router.post('/reference-letter-templates/upload', upload.single('file'), controller.uploadTemplate);
 
 router.route('/reference-letter-templates')
   .get(controller.referenceLetterTemplates.list)

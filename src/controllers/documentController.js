@@ -5,6 +5,8 @@ const AppError = require('../utils/AppError');
 const Application = require('../models/Application');
 const Document = require('../models/Document');
 const driveService = require('../services/googleDriveService');
+const { tryAutoStartTimer } = require('../services/applicationService');
+const { autoResolveOnReupload } = require('../services/documentFeedbackService');
 
 const ALLOWED_MIME = new Set([
   'image/jpeg', 'image/png', 'image/heic', 'image/heif',
@@ -129,6 +131,14 @@ const uploadSingle = asyncHandler(async (req, res) => {
     await application.save();
   }
 
+  // Check if all 3 student obligations are met — auto-start 21-day timer
+  await tryAutoStartTimer(appId);
+
+  // Auto-resolve any active feedback on this document field
+  if (fieldName) {
+    try { await autoResolveOnReupload(appId, fieldName); } catch {}
+  }
+
   res.status(201).json({
     item: document,
     fileUrl: driveFile.webViewLink,
@@ -192,6 +202,11 @@ const uploadMultiple = asyncHandler(async (req, res) => {
   }
 
   await application.save();
+
+  // Check if all 3 student obligations are met — auto-start 21-day timer
+  if (results.length > 0) {
+    await tryAutoStartTimer(appId);
+  }
 
   res.status(201).json({ items: results });
 });

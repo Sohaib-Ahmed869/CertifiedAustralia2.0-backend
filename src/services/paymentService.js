@@ -39,7 +39,7 @@ const createPaymentPlan = async (data) => {
   });
 
   application.paymentPlanId = paymentPlan._id;
-  application.status = 'OnPlan';
+  application.status = 'StudentIntakeForm';
   await application.save();
 
   return refreshPlan(paymentPlan._id);
@@ -114,7 +114,7 @@ const createPaymentRecord = async (data) => {
       application.paymentIds.push(payment._id);
 
       if (payment.type === 'upfront' || payment.type === 'manualMarkPaid') {
-        application.status = 'Paid';
+        application.status = 'StudentIntakeForm';
       }
 
       await application.save();
@@ -166,6 +166,23 @@ const applyPaymentToPlan = async (paymentPlanId, data) => {
 
   // Check if all 3 student obligations are met — auto-start 21-day timer
   await tryAutoStartTimer(paymentPlan.applicationId);
+
+  // Notify student of payment received (non-fatal)
+  if (payment.status === 'completed' && paymentPlan.studentId) {
+    try {
+      const { createNotification } = require('./notificationService');
+      await createNotification({
+        userId: paymentPlan.studentId,
+        type: 'payment_received',
+        title: 'Payment Received',
+        message: `Your payment of $${Number(data.amount).toLocaleString('en-AU', { minimumFractionDigits: 2 })} has been received.`,
+        link: '/student/payments',
+        relatedId: paymentPlan.applicationId,
+      });
+    } catch (err) {
+      console.error('[PaymentService] Failed to create notification:', err.message);
+    }
+  }
 
   return {
     payment: await refreshPayment(payment._id),

@@ -10,30 +10,21 @@ const marketingSpendCrud = buildCrud(MarketingSpend, {
 });
 
 const PAID_STATUSES = [
-  'Paid',
-  'OnPlan',
-  'IntakeComplete',
-  'DocumentsSubmitted',
-  'UnderAdminReview',
-  'ResubmissionRequested',
-  'Resubmitted',
+  'StudentIntakeForm',
+  'UploadDocuments',
+  'DocumentsUploaded',
+  'StudentCompleted',
   'SentToRTO',
-  'UnderRTOReview',
-  'FeedbackRelayed',
-  'AwaitingRTOCompletion',
-  'RTOCompleted',
-  'RTOPaid',
+  'WaitingForVerification',
+  'ReadyForRTOPayment',
+  'RTOInvoiceUploaded',
+  'CertificateGenerated',
   'CertificateIssued',
-  'InDelivery',
-  'Delivered',
 ];
 
 const COMPLETED_STATUSES = [
-  'RTOCompleted',
-  'RTOPaid',
+  'CertificateGenerated',
   'CertificateIssued',
-  'InDelivery',
-  'Delivered',
 ];
 
 const REVENUE_PAYMENT_TYPES = ['upfront', 'plan', 'manualMarkPaid'];
@@ -48,6 +39,43 @@ const COLOR_SOURCE_MAP = {
   green: 'Completed',
   turquoise: 'New Year',
   '': 'Direct',
+};
+
+/**
+ * Canonical marketing source platforms (matches ?source= query param keys).
+ */
+const SOURCE_PLATFORMS = [
+  { key: 'tiktok',   name: 'TikTok' },
+  { key: 'meta',     name: 'Meta Paid' },
+  { key: 'meta_ads', name: 'Meta Ads' },
+  { key: 'linkedin', name: 'LinkedIn' },
+  { key: 'google',   name: 'Google' },
+  { key: 'print',    name: 'Print / QR' },
+  { key: 'mainline', name: 'Mainline' },
+  { key: 'vip',      name: 'VIP Line' },
+  { key: 'gabby',    name: "Gabby's Line" },
+  { key: 'rsg',      name: 'Rehman Sheriff Group' },
+];
+
+/**
+ * Map legacy MarketingSpend platform keys to canonical source keys.
+ * Allows spend logged under either the old or new key to be attributed correctly.
+ */
+const SPEND_KEY_TO_SOURCE = {
+  tiktok: 'tiktok',
+  meta: 'meta',
+  meta_paid: 'meta',
+  meta_ads: 'meta_ads',
+  linkedin: 'linkedin',
+  google: 'google',
+  print: 'print',
+  print_qr: 'print',
+  mainline: 'mainline',
+  vip: 'vip',
+  vip_line: 'vip',
+  gabby: 'gabby',
+  gabby_line: 'gabby',
+  rsg: 'rsg',
 };
 
 /**
@@ -705,12 +733,17 @@ async function getAgentPerformance(query = {}) {
 
 /**
  * CEO Dashboard Marketing
+ *
+ * Aggregates lead, paid, and revenue data by the student's actual
+ * marketing source (Student.sourceAttribution.source) rather than the
+ * Application.color field which is an unrelated lead-categorization flag.
  */
 async function getMarketing(query = {}) {
   const dateFrom = getDateFrom(query.period);
+  const appFilter = dateFilter(dateFrom);
   const spendFilter = dateFrom ? { weekOf: { $gte: dateFrom } } : {};
 
-  // Total spend
+  // ── 1. Aggregate MarketingSpend by platform, then normalise to source keys ──
   const spendAgg = await MarketingSpend.aggregate([
     { $match: spendFilter },
     {
@@ -720,15 +753,55 @@ async function getMarketing(query = {}) {
       },
     },
   ]);
-  const totalSpend = spendAgg.reduce((sum, s) => sum + s.spend, 0);
 
-  // Leads from ad sources (color-based)
-  const adColors = ['red', 'orange', 'turquoise'];
-  const appFilter = dateFilter(dateFrom);
-  const leadsFromAds = await Application.countDocuments({ ...appFilter, color: { $in: adColors } });
+  // Roll up spend into canonical source keys using SPEND_KEY_TO_SOURCE
+  const spendBySource = {};
+  spendAgg.forEach((s) => {
+    const sourceKey = SPEND_KEY_TO_SOURCE[s._id] || s._id;
+    spendBySource[sourceKey] = (spendBySource[sourceKey] || 0) + s.spend;
+  });
+  const totalSpend = Object.values(spendBySource).reduce((sum, v) => sum + v, 0);
 
-  // Revenue from ad sources
-  const adRevAgg = await Payment.aggregate([
+  // ── 2. Leads & paid count per source (Application → Student lookup) ──
+  const sourceKeys = SOURCE_PLATFORMS.map((p) => p.key);
+
+  const leadsAgg = await Application.aggregate([
+    { $match: appFilter },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'studentId',
+        foreignField: '_id',
+        as: 'student',
+      },
+    },
+    { $unwind: '$student' },
+    {
+      $addFields: {
+        marketingSource: { $ifNull: ['$student.sourceAttribution.source', 'direct'] },
+      },
+    },
+    { $match: { marketingSource: { $in: sourceKeys } } },
+    {
+      $group: {
+        _id: '$marketingSource',
+        leads: { $sum: 1 },
+        paid: {
+          $sum: { $cond: [{ $in: ['$status', PAID_STATUSES] }, 1, 0] },
+        },
+      },
+    },
+  ]);
+
+  const leadsMap = {};
+  const paidMap = {};
+  leadsAgg.forEach((r) => {
+    leadsMap[r._id] = r.leads;
+    paidMap[r._id] = r.paid;
+  });
+
+  // ── 3. Revenue per source (Payment → Application → Student) ──
+  const revenueAgg = await Payment.aggregate([
     {
       $match: {
         ...appFilter,
@@ -745,53 +818,79 @@ async function getMarketing(query = {}) {
       },
     },
     { $unwind: '$app' },
-    { $match: { 'app.color': { $in: adColors } } },
-    { $group: { _id: null, revenue: { $sum: '$amount' } } },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'app.studentId',
+        foreignField: '_id',
+        as: 'student',
+      },
+    },
+    { $unwind: '$student' },
+    {
+      $addFields: {
+        marketingSource: { $ifNull: ['$student.sourceAttribution.source', 'direct'] },
+      },
+    },
+    { $match: { marketingSource: { $in: sourceKeys } } },
+    {
+      $group: {
+        _id: '$marketingSource',
+        revenue: { $sum: '$amount' },
+      },
+    },
   ]);
-  const revenueFromAds = adRevAgg[0]?.revenue || 0;
-  const overallROAS = totalSpend > 0 ? Math.round((revenueFromAds / totalSpend) * 100) / 100 : 0;
 
-  // Platform-level cards
-  const platformLabels = {
-    tiktok: 'TikTok',
-    meta_organic: 'Meta Organic',
-    meta_ads: 'Meta Ads',
-    linkedin: 'LinkedIn',
-    google: 'Google',
-    print_qr: 'Print / QR',
-    mainline: 'Mainline',
-    vip_line: 'VIP Line',
-    gabby_line: 'Gabby Line',
-  };
-
-  const spendMap = {};
-  spendAgg.forEach((s) => {
-    spendMap[s._id] = s.spend;
+  const revenueMap = {};
+  revenueAgg.forEach((r) => {
+    revenueMap[r._id] = r.revenue;
   });
 
-  const platformCards = Object.keys(platformLabels).map((platform) => {
-    const spend = spendMap[platform] || 0;
-    return {
-      platform,
-      label: platformLabels[platform],
-      spend,
-      leads: 0,
-      paid: 0,
-      revenue: 0,
-      cpa: 0,
-    };
+  // ── 4. Build per-platform cards ──
+  const totalLeadsFromAds = Object.values(leadsMap).reduce((sum, v) => sum + v, 0);
+  const totalRevenueFromAds = Object.values(revenueMap).reduce((sum, v) => sum + v, 0);
+  const overallROAS = totalSpend > 0 ? Math.round((totalRevenueFromAds / totalSpend) * 100) / 100 : 0;
+
+  const platforms = SOURCE_PLATFORMS.map((p) => {
+    const spend = spendBySource[p.key] || 0;
+    const leads = leadsMap[p.key] || 0;
+    const paid = paidMap[p.key] || 0;
+    const revenue = revenueMap[p.key] || 0;
+    const cpa = paid > 0 ? Math.round(spend / paid) : 0;
+    const roas = spend > 0 ? Math.round((revenue / spend) * 100) / 100 : 0;
+    return { ...p, spend, leads, paid, revenue, cpa, roas };
   });
 
-  // CPA breakdown mirrors platformCards with additional fields
-  const cpaBreakdown = platformCards.map((pc) => ({
+  // CPA breakdown with additional CPA-per-lead
+  const cpaBreakdown = platforms.map((pc) => ({
     ...pc,
+    platform: pc.key,
+    label: pc.name,
     cpaLead: pc.leads > 0 ? Math.round(pc.spend / pc.leads) : 0,
-    cpaConverted: pc.paid > 0 ? Math.round(pc.spend / pc.paid) : 0,
-    roas: pc.spend > 0 ? Math.round((pc.revenue / pc.spend) * 100) / 100 : 0,
+    cpaConverted: pc.cpa,
+  }));
+
+  // platformCards for backward compatibility with frontend
+  const platformCards = platforms.map((pc) => ({
+    platform: pc.key,
+    label: pc.name,
+    spend: pc.spend,
+    leads: pc.leads,
+    paid: pc.paid,
+    revenue: pc.revenue,
+    cpa: pc.cpa,
   }));
 
   return {
-    stats: { totalSpend, leadsFromAds, revenueFromAds, overallROAS },
+    stats: {
+      totalSpend,
+      totalLeadsFromAds,
+      totalRevenueFromAds,
+      overallROAS,
+      // Keep legacy field names so old frontend code doesn't break
+      leadsFromAds: totalLeadsFromAds,
+      revenueFromAds: totalRevenueFromAds,
+    },
     platformCards,
     cpaBreakdown,
   };

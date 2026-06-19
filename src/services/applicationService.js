@@ -99,7 +99,7 @@ const createApplication = async (data) => {
   const application = await Application.create({
     ...data,
     applicationId,
-    status: data.status || 'LeadCaptured',
+    status: data.status || 'New',
   });
 
   return refreshApplication(application._id);
@@ -108,7 +108,7 @@ const createApplication = async (data) => {
 const assignAgent = async (applicationId, assignedAgentId) => {
   const application = await Application.findByIdAndUpdate(
     applicationId,
-    { assignedAgentId, status: 'AgentAssigned' },
+    { assignedAgentId },
     { new: true, runValidators: true }
   )
     .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
@@ -116,15 +116,38 @@ const assignAgent = async (applicationId, assignedAgentId) => {
 
   if (!application) {
     throw new AppError('Application not found', 404);
+  }
+
+  // Notify assigned agent (non-fatal)
+  if (assignedAgentId) {
+    try {
+      const { createNotification } = require('./notificationService');
+      const student = application.studentId;
+      const studentName = student ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : 'a student';
+      await createNotification({
+        userId: assignedAgentId,
+        type: 'application_assigned',
+        title: 'New Application Assigned',
+        message: `You've been assigned to ${application.applicationId} for ${studentName}.`,
+        link: `/agent/applications`,
+        relatedId: application._id,
+      });
+    } catch (err) {
+      console.error('[AssignAgent] Failed to create notification:', err.message);
+    }
   }
 
   return application;
 };
 
 const assignRTO = async (applicationId, assignedRTOId) => {
+  const update = { assignedRTOId, rtoAssignmentDate: assignedRTOId ? new Date() : null };
+  if (!assignedRTOId) {
+    update.rtoAssignmentDate = null;
+  }
   const application = await Application.findByIdAndUpdate(
     applicationId,
-    { assignedRTOId, status: 'SentToRTO' },
+    update,
     { new: true, runValidators: true }
   )
     .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
@@ -134,13 +157,83 @@ const assignRTO = async (applicationId, assignedRTOId) => {
     throw new AppError('Application not found', 404);
   }
 
+  // Notify assigned RTO (non-fatal)
+  if (assignedRTOId) {
+    try {
+      const { createNotification } = require('./notificationService');
+      const student = application.studentId;
+      const studentName = student ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : 'a student';
+      await createNotification({
+        userId: assignedRTOId,
+        type: 'application_assigned',
+        title: 'Application Assigned for Review',
+        message: `You've been assigned to review ${application.applicationId} for ${studentName}.`,
+        link: `/rto/applications`,
+        relatedId: application._id,
+      });
+    } catch (err) {
+      console.error('[AssignRTO] Failed to create notification:', err.message);
+    }
+  }
+
+  return application;
+};
+
+const sendToRTOPortal = async (applicationId, rtoUserId) => {
+  const UserModel = require('../models/User');
+  const rtoUser = await UserModel.findById(rtoUserId).lean();
+  if (!rtoUser) throw new AppError('RTO user not found', 404);
+
+  const application = await Application.findByIdAndUpdate(
+    applicationId,
+    {
+      sentToRTOPortal: true,
+      sentToRTOPortalAt: new Date(),
+      portalRtoEmail: rtoUser.email,
+      portalRtoName: `${rtoUser.firstName || ''} ${rtoUser.lastName || ''}`.trim(),
+      status: 'SentToRTO',
+    },
+    { new: true, runValidators: true }
+  )
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .lean();
+
+  if (!application) throw new AppError('Application not found', 404);
+  return application;
+};
+
+const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
+  const application = await Application.findByIdAndUpdate(
+    applicationId,
+    {
+      sentToRTOEmail: true,
+      sentToRTOEmailAt: new Date(),
+      rtoSubmissionEmail: rtoEmail,
+      rtoSubmissionName: rtoName || rtoEmail,
+    },
+    { new: true, runValidators: true }
+  )
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .lean();
+
+  if (!application) throw new AppError('Application not found', 404);
+
+  // TODO: Integrate actual email sending (PDF generation + branded email) when email service is ready
   return application;
 };
 
 const updateStatus = async (applicationId, status) => {
+  const update = { status };
+
+  // Auto-pause the 21-day timer when RTO invoice is uploaded
+  if (status === 'RTOInvoiceUploaded') {
+    update.timerPausedAt = new Date();
+    update.timerPauseReason = 'RTO invoice uploaded';
+  }
+
   const application = await Application.findByIdAndUpdate(
     applicationId,
-    { status },
+    update,
     { new: true, runValidators: true }
   )
     .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
@@ -148,6 +241,46 @@ const updateStatus = async (applicationId, status) => {
 
   if (!application) {
     throw new AppError('Application not found', 404);
+  }
+
+  // Send notifications for key status changes (non-fatal)
+  try {
+    const { createNotification } = require('./notificationService');
+    const studentId = application.studentId?._id || application.studentId;
+    const rtoId = application.assignedRTOId?._id || application.assignedRTOId;
+    const statusLabel = status.replace(/([A-Z])/g, ' $1').trim();
+
+    // Notify student on important milestones
+    const studentStatuses = {
+      SentToRTO: 'Your application has been sent to the RTO for assessment.',
+      WaitingForVerification: 'Your application is being verified.',
+      CertificateGenerated: 'Great news — your certificate has been generated!',
+      StudentCompleted: 'Your student requirements are now complete.',
+    };
+    if (studentStatuses[status] && studentId) {
+      await createNotification({
+        userId: studentId,
+        type: 'status_changed',
+        title: `Status: ${statusLabel}`,
+        message: studentStatuses[status],
+        link: '/student/applications',
+        relatedId: application._id,
+      });
+    }
+
+    // Notify RTO when application is sent to them
+    if (status === 'SentToRTO' && rtoId) {
+      await createNotification({
+        userId: rtoId,
+        type: 'status_changed',
+        title: 'Application Ready for Review',
+        message: `${application.applicationId} has been sent to you for assessment.`,
+        link: '/rto/applications',
+        relatedId: application._id,
+      });
+    }
+  } catch (err) {
+    console.error('[UpdateStatus] Failed to create notification:', err.message);
   }
 
   return application;
@@ -169,7 +302,7 @@ const createIntakeForm = async (applicationId, data) => {
 
   application.intakeFormId = intakeForm._id;
   if (data.markSubmitted !== false) {
-    application.status = 'IntakeComplete';
+    application.status = 'UploadDocuments';
   }
   await application.save();
 
@@ -224,7 +357,7 @@ const uploadDocument = async (applicationId, data) => {
 };
 
 const issueCertificate = async (applicationId, data) => {
-  const application = await Application.findById(applicationId);
+  const application = await Application.findById(applicationId).populate('studentId');
 
   if (!application) {
     throw new AppError('Application not found', 404);
@@ -233,12 +366,62 @@ const issueCertificate = async (applicationId, data) => {
   const certificate = await Certificate.create({
     ...data,
     applicationId,
-    studentId: application.studentId,
+    studentId: application.studentId._id || application.studentId,
   });
 
   application.certificateId = certificate._id;
   application.status = 'CertificateIssued';
   await application.save();
+
+  // Send email notification (non-fatal)
+  try {
+    const student = application.studentId;
+    if (student?.email) {
+      const { sendTemplatedEmail } = require('./emailService');
+      const trackingHtml = data.trackingNumber
+        ? `<div style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:16px;margin:16px 0;">
+            <p style="margin:0 0 4px;font-weight:600;color:#065f46;">Certificate Tracking</p>
+            ${data.trackingNumber ? `<p style="margin:0;color:#047857;">Tracking ID: <strong>${data.trackingNumber}</strong></p>` : ''}
+            ${data.trackingLink ? `<p style="margin:4px 0 0;"><a href="${data.trackingLink}" style="color:#059669;text-decoration:underline;">Track your certificate &rarr;</a></p>` : ''}
+          </div>`
+        : '';
+
+      await sendTemplatedEmail({
+        to: student.email,
+        subject: 'Your Certificate is Ready — Certified Australia',
+        preheader: 'Congratulations! Your certificate has been issued.',
+        templateContent: `
+          <h2 style="margin:0 0 8px;">Congratulations! 🎉</h2>
+          <p>Hi ${student.firstName || 'there'},</p>
+          <p>Great news — your certificate has been issued and is ready for you! You can view and download it from your student portal.</p>
+          ${trackingHtml}
+          <p>If you have any questions, please don't hesitate to contact us.</p>
+        `,
+        ctaText: 'View Your Certificate',
+        ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/certificates`,
+      });
+    }
+  } catch (err) {
+    console.error('[CertificateService] Failed to send certificate email:', err.message);
+  }
+
+  // Create in-portal notification (non-fatal)
+  try {
+    const { createNotification } = require('./notificationService');
+    const studentId = application.studentId._id || application.studentId;
+    await createNotification({
+      userId: studentId,
+      type: 'certificate_issued',
+      title: 'Certificate Issued',
+      message: data.trackingNumber
+        ? `Your certificate is ready! Tracking ID: ${data.trackingNumber}`
+        : 'Your certificate has been issued and is ready for download.',
+      link: '/student/certificates',
+      relatedId: application._id,
+    });
+  } catch (err) {
+    console.error('[CertificateService] Failed to create notification:', err.message);
+  }
 
   return certificateCrud.getById(certificate._id);
 };
@@ -358,11 +541,10 @@ const getStats = async (query = {}) => {
   twelveMonthsAgo.setHours(0, 0, 0, 0);
 
   const PAID_STATUSES = [
-    'Paid', 'OnPlan', 'IntakeComplete', 'DocumentsSubmitted',
-    'UnderAdminReview', 'ResubmissionRequested', 'Resubmitted',
-    'SentToRTO', 'UnderRTOReview', 'FeedbackRelayed',
-    'AwaitingRTOCompletion', 'RTOCompleted', 'RTOPaid',
-    'CertificateIssued', 'InDelivery', 'Delivered',
+    'StudentIntakeForm', 'UploadDocuments', 'DocumentsUploaded',
+    'StudentCompleted', 'SentToRTO', 'WaitingForVerification',
+    'ReadyForRTOPayment', 'RTOInvoiceUploaded',
+    'CertificateGenerated', 'CertificateIssued',
   ];
 
   const [
@@ -653,6 +835,8 @@ module.exports = {
   createApplication,
   assignAgent,
   assignRTO,
+  sendToRTOPortal,
+  sendRTOSubmission,
   updateStatus,
   createIntakeForm,
   createScreeningForm,

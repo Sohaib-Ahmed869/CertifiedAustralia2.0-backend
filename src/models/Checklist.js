@@ -5,21 +5,31 @@ const checklistSchema = new mongoose.Schema(
     qualificationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Qualification',
-      required: true,
+    },
+    industryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Industry',
+    },
+    rawText: {
+      type: String,
+      default: '',
     },
     units: [
       {
-        code: {
+        unitCode: {
           type: String,
-          required: true,
+          default: '',
         },
-        name: {
+        unitTitle: {
           type: String,
-          required: true,
+          default: '',
         },
-        description: {
-          type: String,
-        },
+        evidenceItems: [
+          {
+            type: String,
+          },
+        ],
+        _id: false,
       },
     ],
     createdAt: {

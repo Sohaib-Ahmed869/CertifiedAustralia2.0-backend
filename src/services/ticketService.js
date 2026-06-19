@@ -71,6 +71,34 @@ const addMessage = async (ticketId, messageData) => {
 
   await ticket.save();
 
+  // Notify the other party (non-fatal)
+  try {
+    const { createNotification } = require('./notificationService');
+    if (messageData.senderRole === 'requester' && ticket.assignedTo) {
+      // Student replied — notify support agent
+      await createNotification({
+        userId: ticket.assignedTo,
+        type: 'ticket_update',
+        title: 'New Ticket Reply',
+        message: `${ticket.ticketId}: The requester has replied.`,
+        link: `/support/tickets`,
+        relatedId: ticket._id,
+      });
+    } else if (messageData.senderRole !== 'requester' && ticket.requesterId && !messageData.isInternal) {
+      // Support replied — notify requester
+      await createNotification({
+        userId: ticket.requesterId,
+        type: 'ticket_update',
+        title: 'Support Response',
+        message: `You have a new response on ticket ${ticket.ticketId}.`,
+        link: `/student/support`,
+        relatedId: ticket._id,
+      });
+    }
+  } catch (err) {
+    console.error('[TicketService] Failed to create message notification:', err.message);
+  }
+
   return Ticket.findById(ticket._id)
     .populate('requesterId assignedTo applicationId')
     .lean();
@@ -97,6 +125,23 @@ const resolveTicket = async (ticketId, userId, finalMessage) => {
   }
 
   await ticket.save();
+
+  // Notify requester that ticket is resolved (non-fatal)
+  if (ticket.requesterId) {
+    try {
+      const { createNotification } = require('./notificationService');
+      await createNotification({
+        userId: ticket.requesterId,
+        type: 'ticket_update',
+        title: 'Ticket Resolved',
+        message: `Your ticket ${ticket.ticketId} has been resolved.`,
+        link: `/student/support`,
+        relatedId: ticket._id,
+      });
+    } catch (err) {
+      console.error('[TicketService] Failed to create resolve notification:', err.message);
+    }
+  }
 
   return Ticket.findById(ticket._id)
     .populate('requesterId assignedTo applicationId')

@@ -28,30 +28,21 @@ const applicationSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
-        'LeadCaptured',
-        'ApplicationCreated',
-        'AgentAssigned',
-        'InContact',
-        'Paid',
-        'OnPlan',
-        'IntakeComplete',
-        'DocumentsSubmitted',
+        'New',
+        'WaitingForPayment',
+        'StudentIntakeForm',
+        'UploadDocuments',
+        'DocumentsUploaded',
         'StudentCompleted',
-        'UnderAdminReview',
-        'ResubmissionRequested',
-        'Resubmitted',
         'SentToRTO',
-        'UnderRTOReview',
-        'FeedbackRelayed',
-        'AwaitingRTOCompletion',
-        'RTOCompleted',
-        'RTOPaid',
+        'WaitingForVerification',
+        'ReadyForRTOPayment',
+        'RTOInvoiceUploaded',
+        'CertificateGenerated',
         'CertificateIssued',
-        'InDelivery',
-        'Delivered',
         'Archived',
       ],
-      default: 'LeadCaptured',
+      default: 'New',
     },
     assignedAgentId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -60,6 +51,49 @@ const applicationSchema = new mongoose.Schema(
     assignedRTOId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+    },
+    rtoAssignmentDate: {
+      type: Date,
+    },
+    // RTO Portal visibility
+    sentToRTOPortal: {
+      type: Boolean,
+      default: false,
+    },
+    sentToRTOPortalAt: {
+      type: Date,
+    },
+    portalRtoEmail: {
+      type: String,
+    },
+    portalRtoName: {
+      type: String,
+    },
+    // RTO Email Submission
+    sentToRTOEmail: {
+      type: Boolean,
+      default: false,
+    },
+    sentToRTOEmailAt: {
+      type: Date,
+    },
+    rtoSubmissionEmail: {
+      type: String,
+    },
+    rtoSubmissionName: {
+      type: String,
+    },
+    closedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    // Single notepad field (rich text HTML)
+    note: {
+      type: String,
+      default: '',
+    },
+    noteUpdatedAt: {
+      type: Date,
     },
     // Financial references
     paymentIds: [

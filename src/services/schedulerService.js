@@ -380,9 +380,9 @@ const flagOverdueInstallments = async () => {
 // ---------------------------------------------------------------------------
 
 // Stale thresholds (days since last update with no progress)
-const STALE_LEAD_DAYS = 3; // LeadCaptured / ApplicationCreated with no contact
-const INCOMPLETE_INTAKE_DAYS = 7; // Paid/OnPlan but intake not complete
-const PENDING_DOCUMENTS_DAYS = 5; // IntakeComplete but documents not submitted
+const STALE_LEAD_DAYS = 3; // New applications with no contact
+const INCOMPLETE_INTAKE_DAYS = 7; // Paid but intake not complete
+const PENDING_DOCUMENTS_DAYS = 5; // Intake done but documents not submitted
 const FOLLOW_UP_REMINDER_HOURS = 1; // Remind agent 1 hour before scheduled follow-up
 
 /**
@@ -402,7 +402,7 @@ const sendApplicationReminders = async () => {
     staleLeadCutoff.setDate(staleLeadCutoff.getDate() - STALE_LEAD_DAYS);
 
     const staleLeads = await Application.find({
-      status: { $in: ['LeadCaptured', 'ApplicationCreated'] },
+      status: 'New',
       assignedAgentId: { $exists: true, $ne: null },
       contactAttempts: { $lt: 1 },
       updatedAt: { $lt: staleLeadCutoff },
@@ -435,7 +435,7 @@ const sendApplicationReminders = async () => {
     incompleteIntakeCutoff.setDate(incompleteIntakeCutoff.getDate() - INCOMPLETE_INTAKE_DAYS);
 
     const incompleteIntakes = await Application.find({
-      status: { $in: ['Paid', 'OnPlan'] },
+      status: 'StudentIntakeForm',
       intakeFormId: { $exists: false },
       updatedAt: { $lt: incompleteIntakeCutoff },
     })
@@ -478,7 +478,7 @@ const sendApplicationReminders = async () => {
     pendingDocsCutoff.setDate(pendingDocsCutoff.getDate() - PENDING_DOCUMENTS_DAYS);
 
     const pendingDocs = await Application.find({
-      status: 'IntakeComplete',
+      status: 'UploadDocuments',
       updatedAt: { $lt: pendingDocsCutoff },
     })
       .populate('studentId', 'firstName lastName email')
@@ -562,7 +562,7 @@ const sendApplicationReminders = async () => {
     resubCutoff.setDate(resubCutoff.getDate() - 3); // 3 days since resubmission request
 
     const resubApps = await Application.find({
-      status: 'ResubmissionRequested',
+      status: 'UploadDocuments',
       updatedAt: { $lt: resubCutoff },
     })
       .populate('studentId', 'firstName lastName email')

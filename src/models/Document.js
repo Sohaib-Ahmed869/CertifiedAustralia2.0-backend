@@ -60,6 +60,12 @@ const documentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    verifiedAt: Date,
+    feedback: String,
+    reviewStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected', 'changes_requested'],
+    },
     // Expiry for RTO access (30 days from upload)
     rtoAccessExpiresAt: Date,
     // ISO compliance baseline: audit trail

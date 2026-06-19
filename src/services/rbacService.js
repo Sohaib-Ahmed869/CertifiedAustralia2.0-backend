@@ -59,6 +59,26 @@ const updateUserPermissions = async (userId, permissions, updatedBy) => {
 
   const effective = getEffectivePermissions(user);
 
+  // Notify user of permission changes (non-fatal)
+  try {
+    const { createNotification } = require('./notificationService');
+    const granted = Object.entries(permissions).filter(([, v]) => v === true).map(([k]) => k);
+    const revoked = Object.entries(permissions).filter(([, v]) => v === false).map(([k]) => k);
+    const parts = [];
+    if (granted.length) parts.push(`Granted: ${granted.length} permission${granted.length > 1 ? 's' : ''}`);
+    if (revoked.length) parts.push(`Revoked: ${revoked.length} permission${revoked.length > 1 ? 's' : ''}`);
+    if (parts.length) {
+      await createNotification({
+        userId,
+        type: 'permission_changed',
+        title: 'Permissions Updated',
+        message: `Your access permissions have been updated. ${parts.join('. ')}.`,
+      });
+    }
+  } catch (err) {
+    console.error('[RBAC] Failed to create notification:', err.message);
+  }
+
   return {
     permissions: effective,
     role: user.role,

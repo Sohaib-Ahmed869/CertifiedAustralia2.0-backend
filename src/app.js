@@ -20,7 +20,7 @@ app.use(morgan('dev'));
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 500,
+    max: 2000,
   })
 );
 

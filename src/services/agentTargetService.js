@@ -20,11 +20,10 @@ const getMonthStart = (date = new Date()) => {
 };
 
 const PAID_STATUSES = [
-  'Paid', 'OnPlan', 'IntakeComplete', 'DocumentsSubmitted',
-  'UnderAdminReview', 'ResubmissionRequested', 'Resubmitted',
-  'SentToRTO', 'UnderRTOReview', 'FeedbackRelayed',
-  'AwaitingRTOCompletion', 'RTOCompleted', 'RTOPaid',
-  'CertificateIssued', 'InDelivery', 'Delivered',
+  'StudentIntakeForm', 'UploadDocuments', 'DocumentsUploaded',
+  'StudentCompleted', 'SentToRTO', 'WaitingForVerification',
+  'ReadyForRTOPayment', 'RTOInvoiceUploaded',
+  'CertificateGenerated', 'CertificateIssued',
 ];
 
 // ---------------------------------------------------------------------------

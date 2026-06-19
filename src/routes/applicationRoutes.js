@@ -20,6 +20,8 @@ router.route('/:id')
 
 router.patch('/:id/assign-agent', controller.assignAgent);
 router.patch('/:id/assign-rto', controller.assignRTO);
+router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);
+router.post('/:id/rto-submission', controller.sendRTOSubmission);
 router.patch('/:id/status', controller.updateStatus);
 router.post('/:id/notes', controller.addNote);
 
@@ -41,8 +43,7 @@ router.post('/:id/documents/upload', upload.single('file'), docController.upload
 router.post('/:id/documents/upload-multiple', upload.array('files', 20), docController.uploadMultiple);
 router.delete('/:id/documents/:docId', docController.deleteDocument);
 
-router.route('/:id/certificate')
-  .post(controller.issueCertificate);
+router.put('/:id/certificate', upload.single('certificate'), controller.uploadCertificate);
 
 // Document review (RTO/Admin feedback on individual documents)
 router.patch('/:id/documents/:docId/review', controller.reviewDocument);

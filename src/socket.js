@@ -1,0 +1,209 @@
+const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
+const User = require('./models/User');
+const ChatPresence = require('./models/ChatPresence');
+const chatService = require('./services/chatService');
+
+const CHAT_ROLES = ['Admin', 'CEOReportingManager', 'Agent'];
+const TYPING_TIMEOUT = 5000;
+
+let io;
+
+const setupSocket = (httpServer) => {
+  io = new Server(httpServer, {
+    cors: {
+      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      methods: ['GET', 'POST'],
+      credentials: true,
+    },
+    path: '/socket.io',
+  });
+
+  // ── Auth middleware ──
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error('Authentication required'));
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('-password').lean();
+      if (!user || user.status !== 'active') return next(new Error('Unauthorized'));
+      if (!CHAT_ROLES.includes(user.role)) return next(new Error('Chat not available for this role'));
+      socket.user = user;
+      next();
+    } catch {
+      next(new Error('Invalid token'));
+    }
+  });
+
+  // ── Connection handler ──
+  io.on('connection', async (socket) => {
+    const userId = String(socket.user._id);
+    const userName = `${socket.user.firstName || ''} ${socket.user.lastName || ''}`.trim();
+
+    console.log(`[Socket] ${userName} connected (${socket.id})`);
+
+    // Mark online
+    await ChatPresence.findOneAndUpdate(
+      { userId },
+      { status: 'online', lastSeenAt: new Date(), socketId: socket.id },
+      { upsert: true }
+    );
+
+    // Join personal room for targeted events
+    socket.join(`user:${userId}`);
+
+    // Broadcast presence
+    io.emit('presence:update', { userId, status: 'online' });
+
+    // Typing timeout map
+    const typingTimers = new Map();
+
+    // ── Join / Leave conversation rooms ──
+    socket.on('join:conversation', ({ conversationId }) => {
+      socket.join(`conv:${conversationId}`);
+    });
+
+    socket.on('leave:conversation', ({ conversationId }) => {
+      socket.leave(`conv:${conversationId}`);
+    });
+
+    // ── Messaging ──
+    socket.on('message:send', async (data) => {
+      try {
+        const message = await chatService.sendMessage(data.conversationId, userId, {
+          content: data.content,
+          type: data.type || 'text',
+          attachments: data.attachments || [],
+          mentions: data.mentions || [],
+          replyTo: data.replyTo,
+        });
+
+        io.to(`conv:${data.conversationId}`).emit('message:new', {
+          message,
+          conversationId: data.conversationId,
+        });
+
+        // Push unread updates to other participants (skip muted)
+        const conv = await require('./models/Conversation').findById(data.conversationId).lean();
+        if (conv) {
+          for (const p of conv.participants) {
+            const pId = String(p.userId);
+            if (pId === userId) continue;
+            // Skip unread push if user has muted this conversation
+            const muted = p.mutedUntil && new Date(p.mutedUntil) > new Date();
+            if (muted) continue;
+            const unread = await chatService.getUnreadTotal(pId);
+            io.to(`user:${pId}`).emit('unread:update', {
+              conversationId: data.conversationId,
+              totalUnread: unread.count,
+            });
+          }
+        }
+      } catch (err) {
+        socket.emit('error', { message: err.message || 'Failed to send message' });
+      }
+    });
+
+    socket.on('message:edit', async ({ messageId, content }) => {
+      try {
+        const message = await chatService.editMessage(messageId, content, userId);
+        io.to(`conv:${message.conversationId}`).emit('message:updated', { message });
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
+    });
+
+    socket.on('message:delete', async ({ messageId }) => {
+      try {
+        const result = await chatService.deleteMessage(messageId, userId);
+        io.to(`conv:${result.conversationId}`).emit('message:deleted', result);
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
+    });
+
+    socket.on('message:reaction', async ({ messageId, emoji }) => {
+      try {
+        const result = await chatService.toggleReaction(messageId, emoji, userId);
+        // Need the conversationId to broadcast
+        const msg = await require('./models/Message').findById(messageId).select('conversationId').lean();
+        if (msg) {
+          io.to(`conv:${msg.conversationId}`).emit('message:reaction:updated', {
+            messageId: result.messageId,
+            reactions: result.reactions,
+          });
+        }
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
+    });
+
+    // ── Typing indicators ──
+    socket.on('typing:start', ({ conversationId }) => {
+      socket.to(`conv:${conversationId}`).emit('typing:update', {
+        conversationId,
+        userId,
+        userName,
+        isTyping: true,
+      });
+
+      // Auto-clear after timeout
+      if (typingTimers.has(conversationId)) clearTimeout(typingTimers.get(conversationId));
+      typingTimers.set(conversationId, setTimeout(() => {
+        socket.to(`conv:${conversationId}`).emit('typing:update', {
+          conversationId,
+          userId,
+          userName,
+          isTyping: false,
+        });
+        typingTimers.delete(conversationId);
+      }, TYPING_TIMEOUT));
+    });
+
+    socket.on('typing:stop', ({ conversationId }) => {
+      if (typingTimers.has(conversationId)) {
+        clearTimeout(typingTimers.get(conversationId));
+        typingTimers.delete(conversationId);
+      }
+      socket.to(`conv:${conversationId}`).emit('typing:update', {
+        conversationId,
+        userId,
+        userName,
+        isTyping: false,
+      });
+    });
+
+    // ── Read receipts ──
+    socket.on('conversation:read', async ({ conversationId }) => {
+      try {
+        await chatService.markRead(conversationId, userId);
+      } catch { /* ignore */ }
+    });
+
+    // ── Disconnect ──
+    socket.on('disconnect', async () => {
+      console.log(`[Socket] ${userName} disconnected`);
+
+      // Clear typing timers
+      for (const timer of typingTimers.values()) clearTimeout(timer);
+      typingTimers.clear();
+
+      // Mark offline
+      await ChatPresence.findOneAndUpdate(
+        { userId },
+        { status: 'offline', lastSeenAt: new Date(), socketId: null }
+      );
+
+      io.emit('presence:update', { userId, status: 'offline' });
+    });
+  });
+
+  return io;
+};
+
+const getIO = () => {
+  if (!io) throw new Error('Socket.io not initialized');
+  return io;
+};
+
+module.exports = { setupSocket, getIO };

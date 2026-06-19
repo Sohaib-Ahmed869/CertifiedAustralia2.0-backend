@@ -68,7 +68,7 @@ const register = async (data) => {
     studentId: student._id,
     industryId,
     qualificationId,
-    status: 'LeadCaptured',
+    status: 'New',
     leadStatus: 'new',
   });
 

@@ -19,6 +19,7 @@ const notificationSchema = new mongoose.Schema(
         'document_reviewed',
         'payment_received',
         'permission_changed',
+        'certificate_issued',
         'general',
       ],
       default: 'general',
