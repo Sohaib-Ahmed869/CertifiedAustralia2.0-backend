@@ -67,7 +67,7 @@ router.post('/:id/rto-activity', controller.logRTOActivity);
 // Document review (RTO/Admin feedback on individual documents)
 router.patch('/:id/documents/:docId/review', controller.reviewDocument);
 
-// 21-day timer management (pause/resume/start)
-router.patch('/:id/timer', controller.updateTimer);
+// 21-day timer status (read-only — timer is automatic, no manual pause/resume)
+router.get('/:id/timer', controller.getTimerStatus);
 
 module.exports = router;

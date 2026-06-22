@@ -249,12 +249,6 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
 const updateStatus = async (applicationId, status) => {
   const update = { status };
 
-  // Auto-pause the 21-day timer when RTO invoice is uploaded
-  if (status === 'RTOInvoiceUploaded') {
-    update.timerPausedAt = new Date();
-    update.timerPauseReason = 'RTO invoice uploaded';
-  }
-
   const application = await Application.findByIdAndUpdate(
     applicationId,
     update,
@@ -759,32 +753,36 @@ const reviewDocument = async (applicationId, documentId, reviewData) => {
   return documentCrud.getById(document._id);
 };
 
-const updateTimer = async (applicationId, timerData) => {
-  const application = await Application.findById(applicationId);
+/**
+ * Get timer status for an application. Timer is AUTOMATIC — no manual pause/resume.
+ * Auto-starts via tryAutoStartTimer when 3 student obligations are met.
+ * The timer is a KPI for internal management visibility only, not shown to RTOs.
+ */
+const getTimerStatus = async (applicationId) => {
+  const application = await Application.findById(applicationId).lean();
   if (!application) throw new AppError('Application not found', 404);
 
-  if (timerData.action === 'pause') {
-    application.timerPausedAt = new Date();
-    application.timerPauseReason = timerData.reason || '';
-  } else if (timerData.action === 'resume') {
-    // Calculate paused duration and extend deadline
-    if (application.timerPausedAt && application.rtoCompletionDeadline) {
-      const pausedMs = Date.now() - application.timerPausedAt.getTime();
-      application.rtoCompletionDeadline = new Date(
-        application.rtoCompletionDeadline.getTime() + pausedMs
-      );
-    }
-    application.timerPausedAt = undefined;
-    application.timerPauseReason = undefined;
-  } else if (timerData.action === 'start') {
-    application.studentCompletionDate = new Date();
-    application.rtoCompletionDeadline = new Date(
-      Date.now() + 21 * 24 * 60 * 60 * 1000
+  const now = new Date();
+  let status = 'not_started';
+  let daysRemaining = null;
+
+  if (application.rtoCompletionDate) {
+    status = 'completed';
+    daysRemaining = 0;
+  } else if (application.rtoCompletionDeadline) {
+    daysRemaining = Math.ceil(
+      (new Date(application.rtoCompletionDeadline) - now) / (1000 * 60 * 60 * 24)
     );
+    status = daysRemaining <= 0 ? 'overdue' : 'running';
   }
 
-  await application.save();
-  return refreshApplication(application._id);
+  return {
+    status,
+    daysRemaining,
+    studentCompletionDate: application.studentCompletionDate,
+    rtoCompletionDeadline: application.rtoCompletionDeadline,
+    rtoCompletionDate: application.rtoCompletionDate,
+  };
 };
 
 const getStats = async (query = {}) => {
@@ -1143,7 +1141,7 @@ module.exports = {
   addDiscount,
   removeDiscount,
   reviewDocument,
-  updateTimer,
+  getTimerStatus,
   getStats,
   exportCsv,
   tryAutoStartTimer,
