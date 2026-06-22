@@ -9,11 +9,14 @@ const Certificate = require('../models/Certificate');
 const Payment = require('../models/Payment');
 
 /**
- * Auto-start the 21-day KPI timer when all 3 student obligations are met:
+ * Auto-start the 21-day KPI timer when ALL conditions are met:
  *   1. Payment received (at least one completed payment)
  *   2. Intake form submitted
  *   3. At least one document uploaded
+ *   4. RTO has been assigned to the application
  *
+ * Both student completion AND RTO assignment must happen before the timer starts.
+ * Called from: payment creation, intake form submission, document upload, RTO assignment.
  * Skips if the timer has already been started.
  */
 const tryAutoStartTimer = async (applicationId) => {
@@ -39,7 +42,10 @@ const tryAutoStartTimer = async (applicationId) => {
   // Check condition 3: at least one document uploaded
   if (!app.documentIds || app.documentIds.length === 0) return;
 
-  // All 3 conditions met — mark student as completed and start timer
+  // Check condition 4: RTO assigned
+  if (!app.assignedRTOId) return;
+
+  // All 4 conditions met — mark student as completed and start 21-day timer
   const now = new Date();
   app.status = 'StudentCompleted';
   app.timerStartedAt = now;
@@ -182,6 +188,9 @@ const assignRTO = async (applicationId, assignedRTOId) => {
     } catch (err) {
       console.error('[AssignRTO] Failed to notify:', err.message);
     }
+
+    // Try to start the 21-day timer — requires both student completion + RTO assignment
+    await tryAutoStartTimer(applicationId);
   }
 
   return application;
@@ -312,6 +321,39 @@ const updateStatus = async (applicationId, status) => {
     }
   } catch (err) {
     console.error('[UpdateStatus] Failed to create notification:', err.message);
+  }
+
+  // Auto-create RTO payable when invoice is uploaded — enters the AP queue
+  if (status === 'RTOInvoiceUploaded') {
+    try {
+      const qual = application.qualificationId;
+      const rto = application.assignedRTOId;
+      if (qual && rto) {
+        const rtoEntry = qual.rtoCosts?.find(
+          (r) => r.rtoId && String(r.rtoId) === String(rto._id || rto)
+        ) || qual.rtoCosts?.[0];
+        const rtoCost = rtoEntry?.rtoCost || 0;
+
+        if (rtoCost > 0) {
+          await Payment.create({
+            applicationId: application._id,
+            studentId: application.studentId?._id || application.studentId,
+            amount: rtoCost,
+            type: 'rtoPayable',
+            paymentMethod: 'manual',
+            status: 'pending',
+            notes: `Auto-created RTO payable for ${application.applicationId} — ${rtoEntry?.rtoName || 'RTO'}`,
+          });
+
+          // Link payment to application
+          await Application.findByIdAndUpdate(applicationId, {
+            $push: { paymentIds: (await Payment.findOne({ applicationId: application._id, type: 'rtoPayable' }).sort('-createdAt'))._id },
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[UpdateStatus] Failed to create RTO payable:', err.message);
+    }
   }
 
   return application;
