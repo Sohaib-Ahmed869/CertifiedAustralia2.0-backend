@@ -310,11 +310,11 @@ const getStats = async () => {
       },
     ]),
 
-    // RTO payables (rtpPayable or rtoPayment that are not completed)
+    // RTO payables (rtoPayable or rtoPayment that are not completed)
     Payment.aggregate([
       {
         $match: {
-          type: { $in: ['rtpPayable', 'rtoPayment'] },
+          type: { $in: ['rtoPayable', 'rtoPayment'] },
           status: { $ne: 'completed' },
         },
       },

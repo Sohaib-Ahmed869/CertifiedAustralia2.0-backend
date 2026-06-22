@@ -95,6 +95,28 @@ const applicationSchema = new mongoose.Schema(
     noteUpdatedAt: {
       type: Date,
     },
+    // Discounts (not payments — simple amount + note entries)
+    discounts: [
+      {
+        amount: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+        note: {
+          type: String,
+          default: '',
+        },
+        createdBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     // Financial references
     paymentIds: [
       {

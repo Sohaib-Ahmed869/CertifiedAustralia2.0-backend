@@ -8,6 +8,8 @@ const ScreeningForm = require('../models/ScreeningForm');
 const AppError = require('../utils/AppError');
 const { sendTemplatedEmail } = require('./emailService');
 
+const SIGNUP_DISCOUNT_AMOUNT = 500;
+
 const signToken = (id, mfaVerified = false) =>
   jwt.sign({ id, mfaVerified }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -86,11 +88,17 @@ const register = async (data) => {
     submittedAt: new Date(),
   });
 
-  // 4. Link screening form to application and application to student
+  // 4. Apply automatic $500 signup discount + link records
   application.screeningFormId = screeningForm._id;
+  application.discounts = [{
+    amount: SIGNUP_DISCOUNT_AMOUNT,
+    note: 'Signup discount',
+    createdAt: new Date(),
+  }];
   await application.save();
 
   student.applicationIds = [application._id];
+  student.signupDiscountApplied = true;
   await student.save({ validateBeforeSave: false });
 
   const token = signToken(student._id, true);

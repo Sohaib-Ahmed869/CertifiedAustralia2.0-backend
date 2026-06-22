@@ -365,10 +365,128 @@ async function setFlexAllocation(weekKey, itemId, amount) {
   return getWeekSummary(weekKey);
 }
 
+/**
+ * Generate all ISO week keys between two dates.
+ */
+function getWeekKeysBetween(start, end) {
+  const keys = [];
+  const current = new Date(start);
+  while (current <= end) {
+    keys.push(getISOWeekKey(current));
+    current.setDate(current.getDate() + 7);
+  }
+  // Ensure the end date's week is included
+  const endKey = getISOWeekKey(end);
+  if (!keys.includes(endKey)) keys.push(endKey);
+  return [...new Set(keys)];
+}
+
+function getISOWeekKey(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+/**
+ * Aggregate cashflow across a date range.
+ * Returns revenue, allocated, paid totals, and per-week breakdown.
+ */
+async function getRangeSummary(dateFrom, dateTo) {
+  const start = new Date(dateFrom);
+  const end = new Date(dateTo);
+  end.setHours(23, 59, 59, 999);
+
+  // Revenue across the full date range
+  const revenueAgg = await Payment.aggregate([
+    {
+      $match: {
+        status: 'completed',
+        type: { $in: REVENUE_PAYMENT_TYPES },
+        createdAt: { $gte: start, $lte: end },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: '$amount' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const totalRevenue = revenueAgg[0]?.total || 0;
+  const paymentCount = revenueAgg[0]?.count || 0;
+
+  // Weekly revenue breakdown
+  const weeklyRevenueAgg = await Payment.aggregate([
+    {
+      $match: {
+        status: 'completed',
+        type: { $in: REVENUE_PAYMENT_TYPES },
+        createdAt: { $gte: start, $lte: end },
+      },
+    },
+    {
+      $group: {
+        _id: { $isoWeek: '$createdAt' },
+        year: { $first: { $isoWeekYear: '$createdAt' } },
+        revenue: { $sum: '$amount' },
+      },
+    },
+    { $sort: { year: 1, _id: 1 } },
+  ]);
+
+  // Get expense ledger totals for the range
+  const ledgerAgg = await ExpenseLedger.aggregate([
+    {
+      $match: {
+        paidAt: { $gte: start, $lte: end },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalPaid: { $sum: '$amount' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const totalExpensesPaid = ledgerAgg[0]?.totalPaid || 0;
+
+  // Config for allocation targets
+  const config = await getConfig();
+  const weekKeys = getWeekKeysBetween(start, end);
+  const totalAllocated = config.tiers.reduce(
+    (sum, t) => sum + t.items.reduce((s, i) => s + (i.amount || 0), 0),
+    0
+  ) * weekKeys.length;
+
+  const weeklyBreakdown = weeklyRevenueAgg.map((w) => ({
+    weekKey: `${w.year}-W${String(w._id).padStart(2, '0')}`,
+    revenue: w.revenue,
+  }));
+
+  return {
+    dateFrom: start,
+    dateTo: end,
+    weeksInRange: weekKeys.length,
+    totalRevenue,
+    paymentCount,
+    totalAllocated,
+    totalExpensesPaid,
+    surplus: totalRevenue - totalAllocated,
+    debtBalances: config.debtBalances,
+    weeklyBreakdown,
+  };
+}
+
 module.exports = {
   getConfig,
   updateConfig,
   getWeekSummary,
+  getRangeSummary,
   markPaid,
   undoPaid,
   setFlexAllocation,

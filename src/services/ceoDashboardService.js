@@ -909,6 +909,172 @@ function getWeekStartFromLabel(weekLabel) {
   return monday;
 }
 
+const Qualification = require('../models/Qualification');
+
+/**
+ * Supplier Liability / RTO Payables — CEO Dashboard
+ * Shows which RTOs are owed money, from which applications, with forecasting.
+ */
+async function getSupplierLiability(query = {}) {
+  const dateFrom = getDateFrom(query.period);
+  const now = new Date();
+
+  // 1. Applications with an assigned RTO (these generate RTO liabilities)
+  const appFilter = { assignedRTOId: { $exists: true, $ne: null } };
+  if (dateFrom) appFilter.createdAt = { $gte: dateFrom };
+
+  const applications = await Application.find(appFilter)
+    .populate('assignedRTOId', 'firstName lastName email')
+    .populate('qualificationId', 'name caPrice rtoCosts')
+    .populate('studentId', 'firstName lastName')
+    .lean();
+
+  // 2. Existing RTO payments (type rtoPayable or rtoPayment with status completed)
+  const paidPayments = await Payment.find({
+    type: { $in: ['rtoPayable', 'rtoPayment'] },
+    status: 'completed',
+  }).lean();
+  const paidByApp = {};
+  for (const p of paidPayments) {
+    const appId = String(p.applicationId);
+    paidByApp[appId] = (paidByApp[appId] || 0) + p.amount;
+  }
+
+  // 3. Build per-application liability items
+  const liabilityItems = [];
+  const rtoSummary = {}; // rtoId → { name, totalOwed, totalPaid, applications[] }
+
+  for (const app of applications) {
+    const rto = app.assignedRTOId;
+    if (!rto) continue;
+
+    const qual = app.qualificationId;
+    if (!qual) continue;
+
+    // Find RTO cost for this qualification
+    const rtoEntry = qual.rtoCosts?.find(
+      (r) => r.rtoId && String(r.rtoId) === String(rto._id)
+    ) || qual.rtoCosts?.[0];
+    const rtoCost = rtoEntry?.rtoCost || 0;
+    if (rtoCost === 0) continue;
+
+    const appId = String(app._id);
+    const amountPaid = paidByApp[appId] || 0;
+    const amountOwed = Math.max(0, rtoCost - amountPaid);
+
+    // Determine liability status
+    let status = 'forecasted';
+    if (amountPaid >= rtoCost) {
+      status = 'paid';
+    } else if (app.rtoCompletionDeadline && now > new Date(app.rtoCompletionDeadline)) {
+      status = 'overdue';
+    } else if (app.studentCompletionDate) {
+      status = 'pending';
+    }
+
+    // Days until/since deadline
+    let daysRemaining = null;
+    if (app.rtoCompletionDeadline) {
+      daysRemaining = Math.ceil((new Date(app.rtoCompletionDeadline) - now) / (1000 * 60 * 60 * 24));
+    }
+
+    const item = {
+      applicationId: app.applicationId,
+      applicationObjId: app._id,
+      studentName: app.studentId ? `${app.studentId.firstName} ${app.studentId.lastName}` : 'Unknown',
+      qualificationName: qual.name || 'Unknown',
+      rtoId: rto._id,
+      rtoName: `${rto.firstName} ${rto.lastName}`,
+      rtoCost,
+      amountPaid,
+      amountOwed,
+      status,
+      daysRemaining,
+      studentCompletionDate: app.studentCompletionDate,
+      rtoCompletionDeadline: app.rtoCompletionDeadline,
+    };
+    liabilityItems.push(item);
+
+    // Aggregate per-RTO
+    const rtoKey = String(rto._id);
+    if (!rtoSummary[rtoKey]) {
+      rtoSummary[rtoKey] = {
+        rtoId: rto._id,
+        rtoName: `${rto.firstName} ${rto.lastName}`,
+        rtoEmail: rto.email,
+        totalOwed: 0,
+        totalPaid: 0,
+        applicationCount: 0,
+        overdueCount: 0,
+        pendingCount: 0,
+        forecastedCount: 0,
+      };
+    }
+    rtoSummary[rtoKey].totalOwed += amountOwed;
+    rtoSummary[rtoKey].totalPaid += amountPaid;
+    rtoSummary[rtoKey].applicationCount += 1;
+    if (status === 'overdue') rtoSummary[rtoKey].overdueCount += 1;
+    if (status === 'pending') rtoSummary[rtoKey].pendingCount += 1;
+    if (status === 'forecasted') rtoSummary[rtoKey].forecastedCount += 1;
+  }
+
+  // 4. Compute totals
+  const totalLiability = liabilityItems.reduce((s, i) => s + i.rtoCost, 0);
+  const totalPaid = liabilityItems.reduce((s, i) => s + i.amountPaid, 0);
+  const totalOwed = liabilityItems.reduce((s, i) => s + i.amountOwed, 0);
+  const overdueItems = liabilityItems.filter((i) => i.status === 'overdue');
+  const pendingItems = liabilityItems.filter((i) => i.status === 'pending');
+  const forecastedItems = liabilityItems.filter((i) => i.status === 'forecasted');
+
+  // This week's liability (items with deadline this week)
+  const weekStart = new Date(now);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  const thisWeekItems = liabilityItems.filter(
+    (i) => i.rtoCompletionDeadline &&
+      new Date(i.rtoCompletionDeadline) >= weekStart &&
+      new Date(i.rtoCompletionDeadline) <= weekEnd
+  );
+  const thisWeekLiability = thisWeekItems.reduce((s, i) => s + i.amountOwed, 0);
+
+  // Revenue in period for net cash calculation
+  const revFilter = { status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } };
+  if (dateFrom) revFilter.createdAt = { $gte: dateFrom };
+  const revAgg = await Payment.aggregate([
+    { $match: revFilter },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ]);
+  const totalRevenue = revAgg[0]?.total || 0;
+  const netCashAfterLiabilities = totalRevenue - totalOwed;
+
+  return {
+    summary: {
+      totalLiability,
+      totalPaid,
+      totalOwed,
+      thisWeekLiability,
+      thisWeekCount: thisWeekItems.length,
+      overdueTotal: overdueItems.reduce((s, i) => s + i.amountOwed, 0),
+      overdueCount: overdueItems.length,
+      pendingTotal: pendingItems.reduce((s, i) => s + i.amountOwed, 0),
+      pendingCount: pendingItems.length,
+      forecastedTotal: forecastedItems.reduce((s, i) => s + i.amountOwed, 0),
+      forecastedCount: forecastedItems.length,
+      totalRevenue,
+      netCashAfterLiabilities,
+    },
+    rtoBreakdown: Object.values(rtoSummary).sort((a, b) => b.totalOwed - a.totalOwed),
+    items: liabilityItems.sort((a, b) => {
+      // Overdue first, then pending, then forecasted, then paid
+      const order = { overdue: 0, pending: 1, forecasted: 2, paid: 3 };
+      return (order[a.status] ?? 4) - (order[b.status] ?? 4);
+    }),
+  };
+}
+
 module.exports = {
   marketingSpend: marketingSpendCrud,
   getOverview,
@@ -916,4 +1082,5 @@ module.exports = {
   getCallAttempts,
   getAgentPerformance,
   getMarketing,
+  getSupplierLiability,
 };

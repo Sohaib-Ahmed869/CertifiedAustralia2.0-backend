@@ -73,7 +73,6 @@ const documentSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
-    verifiedAt: Date,
     createdAt: {
       type: Date,
       default: Date.now,

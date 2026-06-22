@@ -24,6 +24,8 @@ router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);
 router.post('/:id/rto-submission', controller.sendRTOSubmission);
 router.patch('/:id/status', controller.updateStatus);
 router.post('/:id/notes', controller.addNote);
+router.post('/:id/discounts', controller.addDiscount);
+router.delete('/:id/discounts/:discountId', controller.removeDiscount);
 
 router.route('/:id/intake')
   .post(controller.createIntakeForm);

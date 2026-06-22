@@ -38,6 +38,20 @@ module.exports = {
 
   // ── Cashflow endpoints ──
 
+  getSupplierLiability: asyncHandler(async (req, res) => {
+    const result = await ceoDashboardService.getSupplierLiability(req.query);
+    res.status(200).json(result);
+  }),
+
+  getCashflowRange: asyncHandler(async (req, res) => {
+    const { dateFrom, dateTo } = req.query;
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ message: 'dateFrom and dateTo are required' });
+    }
+    const result = await cashflowService.getRangeSummary(dateFrom, dateTo);
+    res.status(200).json(result);
+  }),
+
   getCashflowConfig: asyncHandler(async (req, res) => {
     const config = await cashflowService.getConfig();
     res.status(200).json({ item: config });

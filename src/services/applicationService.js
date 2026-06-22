@@ -444,6 +444,34 @@ const addNote = async (applicationId, note) => {
   return refreshApplication(application._id);
 };
 
+const addDiscount = async (applicationId, { amount, note, createdBy }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+  if (!amount || amount <= 0) throw new AppError('Discount amount must be greater than 0', 400);
+
+  application.discounts.push({
+    amount,
+    note: note || '',
+    createdBy,
+    createdAt: new Date(),
+  });
+
+  await application.save();
+  return refreshApplication(application._id);
+};
+
+const removeDiscount = async (applicationId, discountId) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  const discount = application.discounts.id(discountId);
+  if (!discount) throw new AppError('Discount not found', 404);
+
+  discount.deleteOne();
+  await application.save();
+  return refreshApplication(application._id);
+};
+
 const reviewDocument = async (applicationId, documentId, reviewData) => {
   const application = await Application.findById(applicationId);
   if (!application) throw new AppError('Application not found', 404);
@@ -790,9 +818,8 @@ const exportCsv = async (filters) => {
       .filter((p) => p && p.status === 'completed')
       .reduce((sum, p) => sum + (p.amount || 0), 0);
 
-    const totalDiscount = payments
-      .filter((p) => p && p.type === 'discount')
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalDiscount = (app.discounts || [])
+      .reduce((sum, d) => sum + (d.amount || 0), 0);
 
     const hasCompleted = payments.some((p) => p && p.status === 'completed');
 
@@ -843,6 +870,8 @@ module.exports = {
   uploadDocument,
   issueCertificate,
   addNote,
+  addDiscount,
+  removeDiscount,
   reviewDocument,
   updateTimer,
   getStats,

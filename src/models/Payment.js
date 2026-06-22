@@ -19,7 +19,7 @@ const paymentSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['upfront', 'plan', 'discount', 'manualMarkPaid', 'refund', 'rtpPayable', 'rtoPayment'],
+      enum: ['upfront', 'plan', 'discount', 'manualMarkPaid', 'refund', 'rtoPayable', 'rtoPayment'],
       required: true,
     },
     // For discounts

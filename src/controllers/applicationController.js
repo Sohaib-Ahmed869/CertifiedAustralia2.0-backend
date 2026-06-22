@@ -123,6 +123,19 @@ module.exports = {
     res.status(201).json({ item: result });
   }),
 
+  addDiscount: asyncHandler(async (req, res) => {
+    const result = await service.addDiscount(req.params.id, {
+      ...req.body,
+      createdBy: req.user._id,
+    });
+    res.status(201).json({ item: result });
+  }),
+
+  removeDiscount: asyncHandler(async (req, res) => {
+    const result = await service.removeDiscount(req.params.id, req.params.discountId);
+    res.status(200).json({ item: result });
+  }),
+
   reviewDocument: asyncHandler(async (req, res) => {
     const result = await service.reviewDocument(req.params.id, req.params.docId, {
       ...req.body,

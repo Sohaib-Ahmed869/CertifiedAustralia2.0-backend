@@ -15,8 +15,10 @@ router.get('/call-attempts', controller.getCallAttempts);
 router.get('/agent-performance', controller.getAgentPerformance);
 router.get('/marketing', controller.getMarketing);
 router.post('/marketing/spend', controller.createMarketingSpend);
+router.get('/supplier-liability', controller.getSupplierLiability);
 
 // ── Cashflow routes ──
+router.get('/cashflow/range', controller.getCashflowRange);
 router.get('/cashflow/config', controller.getCashflowConfig);
 router.patch('/cashflow/config', controller.updateCashflowConfig);
 router.get('/cashflow/:weekKey', controller.getWeekSummary);
