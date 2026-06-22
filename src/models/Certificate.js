@@ -32,6 +32,16 @@ const certificateSchema = new mongoose.Schema(
       enum: ['issued', 'in_delivery', 'delivered', 'failed_delivery'],
       default: 'issued',
     },
+    // Soft-copy workflow
+    softCopyUploadedAt: Date,
+    softCopyEmailSentAt: Date,
+    // Hard-copy workflow
+    hardCopyDispatchedAt: Date,
+    hardCopyEmailSentAt: Date,
+    hardCopySentKPI: {
+      type: Boolean,
+      default: false,
+    },
     // Timestamps
     issuedAt: {
       type: Date,

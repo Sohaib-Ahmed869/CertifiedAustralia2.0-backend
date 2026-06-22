@@ -426,6 +426,88 @@ const issueCertificate = async (applicationId, data) => {
   return certificateCrud.getById(certificate._id);
 };
 
+/**
+ * Soft-copy certificate upload — triggers soft-copy email with Google review link.
+ * Separate from hard-copy dispatch (CA-11).
+ */
+const notifySoftCopy = async (certificateId) => {
+  const certificate = await Certificate.findById(certificateId).populate('studentId');
+  if (!certificate) throw new AppError('Certificate not found', 404);
+
+  certificate.softCopyUploadedAt = new Date();
+  certificate.softCopyEmailSentAt = new Date();
+  await certificate.save();
+
+  const student = certificate.studentId;
+  if (student?.email) {
+    const { sendTemplatedEmail } = require('./emailService');
+    await sendTemplatedEmail({
+      to: student.email,
+      subject: 'Your Certificate Soft Copy is Ready — Certified Australia',
+      preheader: 'Your certificate has been uploaded and is available to view.',
+      templateContent: `
+        <h2 style="margin:0 0 8px;">Your Certificate is Ready!</h2>
+        <p>Hi ${student.firstName || 'there'},</p>
+        <p>Great news — your certificate soft copy has been uploaded and is now available for you to view and download from your student portal.</p>
+        <p>Thank you for your patience and cooperation throughout the process.</p>
+        <div style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:16px;margin:16px 0;">
+          <p style="margin:0 0 8px;font-weight:600;color:#065f46;">We'd love your feedback!</p>
+          <p style="margin:0;color:#047857;">If you had a great experience, we'd really appreciate a Google review:</p>
+          <p style="margin:8px 0 0;"><a href="https://g.page/r/CertifiedAustralia/review" style="color:#059669;text-decoration:underline;font-weight:600;">Leave a Google Review &rarr;</a></p>
+        </div>
+        <p style="font-size:13px;color:#6b7280;">Note: Your hard-copy certificate will be posted separately. We'll send you a tracking number once it's dispatched.</p>
+      `,
+      ctaText: 'View Your Certificate',
+      ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/certificates`,
+    }).catch((err) => console.error('[CertificateService] Soft-copy email error:', err.message));
+  }
+
+  return Certificate.findById(certificateId).lean();
+};
+
+/**
+ * Hard-copy certificate dispatch — triggers hard-copy email with AusPost tracking.
+ * Separate from soft-copy upload (CA-11).
+ */
+const dispatchHardCopy = async (certificateId, { trackingNumber, trackingLink }) => {
+  const certificate = await Certificate.findById(certificateId).populate('studentId');
+  if (!certificate) throw new AppError('Certificate not found', 404);
+
+  certificate.trackingNumber = trackingNumber;
+  certificate.trackingLink = trackingLink;
+  certificate.status = 'in_delivery';
+  certificate.hardCopyDispatchedAt = new Date();
+  certificate.hardCopyEmailSentAt = new Date();
+  certificate.hardCopySentKPI = true;
+  certificate.dispatchedAt = new Date();
+  await certificate.save();
+
+  const student = certificate.studentId;
+  if (student?.email) {
+    const { sendTemplatedEmail } = require('./emailService');
+    await sendTemplatedEmail({
+      to: student.email,
+      subject: 'Your Hard-Copy Certificate Has Been Posted — Certified Australia',
+      preheader: 'Your certificate has been dispatched via Australia Post.',
+      templateContent: `
+        <h2 style="margin:0 0 8px;">Your Certificate is On Its Way!</h2>
+        <p>Hi ${student.firstName || 'there'},</p>
+        <p>Your hard-copy certificate has been posted and is on its way to you via Australia Post.</p>
+        <div style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:16px;margin:16px 0;">
+          <p style="margin:0 0 4px;font-weight:600;color:#065f46;">Tracking Details</p>
+          ${trackingNumber ? `<p style="margin:0;color:#047857;">Tracking Number: <strong>${trackingNumber}</strong></p>` : ''}
+          ${trackingLink ? `<p style="margin:4px 0 0;"><a href="${trackingLink}" style="color:#059669;text-decoration:underline;">Track your delivery on AusPost &rarr;</a></p>` : ''}
+        </div>
+        <p>If you have any questions about your delivery, please don't hesitate to contact us.</p>
+      `,
+      ctaText: 'Track Delivery',
+      ctaUrl: trackingLink || `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/certificates`,
+    }).catch((err) => console.error('[CertificateService] Hard-copy email error:', err.message));
+  }
+
+  return Certificate.findById(certificateId).lean();
+};
+
 const addNote = async (applicationId, note) => {
   const application = await Application.findById(applicationId);
 
@@ -967,6 +1049,8 @@ module.exports = {
   getStats,
   exportCsv,
   tryAutoStartTimer,
+  notifySoftCopy,
+  dispatchHardCopy,
   createAdditionalDocRequest,
   submitAdditionalDocs,
   reviewAdditionalDocs,

@@ -55,6 +55,8 @@ router.post('/:id/documents/upload-multiple', upload.array('files', 20), docCont
 router.delete('/:id/documents/:docId', docController.deleteDocument);
 
 router.put('/:id/certificate', upload.single('certificate'), controller.uploadCertificate);
+router.post('/:id/certificate/:certId/notify-soft-copy', controller.notifySoftCopy);
+router.post('/:id/certificate/:certId/dispatch-hard-copy', controller.dispatchHardCopy);
 
 // Document review (RTO/Admin feedback on individual documents)
 router.patch('/:id/documents/:docId/review', controller.reviewDocument);

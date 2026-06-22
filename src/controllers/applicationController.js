@@ -158,6 +158,16 @@ module.exports = {
     res.status(200).json({ item: result });
   }),
 
+  notifySoftCopy: asyncHandler(async (req, res) => {
+    const result = await service.notifySoftCopy(req.params.certId);
+    res.status(200).json({ item: result });
+  }),
+
+  dispatchHardCopy: asyncHandler(async (req, res) => {
+    const result = await service.dispatchHardCopy(req.params.certId, req.body);
+    res.status(200).json({ item: result });
+  }),
+
   createRTOSubmission: asyncHandler(async (req, res) => {
     const result = await service.createRTOSubmission(req.params.id, {
       ...req.body,

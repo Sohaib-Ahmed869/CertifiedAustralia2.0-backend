@@ -36,6 +36,21 @@ const qualificationSchema = new mongoose.Schema(
         _id: false,
       },
     ],
+    // Category for conditional document requirements (CA-05)
+    category: {
+      type: String,
+      enum: ['trade', 'fitness', 'general'],
+      default: 'general',
+    },
+    // Specific qualification flags for conditional docs
+    requiresWhiteCard: {
+      type: Boolean,
+      default: false,
+    },
+    requiresFirstAid: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ['active', 'inactive'],
