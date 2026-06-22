@@ -20,6 +20,8 @@ const documentFeedbackRoutes = require('./documentFeedbackRoutes');
 const chatRoutes = require('./chatRoutes');
 const callLogRoutes = require('./callLogRoutes');
 const rtoInvoiceRoutes = require('./rtoInvoiceRoutes');
+const paymentBatchRoutes = require('./paymentBatchRoutes');
+const xeroRoutes = require('./xeroRoutes');
 const applicationController = require('../controllers/applicationController');
 
 const router = express.Router();
@@ -45,6 +47,8 @@ router.use('/document-feedback', documentFeedbackRoutes);
 router.use('/chat', chatRoutes);
 router.use('/call-logs', callLogRoutes);
 router.use('/rto-invoices', rtoInvoiceRoutes);
+router.use('/payment-batches', paymentBatchRoutes);
+router.use('/xero', xeroRoutes);
 
 // Standalone intake form access (read-only)
 router.get('/intake-forms/:id', applicationController.intakeForms.getById);
