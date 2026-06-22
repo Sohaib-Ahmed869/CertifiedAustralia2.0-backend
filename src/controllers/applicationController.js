@@ -7,6 +7,7 @@ const createCrudController = require('./crudController');
 const service = require('../services/applicationService');
 const Application = require('../models/Application');
 const driveService = require('../services/googleDriveService');
+const callLogService = require('../services/callLogService');
 
 const applications = createCrudController(service.applications);
 const intakeForms = createCrudController(service.intakeForms);
@@ -134,6 +135,14 @@ module.exports = {
   removeDiscount: asyncHandler(async (req, res) => {
     const result = await service.removeDiscount(req.params.id, req.params.discountId);
     res.status(200).json({ item: result });
+  }),
+
+  logCall: asyncHandler(async (req, res) => {
+    const result = await callLogService.logCall(req.params.id, {
+      ...req.body,
+      agentId: req.user._id,
+    });
+    res.status(201).json({ item: result });
   }),
 
   reviewDocument: asyncHandler(async (req, res) => {

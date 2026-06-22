@@ -26,6 +26,7 @@ router.patch('/:id/status', controller.updateStatus);
 router.post('/:id/notes', controller.addNote);
 router.post('/:id/discounts', controller.addDiscount);
 router.delete('/:id/discounts/:discountId', controller.removeDiscount);
+router.post('/:id/calls', controller.logCall);
 
 router.route('/:id/intake')
   .post(controller.createIntakeForm);

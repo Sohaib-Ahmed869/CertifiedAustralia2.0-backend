@@ -5,12 +5,10 @@ const paymentSchema = new mongoose.Schema(
     applicationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Application',
-      required: true,
     },
     studentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
     },
     amount: {
       type: Number,
