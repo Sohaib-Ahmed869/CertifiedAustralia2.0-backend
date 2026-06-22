@@ -279,6 +279,25 @@ const applicationSchema = new mongoose.Schema(
         },
       },
     ],
+    // RTO activity log — tracks all RTO actions for audit (CA-06)
+    rtoActivityLog: [
+      {
+        action: {
+          type: String,
+          enum: ['viewed', 'downloaded', 'status_updated', 'feedback_sent', 'note_added', 'timer_paused', 'timer_resumed'],
+          required: true,
+        },
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        detail: String,
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     // Audit trail
     createdAt: {
       type: Date,

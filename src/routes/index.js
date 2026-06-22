@@ -21,6 +21,7 @@ const chatRoutes = require('./chatRoutes');
 const callLogRoutes = require('./callLogRoutes');
 const rtoInvoiceRoutes = require('./rtoInvoiceRoutes');
 const chatbotRoutes = require('./chatbotRoutes');
+const competencyBookingRoutes = require('./competencyBookingRoutes');
 const paymentBatchRoutes = require('./paymentBatchRoutes');
 const xeroRoutes = require('./xeroRoutes');
 const applicationController = require('../controllers/applicationController');
@@ -49,6 +50,7 @@ router.use('/chat', chatRoutes);
 router.use('/call-logs', callLogRoutes);
 router.use('/rto-invoices', rtoInvoiceRoutes);
 router.use('/chatbot', chatbotRoutes);
+router.use('/competency-bookings', competencyBookingRoutes);
 router.use('/payment-batches', paymentBatchRoutes);
 router.use('/xero', xeroRoutes);
 

@@ -61,6 +61,9 @@ router.put('/:id/certificate', upload.single('certificate'), controller.uploadCe
 router.post('/:id/certificate/:certId/notify-soft-copy', controller.notifySoftCopy);
 router.post('/:id/certificate/:certId/dispatch-hard-copy', controller.dispatchHardCopy);
 
+// RTO activity logging
+router.post('/:id/rto-activity', controller.logRTOActivity);
+
 // Document review (RTO/Admin feedback on individual documents)
 router.patch('/:id/documents/:docId/review', controller.reviewDocument);
 

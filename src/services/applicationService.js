@@ -157,26 +157,50 @@ const assignRTO = async (applicationId, assignedRTOId) => {
     throw new AppError('Application not found', 404);
   }
 
-  // Notify assigned RTO (non-fatal)
+  // Notify assigned RTO — in-portal + email (non-fatal)
   if (assignedRTOId) {
     try {
-      const { createNotification } = require('./notificationService');
+      const { notifyWithEmail } = require('./notificationService');
       const student = application.studentId;
       const studentName = student ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : 'a student';
-      await createNotification({
-        userId: assignedRTOId,
-        type: 'application_assigned',
-        title: 'Application Assigned for Review',
-        message: `You've been assigned to review ${application.applicationId} for ${studentName}.`,
-        link: `/rto/applications`,
-        relatedId: application._id,
-      });
+      const qualName = application.qualificationId?.name || '';
+      await notifyWithEmail(
+        assignedRTOId,
+        {
+          type: 'application_assigned',
+          title: 'Application Assigned for Review',
+          message: `You've been assigned to review ${application.applicationId} for ${studentName}${qualName ? ` — ${qualName}` : ''}.`,
+          link: `/rto/applications`,
+          relatedId: application._id,
+        },
+        {
+          subject: `New Application Assigned: ${application.applicationId} — ${studentName}`,
+          ctaText: 'Review Application',
+        }
+      );
     } catch (err) {
-      console.error('[AssignRTO] Failed to create notification:', err.message);
+      console.error('[AssignRTO] Failed to notify:', err.message);
     }
   }
 
   return application;
+};
+
+/**
+ * Log an RTO activity against an application (CA-06 audit trail).
+ */
+const logRTOActivity = async (applicationId, { action, userId, detail }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  application.rtoActivityLog.push({
+    action,
+    userId,
+    detail: detail || '',
+    timestamp: new Date(),
+  });
+  await application.save();
+  return { message: 'Activity logged' };
 };
 
 const sendToRTOPortal = async (applicationId, rtoUserId) => {
@@ -1123,6 +1147,7 @@ module.exports = {
   getStats,
   exportCsv,
   tryAutoStartTimer,
+  logRTOActivity,
   notifySoftCopy,
   dispatchHardCopy,
   createAdditionalDocRequest,

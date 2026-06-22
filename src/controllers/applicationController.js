@@ -183,6 +183,14 @@ module.exports = {
     res.status(200).json({ item: result });
   }),
 
+  logRTOActivity: asyncHandler(async (req, res) => {
+    const result = await service.logRTOActivity(req.params.id, {
+      ...req.body,
+      userId: req.user._id,
+    });
+    res.status(201).json(result);
+  }),
+
   notifySoftCopy: asyncHandler(async (req, res) => {
     const result = await service.notifySoftCopy(req.params.certId);
     res.status(200).json({ item: result });
