@@ -79,6 +79,12 @@ const updateUserPermissions = async (userId, permissions, updatedBy) => {
     console.error('[RBAC] Failed to create notification:', err.message);
   }
 
+  // Push permission update via socket (avoids HTTP polling)
+  try {
+    const { pushPermissionUpdate } = require('../socket');
+    pushPermissionUpdate(userId);
+  } catch { /* socket not initialized */ }
+
   return {
     permissions: effective,
     role: user.role,

@@ -4,7 +4,10 @@ const User = require('./models/User');
 const ChatPresence = require('./models/ChatPresence');
 const chatService = require('./services/chatService');
 
+// All roles can connect to sockets for notifications/permissions.
+// Chat features are limited to these roles:
 const CHAT_ROLES = ['Admin', 'CEOReportingManager', 'Agent'];
+const ALL_ROLES = ['Admin', 'CEOReportingManager', 'Agent', 'Student', 'InternalRTO', 'Support', 'Marketing'];
 const TYPING_TIMEOUT = 5000;
 
 let io;
@@ -27,7 +30,7 @@ const setupSocket = (httpServer) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await User.findById(decoded.id).select('-password').lean();
       if (!user || user.status !== 'active') return next(new Error('Unauthorized'));
-      if (!CHAT_ROLES.includes(user.role)) return next(new Error('Chat not available for this role'));
+      if (!ALL_ROLES.includes(user.role)) return next(new Error('Socket not available for this role'));
       socket.user = user;
       next();
     } catch {
@@ -245,4 +248,20 @@ const getIO = () => {
   return io;
 };
 
-module.exports = { setupSocket, getIO };
+/**
+ * Push a notification to a user via socket (avoids HTTP polling).
+ */
+const pushNotification = (userId, notification) => {
+  if (!io) return;
+  io.to(`user:${String(userId)}`).emit('notification:new', notification);
+};
+
+/**
+ * Push permission update signal to a user via socket.
+ */
+const pushPermissionUpdate = (userId) => {
+  if (!io) return;
+  io.to(`user:${String(userId)}`).emit('permissions:updated');
+};
+
+module.exports = { setupSocket, getIO, pushNotification, pushPermissionUpdate };

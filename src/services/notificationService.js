@@ -21,6 +21,13 @@ const createNotification = async ({ userId, type, title, message, link, relatedI
       link,
       relatedId,
     });
+
+    // Push via socket (avoids HTTP polling)
+    try {
+      const { pushNotification } = require('../socket');
+      pushNotification(userId, notification.toObject());
+    } catch { /* socket not initialized yet — that's fine */ }
+
     return notification.toObject();
   } catch (err) {
     console.error('[NotificationService] Failed to create:', err.message);
