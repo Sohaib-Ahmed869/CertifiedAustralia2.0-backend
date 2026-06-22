@@ -35,12 +35,11 @@ const createDriveClient = () => {
     throw new AppError('Google service account key file is missing client_email or private_key', 500);
   }
 
-  const auth = new google.auth.JWT(
-    credentials.client_email,
-    null,
-    credentials.private_key,
-    driveScopes,
-  );
+  const auth = new google.auth.JWT({
+    email: credentials.client_email,
+    key: credentials.private_key,
+    scopes: driveScopes,
+  });
 
   return google.drive({ version: 'v3', auth });
 };
