@@ -28,6 +28,14 @@ router.post('/:id/discounts', controller.addDiscount);
 router.delete('/:id/discounts/:discountId', controller.removeDiscount);
 router.post('/:id/calls', controller.logCall);
 
+// Additional document requests (CA-08 gated upload)
+router.post('/:id/additional-doc-requests', controller.createAdditionalDocRequest);
+router.patch('/:id/additional-doc-requests/:requestId/submit', controller.submitAdditionalDocs);
+router.patch('/:id/additional-doc-requests/:requestId/review', controller.reviewAdditionalDocs);
+
+// RTO submission versioning
+router.post('/:id/rto-submissions', controller.createRTOSubmission);
+
 router.route('/:id/intake')
   .post(controller.createIntakeForm);
 

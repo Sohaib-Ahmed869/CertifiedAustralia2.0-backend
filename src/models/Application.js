@@ -214,6 +214,71 @@ const applicationSchema = new mongoose.Schema(
         resolvedAt: Date,
       },
     ],
+    // Gated additional document requests (CA-08)
+    additionalDocRequests: [
+      {
+        requestedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        requestedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        items: [
+          {
+            label: { type: String, required: true },
+            description: String,
+            required: { type: Boolean, default: true },
+          },
+        ],
+        deadline: Date,
+        status: {
+          type: String,
+          enum: ['open', 'submitted', 'reviewed', 'approved', 'rejected'],
+          default: 'open',
+        },
+        submittedAt: Date,
+        reviewedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        reviewedAt: Date,
+        reviewNotes: String,
+        documentIds: [
+          {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Document',
+          },
+        ],
+      },
+    ],
+    // RTO submission version tracking (CA-08 duplicate prevention)
+    rtoSubmissions: [
+      {
+        sentAt: {
+          type: Date,
+          default: Date.now,
+        },
+        sentBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        packageVersion: {
+          type: Number,
+          default: 1,
+        },
+        documentsIncluded: [String],
+        emailSent: {
+          type: Boolean,
+          default: false,
+        },
+        superseded: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
     // Audit trail
     createdAt: {
       type: Date,

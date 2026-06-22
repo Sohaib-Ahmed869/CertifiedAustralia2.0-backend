@@ -137,6 +137,35 @@ module.exports = {
     res.status(200).json({ item: result });
   }),
 
+  createAdditionalDocRequest: asyncHandler(async (req, res) => {
+    const result = await service.createAdditionalDocRequest(req.params.id, {
+      ...req.body,
+      requestedBy: req.user._id,
+    });
+    res.status(201).json({ item: result });
+  }),
+
+  submitAdditionalDocs: asyncHandler(async (req, res) => {
+    const result = await service.submitAdditionalDocs(req.params.id, req.params.requestId);
+    res.status(200).json({ item: result });
+  }),
+
+  reviewAdditionalDocs: asyncHandler(async (req, res) => {
+    const result = await service.reviewAdditionalDocs(req.params.id, req.params.requestId, {
+      ...req.body,
+      reviewedBy: req.user._id,
+    });
+    res.status(200).json({ item: result });
+  }),
+
+  createRTOSubmission: asyncHandler(async (req, res) => {
+    const result = await service.createRTOSubmission(req.params.id, {
+      ...req.body,
+      sentBy: req.user._id,
+    });
+    res.status(201).json({ item: result });
+  }),
+
   logCall: asyncHandler(async (req, res) => {
     const result = await callLogService.logCall(req.params.id, {
       ...req.body,

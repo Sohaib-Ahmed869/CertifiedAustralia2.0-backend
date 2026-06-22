@@ -117,14 +117,36 @@ const deleteFile = async (fileId) => {
   }
 };
 
-const createApplicationFolder = async ({ applicationId, studentName }) => {
+const createApplicationFolder = async ({ applicationId, studentName, qualificationCode }) => {
   const drive = createDriveClient();
   const parentFolderId = resolveParentFolderId();
-  const folderName = `${applicationId}${studentName ? ` - ${studentName}` : ''}`;
+  const parts = [applicationId];
+  if (studentName) parts.push(studentName);
+  if (qualificationCode) parts.push(qualificationCode);
+  const folderName = parts.join(' - ');
 
   const response = await drive.files.create({
     requestBody: {
       name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentFolderId],
+    },
+    fields: 'id, webViewLink',
+  });
+
+  return response.data;
+};
+
+/**
+ * Create a submission subfolder within an application folder.
+ * Used to separate initial submissions from additional document uploads.
+ */
+const createSubmissionSubfolder = async ({ parentFolderId, name }) => {
+  const drive = createDriveClient();
+
+  const response = await drive.files.create({
+    requestBody: {
+      name,
       mimeType: 'application/vnd.google-apps.folder',
       parents: [parentFolderId],
     },
@@ -161,5 +183,6 @@ module.exports = {
   uploadFileFromDisk,
   deleteFile,
   createApplicationFolder,
+  createSubmissionSubfolder,
   shareWithEmail,
 };

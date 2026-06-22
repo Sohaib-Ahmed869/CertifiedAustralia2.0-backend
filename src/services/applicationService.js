@@ -472,6 +472,96 @@ const removeDiscount = async (applicationId, discountId) => {
   return refreshApplication(application._id);
 };
 
+// ── Additional Document Requests (CA-08 gated upload) ──
+
+const createAdditionalDocRequest = async (applicationId, { items, deadline, requestedBy }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  application.additionalDocRequests.push({
+    requestedBy,
+    requestedAt: new Date(),
+    items: items || [],
+    deadline: deadline || undefined,
+    status: 'open',
+  });
+  await application.save();
+
+  // Notify student
+  const { notifyWithEmail } = require('./notificationService');
+  if (application.studentId) {
+    const student = await require('../models/User').findById(application.studentId).select('firstName').lean();
+    const itemLabels = (items || []).map((i) => i.label).join(', ');
+    await notifyWithEmail(
+      application.studentId,
+      {
+        type: 'feedback_received',
+        title: 'Additional Documents Required',
+        message: `Please upload the following documents: ${itemLabels}`,
+        link: `/student/documents`,
+        relatedId: application._id,
+      },
+      { subject: 'Additional Documents Required — Certified Australia' }
+    );
+  }
+
+  return refreshApplication(application._id);
+};
+
+const submitAdditionalDocs = async (applicationId, requestId) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  const request = application.additionalDocRequests.id(requestId);
+  if (!request) throw new AppError('Request not found', 404);
+  if (request.status !== 'open') throw new AppError('Request is not open for submission', 400);
+
+  request.status = 'submitted';
+  request.submittedAt = new Date();
+  await application.save();
+  return refreshApplication(application._id);
+};
+
+const reviewAdditionalDocs = async (applicationId, requestId, { status, reviewNotes, reviewedBy }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  const request = application.additionalDocRequests.id(requestId);
+  if (!request) throw new AppError('Request not found', 404);
+
+  request.status = status; // 'approved' or 'rejected'
+  request.reviewedBy = reviewedBy;
+  request.reviewedAt = new Date();
+  request.reviewNotes = reviewNotes || '';
+  await application.save();
+  return refreshApplication(application._id);
+};
+
+// ── RTO Submission Versioning (CA-08 duplicate prevention) ──
+
+const createRTOSubmission = async (applicationId, { sentBy, documentsIncluded, emailSent }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  // Supersede all previous submissions
+  for (const sub of application.rtoSubmissions) {
+    sub.superseded = true;
+  }
+
+  const version = (application.rtoSubmissions.length || 0) + 1;
+  application.rtoSubmissions.push({
+    sentAt: new Date(),
+    sentBy,
+    packageVersion: version,
+    documentsIncluded: documentsIncluded || [],
+    emailSent: emailSent || false,
+    superseded: false,
+  });
+
+  await application.save();
+  return refreshApplication(application._id);
+};
+
 const reviewDocument = async (applicationId, documentId, reviewData) => {
   const application = await Application.findById(applicationId);
   if (!application) throw new AppError('Application not found', 404);
@@ -877,4 +967,8 @@ module.exports = {
   getStats,
   exportCsv,
   tryAutoStartTimer,
+  createAdditionalDocRequest,
+  submitAdditionalDocs,
+  reviewAdditionalDocs,
+  createRTOSubmission,
 };

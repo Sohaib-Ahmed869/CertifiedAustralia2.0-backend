@@ -56,6 +56,14 @@ const documentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    uploadedOnBehalf: {
+      type: Boolean,
+      default: false,
+    },
+    // Links to additional doc request if applicable
+    additionalDocRequestId: {
+      type: mongoose.Schema.Types.ObjectId,
+    },
     verifiedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
