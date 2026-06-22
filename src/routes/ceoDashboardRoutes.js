@@ -4,9 +4,9 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All routes require authentication + Admin or CEOReportingManager role
+// All routes require authentication + Admin, CEOReportingManager, or Marketing role
 router.use(protect);
-router.use(authorize('Admin', 'CEOReportingManager'));
+router.use(authorize('Admin', 'CEOReportingManager', 'Marketing'));
 
 // ── Dashboard aggregation routes ──
 router.get('/overview', controller.getOverview);
@@ -14,6 +14,7 @@ router.get('/leads', controller.getLeads);
 router.get('/call-attempts', controller.getCallAttempts);
 router.get('/agent-performance', controller.getAgentPerformance);
 router.get('/marketing', controller.getMarketing);
+router.get('/marketing/export', controller.exportMarketing);
 router.post('/marketing/spend', controller.createMarketingSpend);
 router.get('/supplier-liability', controller.getSupplierLiability);
 

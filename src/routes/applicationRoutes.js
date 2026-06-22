@@ -9,9 +9,10 @@ router.route('/')
   .get(controller.applications.list)
   .post(controller.createApplication);
 
-// Stats and export routes MUST be before /:id to avoid Express param collision
+// Stats, export and search routes MUST be before /:id to avoid Express param collision
 router.get('/stats', controller.getStats);
 router.get('/export', controller.exportCsv);
+router.get('/notes/search', controller.searchNotes);
 
 router.route('/:id')
   .get(controller.getApplication)
@@ -24,6 +25,8 @@ router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);
 router.post('/:id/rto-submission', controller.sendRTOSubmission);
 router.patch('/:id/status', controller.updateStatus);
 router.post('/:id/notes', controller.addNote);
+router.patch('/:id/notes/:noteId', controller.editNote);
+router.delete('/:id/notes/:noteId', controller.deleteNote);
 router.post('/:id/discounts', controller.addDiscount);
 router.delete('/:id/discounts/:discountId', controller.removeDiscount);
 router.post('/:id/calls', controller.logCall);

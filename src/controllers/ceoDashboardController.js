@@ -30,6 +30,17 @@ module.exports = {
     res.status(200).json(result);
   }),
 
+  exportMarketing: asyncHandler(async (req, res) => {
+    const data = await ceoDashboardService.exportMarketingData(req.query);
+    const { Parser } = require('json2csv');
+    const fields = ['platform', 'spend', 'leads', 'conversions', 'revenue', 'cpaPerLead', 'cpaPerConversion', 'roas'];
+    const parser = new Parser({ fields });
+    const csv = parser.parse(data);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=marketing-data.csv');
+    res.status(200).send(csv);
+  }),
+
   createMarketingSpend: asyncHandler(async (req, res) => {
     const data = { ...req.body, createdBy: req.user._id };
     const item = await ceoDashboardService.marketingSpend.create(data);

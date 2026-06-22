@@ -124,6 +124,31 @@ module.exports = {
     res.status(201).json({ item: result });
   }),
 
+  searchNotes: asyncHandler(async (req, res) => {
+    const results = await service.searchNotes(req.query.q, {
+      visibility: req.query.visibility,
+      limit: parseInt(req.query.limit, 10) || 50,
+    });
+    res.status(200).json({ items: results });
+  }),
+
+  editNote: asyncHandler(async (req, res) => {
+    const result = await service.editNote(req.params.id, req.params.noteId, {
+      content: req.body.content,
+      userId: req.user._id,
+      userRole: req.user.role,
+    });
+    res.status(200).json({ item: result });
+  }),
+
+  deleteNote: asyncHandler(async (req, res) => {
+    const result = await service.deleteNote(req.params.id, req.params.noteId, {
+      userId: req.user._id,
+      userRole: req.user.role,
+    });
+    res.status(200).json({ item: result });
+  }),
+
   addDiscount: asyncHandler(async (req, res) => {
     const result = await service.addDiscount(req.params.id, {
       ...req.body,

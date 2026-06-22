@@ -58,6 +58,14 @@ const conversationSchema = new mongoose.Schema(
     // DM uniqueness — sorted participant ID hash
     dmParticipantHash: { type: String, unique: true, sparse: true },
 
+    // Observers: users with read-only access (admin visibility on RTO-student chats)
+    observers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+
     archived: { type: Boolean, default: false },
   },
   { timestamps: true }

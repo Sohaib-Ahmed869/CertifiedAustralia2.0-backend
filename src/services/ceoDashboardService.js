@@ -1075,6 +1075,23 @@ async function getSupplierLiability(query = {}) {
   };
 }
 
+/**
+ * Export marketing data as flat array for CSV.
+ */
+async function exportMarketingData(query = {}) {
+  const data = await getMarketing(query);
+  return (data.cpaBreakdown || []).map((p) => ({
+    platform: p.label || p.platform,
+    spend: p.spend || 0,
+    leads: p.leads || 0,
+    conversions: p.paid || 0,
+    revenue: p.revenue || 0,
+    cpaPerLead: p.cpaLead || 0,
+    cpaPerConversion: p.cpaConverted || 0,
+    roas: p.roas || 0,
+  }));
+}
+
 module.exports = {
   marketingSpend: marketingSpendCrud,
   getOverview,
@@ -1083,4 +1100,5 @@ module.exports = {
   getAgentPerformance,
   getMarketing,
   getSupplierLiability,
+  exportMarketingData,
 };

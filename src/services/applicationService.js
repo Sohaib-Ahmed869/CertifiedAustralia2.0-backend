@@ -526,6 +526,77 @@ const addNote = async (applicationId, note) => {
   return refreshApplication(application._id);
 };
 
+/**
+ * Search notes across all applications by keyword.
+ */
+const searchNotes = async (query, { visibility, limit = 50 } = {}) => {
+  const filter = { 'notes.content': { $regex: query, $options: 'i' } };
+  const apps = await Application.find(filter)
+    .populate('studentId', 'firstName lastName')
+    .populate('notes.addedBy', 'firstName lastName')
+    .select('applicationId studentId notes')
+    .lean();
+
+  const results = [];
+  for (const app of apps) {
+    for (const note of app.notes || []) {
+      if (!note.content?.match(new RegExp(query, 'i'))) continue;
+      if (visibility && note.visibility !== visibility) continue;
+      results.push({
+        applicationId: app.applicationId,
+        applicationObjId: app._id,
+        studentName: app.studentId ? `${app.studentId.firstName} ${app.studentId.lastName}` : 'Unknown',
+        noteId: note._id,
+        content: note.content,
+        addedBy: note.addedBy,
+        addedAt: note.addedAt,
+        visibility: note.visibility,
+      });
+    }
+  }
+
+  return results.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt)).slice(0, limit);
+};
+
+/**
+ * Edit a note on an application (only author or admin).
+ */
+const editNote = async (applicationId, noteId, { content, userId, userRole }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  const note = application.notes.id(noteId);
+  if (!note) throw new AppError('Note not found', 404);
+
+  // Permission check: only author or admin can edit
+  if (String(note.addedBy) !== String(userId) && userRole !== 'Admin' && userRole !== 'CEOReportingManager') {
+    throw new AppError('You do not have permission to edit this note', 403);
+  }
+
+  note.content = content;
+  await application.save();
+  return refreshApplication(application._id);
+};
+
+/**
+ * Delete a note from an application (only author or admin).
+ */
+const deleteNote = async (applicationId, noteId, { userId, userRole }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  const note = application.notes.id(noteId);
+  if (!note) throw new AppError('Note not found', 404);
+
+  if (String(note.addedBy) !== String(userId) && userRole !== 'Admin' && userRole !== 'CEOReportingManager') {
+    throw new AppError('You do not have permission to delete this note', 403);
+  }
+
+  note.deleteOne();
+  await application.save();
+  return refreshApplication(application._id);
+};
+
 const addDiscount = async (applicationId, { amount, note, createdBy }) => {
   const application = await Application.findById(applicationId);
   if (!application) throw new AppError('Application not found', 404);
@@ -1042,6 +1113,9 @@ module.exports = {
   uploadDocument,
   issueCertificate,
   addNote,
+  searchNotes,
+  editNote,
+  deleteNote,
   addDiscount,
   removeDiscount,
   reviewDocument,

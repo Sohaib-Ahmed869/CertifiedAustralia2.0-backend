@@ -269,6 +269,22 @@ const ROLE_DEFAULTS = {
     feature_restore_applications: false,
   },
 
+  Marketing: {
+    tab_dashboard: true,
+    tab_marketing_links: true,
+    tab_ceo_dashboard: false,
+    tab_applications: false,
+    tab_students: false,
+    tab_users: false,
+    tab_inbox: true,
+    tab_chat: true,
+    tab_settings: true,
+    tab_settings_password: true,
+    feature_view_marketing_data: true,
+    feature_log_marketing_spend: true,
+    feature_export_marketing_data: true,
+  },
+
   Student: {
     // Students don't go through RBAC — their portal is always fully accessible
   },

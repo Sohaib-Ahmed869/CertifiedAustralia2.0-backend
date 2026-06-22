@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['Admin', 'Agent', 'Student', 'InternalRTO', 'ExternalRTO', 'Support', 'CEOReportingManager'],
+      enum: ['Admin', 'Agent', 'Student', 'InternalRTO', 'ExternalRTO', 'Support', 'CEOReportingManager', 'Marketing'],
       required: true,
     },
     status: {
@@ -65,6 +65,11 @@ const userSchema = new mongoose.Schema(
     portalAccess: {
       type: [String],
       enum: ['admin', 'student', 'rto', 'support'],
+    },
+    // RTO-specific: direct student communication toggle (CA-04)
+    directStudentCommunication: {
+      type: Boolean,
+      default: false,
     },
     // RBAC: per-user permission overrides (Map<String, Boolean>)
     // undefined = use role default, false = explicitly denied, true = explicitly granted
