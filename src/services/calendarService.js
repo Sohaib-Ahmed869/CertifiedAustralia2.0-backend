@@ -341,6 +341,113 @@ const syncFollowUp = async (userId, eventData) => {
   return results;
 };
 
+/**
+ * Get calendar events for a date range — aggregates tasks, follow-ups, and deadlines.
+ */
+const getCalendarEvents = async (userId, dateFrom, dateTo) => {
+  const Task = require('../models/Task');
+  const Application = require('../models/Application');
+
+  const from = new Date(dateFrom);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(dateTo);
+  to.setHours(23, 59, 59, 999);
+
+  const events = [];
+
+  // Tasks with due dates in range
+  const tasks = await Task.find({
+    $or: [
+      { assignedTo: userId },
+      { createdBy: userId },
+    ],
+    dueDate: { $gte: from, $lte: to },
+  })
+    .populate('applicationId', 'applicationId studentId')
+    .populate('assignedTo', 'firstName lastName')
+    .lean();
+
+  for (const t of tasks) {
+    events.push({
+      id: `task-${t._id}`,
+      type: 'task',
+      title: t.title,
+      date: t.dueDate,
+      status: t.status,
+      priority: t.priority,
+      applicationId: t.applicationId?.applicationId,
+      assignedTo: t.assignedTo ? `${t.assignedTo.firstName} ${t.assignedTo.lastName}` : null,
+      link: t.applicationId?.studentId
+        ? `/admin/students/${t.applicationId.studentId}`
+        : '/admin/tasks',
+      color: t.priority === 'high' ? '#ef4444' : t.priority === 'medium' ? '#f59e0b' : '#3b82f6',
+    });
+  }
+
+  // Follow-up calls in range
+  const appsWithFollowUps = await Application.find({
+    'followUpCalls.scheduledFor': { $gte: from, $lte: to },
+    $or: [
+      { assignedAgentId: userId },
+    ],
+  })
+    .populate('studentId', 'firstName lastName')
+    .select('applicationId studentId followUpCalls assignedAgentId')
+    .lean();
+
+  for (const app of appsWithFollowUps) {
+    const studentName = app.studentId
+      ? `${app.studentId.firstName} ${app.studentId.lastName}`
+      : 'Unknown';
+    for (const call of app.followUpCalls || []) {
+      const d = new Date(call.scheduledFor);
+      if (d >= from && d <= to) {
+        events.push({
+          id: `followup-${app._id}-${call._id}`,
+          type: 'follow_up',
+          title: `Follow-up: ${studentName}`,
+          date: call.scheduledFor,
+          status: call.completedAt ? 'done' : 'pending',
+          applicationId: app.applicationId,
+          link: `/admin/students/${app.studentId?._id || app._id}`,
+          color: '#8b5cf6',
+          notes: call.outcome || call.notes || '',
+        });
+      }
+    }
+  }
+
+  // Application deadlines (RTO completion) in range
+  const deadlineApps = await Application.find({
+    rtoCompletionDeadline: { $gte: from, $lte: to },
+    $or: [
+      { assignedAgentId: userId },
+      { assignedRTOId: userId },
+    ],
+  })
+    .populate('studentId', 'firstName lastName')
+    .select('applicationId studentId rtoCompletionDeadline status')
+    .lean();
+
+  for (const app of deadlineApps) {
+    const studentName = app.studentId
+      ? `${app.studentId.firstName} ${app.studentId.lastName}`
+      : 'Unknown';
+    events.push({
+      id: `deadline-${app._id}`,
+      type: 'deadline',
+      title: `21-Day Deadline: ${studentName}`,
+      date: app.rtoCompletionDeadline,
+      status: app.status,
+      applicationId: app.applicationId,
+      link: `/admin/students/${app.studentId?._id || app._id}`,
+      color: '#ef4444',
+    });
+  }
+
+  return events.sort((a, b) => new Date(a.date) - new Date(b.date));
+};
+
 module.exports = {
   getGoogleAuthUrl,
   handleGoogleCallback,
@@ -350,4 +457,5 @@ module.exports = {
   getConnections,
   updateSyncPreferences,
   syncFollowUp,
+  getCalendarEvents,
 };

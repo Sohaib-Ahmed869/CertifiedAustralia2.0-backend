@@ -1,6 +1,8 @@
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 const AppError = require('../utils/AppError');
 const buildCrud = require('./commonCrud');
+const { sendTemplatedEmail } = require('./emailService');
 
 const notificationCrud = buildCrud(Notification, {
   populate: ['userId'],
@@ -99,11 +101,49 @@ const getUnreadCount = async (userId, typeFilter) => {
   return { count };
 };
 
+/**
+ * Notify a user with both in-portal notification AND email.
+ * @param {string} userId
+ * @param {object} data - { type, title, message, link?, relatedId? }
+ * @param {object} [emailOpts] - { subject?, ctaText?, ctaUrl? } — if provided, sends email too
+ */
+const notifyWithEmail = async (userId, data, emailOpts) => {
+  const notification = await notify(userId, data);
+
+  if (emailOpts) {
+    try {
+      const user = await User.findById(userId).select('email firstName').lean();
+      if (user?.email) {
+        const baseUrl = process.env.APP_BASE_URL || 'http://localhost:5173';
+        sendTemplatedEmail({
+          to: user.email,
+          subject: emailOpts.subject || data.title,
+          preheader: data.message,
+          templateContent: `
+            <h2 style="margin:0 0 16px 0;font-size:20px;color:#111827;">${data.title}</h2>
+            <p>Hi ${user.firstName || 'there'},</p>
+            <p>${data.message}</p>
+          `,
+          ctaText: emailOpts.ctaText || 'View in Portal',
+          ctaUrl: emailOpts.ctaUrl || (data.link ? `${baseUrl}${data.link}` : baseUrl),
+        }).catch((err) => {
+          console.error('[NotificationService] Email dispatch error:', err.message);
+        });
+      }
+    } catch (err) {
+      console.error('[NotificationService] Email lookup error:', err.message);
+    }
+  }
+
+  return notification;
+};
+
 module.exports = {
   notifications: notificationCrud,
   createNotification,
   notify,
   notifyMany,
+  notifyWithEmail,
   notifyConversationParticipants,
   markRead,
   markAllRead,

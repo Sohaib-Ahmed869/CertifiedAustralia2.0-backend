@@ -116,4 +116,17 @@ router.post(
   })
 );
 
+// GET /api/calendar/events — aggregated calendar events for the current user
+router.get(
+  '/events',
+  asyncHandler(async (req, res) => {
+    const { dateFrom, dateTo } = req.query;
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ message: 'dateFrom and dateTo are required' });
+    }
+    const events = await calendarService.getCalendarEvents(req.user._id, dateFrom, dateTo);
+    res.json({ events });
+  })
+);
+
 module.exports = router;
