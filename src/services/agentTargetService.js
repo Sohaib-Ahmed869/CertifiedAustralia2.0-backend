@@ -2,6 +2,7 @@ const AgentTarget = require('../models/AgentTarget');
 const User = require('../models/User');
 const Application = require('../models/Application');
 const Payment = require('../models/Payment');
+const CallLog = require('../models/CallLog');
 const AppError = require('../utils/AppError');
 
 // ---------------------------------------------------------------------------
@@ -183,18 +184,29 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
 
     const revenue = revenueAgg[0]?.total || 0;
 
-    // Call attempts in period
-    const callsAgg = await Application.aggregate([
+    // Call counts from CallLog (structured) in period
+    const callsAgg = await CallLog.aggregate([
       {
         $match: {
-          assignedAgentId: agent._id,
-          updatedAt: { $gte: periodStart, $lt: periodEnd },
+          agentId: agent._id,
+          createdAt: { $gte: periodStart, $lt: periodEnd },
         },
       },
-      { $group: { _id: null, total: { $sum: '$contactAttempts' } } },
+      {
+        $group: {
+          _id: '$outcome',
+          count: { $sum: 1 },
+        },
+      },
     ]);
 
-    const calls = callsAgg[0]?.total || 0;
+    let calls = 0;
+    const callOutcomes = {};
+    for (const entry of callsAgg) {
+      calls += entry.count;
+      callOutcomes[entry._id] = entry.count;
+    }
+
     const conversionPct = assigned > 0 ? Math.round((paid / assigned) * 100) : 0;
 
     results.push({
@@ -217,6 +229,7 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
         paid,
         revenue,
         calls,
+        callOutcomes,
         conversionPct,
       },
       progress: {
@@ -236,6 +249,99 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
   };
 };
 
+/**
+ * Get a single agent's performance for today + current period.
+ * Used for agent self-view ("My Performance" card).
+ */
+const getMyPerformance = async (agentId) => {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+
+  const weekStart = getWeekStart(now);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+
+  const monthStart = getMonthStart(now);
+  const monthEnd = new Date(monthStart);
+  monthEnd.setMonth(monthEnd.getMonth() + 1);
+
+  const mongoose = require('mongoose');
+  const agentObjId = new mongoose.Types.ObjectId(agentId);
+
+  // Today's calls from CallLog
+  const todayCalls = await CallLog.aggregate([
+    { $match: { agentId: agentObjId, createdAt: { $gte: todayStart, $lt: todayEnd } } },
+    { $group: { _id: '$outcome', count: { $sum: 1 } } },
+  ]);
+
+  let todayTotal = 0;
+  const todayOutcomes = {};
+  for (const e of todayCalls) {
+    todayTotal += e.count;
+    todayOutcomes[e._id] = e.count;
+  }
+
+  // Weekly calls
+  const weekCalls = await CallLog.countDocuments({
+    agentId: agentObjId,
+    createdAt: { $gte: weekStart, $lt: weekEnd },
+  });
+
+  // Monthly calls
+  const monthCalls = await CallLog.countDocuments({
+    agentId: agentObjId,
+    createdAt: { $gte: monthStart, $lt: monthEnd },
+  });
+
+  // Weekly target
+  const weekTarget = await AgentTarget.findOne({
+    agentId: agentObjId,
+    period: 'weekly',
+    periodStart: weekStart,
+  }).lean();
+
+  // Monthly target
+  const monthTarget = await AgentTarget.findOne({
+    agentId: agentObjId,
+    period: 'monthly',
+    periodStart: monthStart,
+  }).lean();
+
+  // Applications assigned this month
+  const assignedThisMonth = await Application.countDocuments({
+    assignedAgentId: agentObjId,
+    createdAt: { $gte: monthStart, $lt: monthEnd },
+  });
+
+  // Paid this month
+  const paidThisMonth = await Application.countDocuments({
+    assignedAgentId: agentObjId,
+    status: { $in: PAID_STATUSES },
+    updatedAt: { $gte: monthStart, $lt: monthEnd },
+  });
+
+  return {
+    today: {
+      calls: todayTotal,
+      outcomes: todayOutcomes,
+    },
+    week: {
+      calls: weekCalls,
+      callsTarget: weekTarget?.callsTarget || 0,
+      callsProgress: weekTarget?.callsTarget ? Math.round((weekCalls / weekTarget.callsTarget) * 100) : null,
+    },
+    month: {
+      calls: monthCalls,
+      callsTarget: monthTarget?.callsTarget || 0,
+      assigned: assignedThisMonth,
+      paid: paidThisMonth,
+      conversionPct: assignedThisMonth > 0 ? Math.round((paidThisMonth / assignedThisMonth) * 100) : 0,
+    },
+  };
+};
+
 module.exports = {
   upsertTarget,
   bulkSetTargets,
@@ -243,4 +349,5 @@ module.exports = {
   getTargetById,
   deleteTarget,
   getPerformanceVsTargets,
+  getMyPerformance,
 };

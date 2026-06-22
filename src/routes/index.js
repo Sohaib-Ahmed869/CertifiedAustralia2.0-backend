@@ -19,6 +19,7 @@ const mailboxRoutes = require('./mailboxRoutes');
 const documentFeedbackRoutes = require('./documentFeedbackRoutes');
 const chatRoutes = require('./chatRoutes');
 const callLogRoutes = require('./callLogRoutes');
+const rtoInvoiceRoutes = require('./rtoInvoiceRoutes');
 const applicationController = require('../controllers/applicationController');
 
 const router = express.Router();
@@ -43,6 +44,7 @@ router.use('/mailboxes', mailboxRoutes);
 router.use('/document-feedback', documentFeedbackRoutes);
 router.use('/chat', chatRoutes);
 router.use('/call-logs', callLogRoutes);
+router.use('/rto-invoices', rtoInvoiceRoutes);
 
 // Standalone intake form access (read-only)
 router.get('/intake-forms/:id', applicationController.intakeForms.getById);

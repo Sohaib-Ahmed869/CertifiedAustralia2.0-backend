@@ -6,6 +6,18 @@ const agentTargetService = require('../services/agentTargetService');
 const router = express.Router();
 
 router.use(protect);
+
+// GET /api/agent-targets/my-performance — agent self-view (accessible to agents)
+router.get(
+  '/my-performance',
+  authorize('Agent', 'Admin', 'CEOReportingManager'),
+  asyncHandler(async (req, res) => {
+    const result = await agentTargetService.getMyPerformance(req.user._id);
+    res.json(result);
+  })
+);
+
+// All routes below require Admin/CEO
 router.use(authorize('Admin', 'CEOReportingManager'));
 
 // GET /api/agent-targets/performance — performance vs targets comparison
