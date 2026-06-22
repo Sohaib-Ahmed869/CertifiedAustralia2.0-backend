@@ -189,13 +189,14 @@ const applicationSchema = new mongoose.Schema(
         ref: 'Task',
       },
     ],
-    // 21-day RTO completion KPI
+    // 21-day RTO assessment KPI timer (count-up from start, not countdown)
+    // Starts when student completes all obligations. Stops when RTO invoice uploaded.
+    timerStartedAt: Date,
+    timerStoppedAt: Date,
+    timerDaysElapsed: Number,
+    // Legacy fields (kept for backward compat with existing data)
     studentCompletionDate: Date,
     rtoCompletionDeadline: Date,
-    rtoCompletionDate: Date,
-    timerPausedAt: Date,
-    timerPauseReason: String,
-    timerBreachReported: Boolean,
     // Resubmission tracking
     resubmissionRequests: [
       {

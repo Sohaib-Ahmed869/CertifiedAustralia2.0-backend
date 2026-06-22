@@ -21,7 +21,7 @@ const tryAutoStartTimer = async (applicationId) => {
   if (!app) return;
 
   // Already started — don't restart
-  if (app.studentCompletionDate) return;
+  if (app.timerStartedAt || app.studentCompletionDate) return;
 
   // Check condition 1: has completed payment
   const hasPaid = app.paymentIds && app.paymentIds.length > 0
@@ -39,10 +39,11 @@ const tryAutoStartTimer = async (applicationId) => {
   // Check condition 3: at least one document uploaded
   if (!app.documentIds || app.documentIds.length === 0) return;
 
-  // All 3 conditions met — mark student as completed and start 21-day timer
+  // All 3 conditions met — mark student as completed and start timer
+  const now = new Date();
   app.status = 'StudentCompleted';
-  app.studentCompletionDate = new Date();
-  app.rtoCompletionDeadline = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000);
+  app.timerStartedAt = now;
+  app.studentCompletionDate = now; // legacy compat
   await app.save();
 };
 
@@ -248,6 +249,18 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
 
 const updateStatus = async (applicationId, status) => {
   const update = { status };
+
+  // Stop the 21-day timer when RTO invoice is uploaded
+  if (status === 'RTOInvoiceUploaded') {
+    const app = await Application.findById(applicationId).lean();
+    if (app?.timerStartedAt && !app.timerStoppedAt) {
+      const now = new Date();
+      update.timerStoppedAt = now;
+      update.timerDaysElapsed = Math.floor(
+        (now.getTime() - new Date(app.timerStartedAt).getTime()) / (1000 * 60 * 60 * 24)
+      );
+    }
+  }
 
   const application = await Application.findByIdAndUpdate(
     applicationId,
@@ -755,7 +768,7 @@ const reviewDocument = async (applicationId, documentId, reviewData) => {
 
 /**
  * Get timer status for an application. Timer is AUTOMATIC — no manual pause/resume.
- * Auto-starts via tryAutoStartTimer when 3 student obligations are met.
+ * Count-up from timerStartedAt. Stops when timerStoppedAt is set (RTO invoice uploaded).
  * The timer is a KPI for internal management visibility only, not shown to RTOs.
  */
 const getTimerStatus = async (applicationId) => {
@@ -763,25 +776,34 @@ const getTimerStatus = async (applicationId) => {
   if (!application) throw new AppError('Application not found', 404);
 
   const now = new Date();
-  let status = 'not_started';
-  let daysRemaining = null;
 
-  if (application.rtoCompletionDate) {
-    status = 'completed';
-    daysRemaining = 0;
-  } else if (application.rtoCompletionDeadline) {
-    daysRemaining = Math.ceil(
-      (new Date(application.rtoCompletionDeadline) - now) / (1000 * 60 * 60 * 24)
-    );
-    status = daysRemaining <= 0 ? 'overdue' : 'running';
+  // Not started
+  if (!application.timerStartedAt) {
+    return { status: 'not_started', daysElapsed: null, timerStartedAt: null, timerStoppedAt: null, timerDaysElapsed: null };
   }
 
+  // Stopped (RTO invoice uploaded)
+  if (application.timerStoppedAt) {
+    return {
+      status: 'stopped',
+      daysElapsed: application.timerDaysElapsed,
+      timerStartedAt: application.timerStartedAt,
+      timerStoppedAt: application.timerStoppedAt,
+      timerDaysElapsed: application.timerDaysElapsed,
+    };
+  }
+
+  // Running — calculate live days elapsed
+  const daysElapsed = Math.floor(
+    (now.getTime() - new Date(application.timerStartedAt).getTime()) / (1000 * 60 * 60 * 24)
+  );
+
   return {
-    status,
-    daysRemaining,
-    studentCompletionDate: application.studentCompletionDate,
-    rtoCompletionDeadline: application.rtoCompletionDeadline,
-    rtoCompletionDate: application.rtoCompletionDate,
+    status: daysElapsed > 21 ? 'overdue' : 'running',
+    daysElapsed,
+    timerStartedAt: application.timerStartedAt,
+    timerStoppedAt: null,
+    timerDaysElapsed: null,
   };
 };
 
