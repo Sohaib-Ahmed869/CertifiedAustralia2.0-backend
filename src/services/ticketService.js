@@ -3,7 +3,7 @@ const AppError = require('../utils/AppError');
 const buildCrud = require('./commonCrud');
 
 const ticketCrud = buildCrud(Ticket, {
-  populate: ['requesterId', 'assignedTo', 'applicationId'],
+  populate: ['requesterId', 'assignedTo', 'applicationId', 'messages.senderId'],
 });
 
 const generateTicketId = async () => {
@@ -37,7 +37,7 @@ const createTicket = async (data) => {
   });
 
   return Ticket.findById(ticket._id)
-    .populate('requesterId assignedTo applicationId')
+    .populate('requesterId assignedTo applicationId messages.senderId')
     .lean();
 };
 
@@ -100,7 +100,7 @@ const addMessage = async (ticketId, messageData) => {
   }
 
   return Ticket.findById(ticket._id)
-    .populate('requesterId assignedTo applicationId')
+    .populate('requesterId assignedTo applicationId messages.senderId')
     .lean();
 };
 
@@ -144,7 +144,7 @@ const resolveTicket = async (ticketId, userId, finalMessage) => {
   }
 
   return Ticket.findById(ticket._id)
-    .populate('requesterId assignedTo applicationId')
+    .populate('requesterId assignedTo applicationId messages.senderId')
     .lean();
 };
 
