@@ -2,8 +2,11 @@ const express = require('express');
 const controller = require('../controllers/applicationController');
 const docController = require('../controllers/documentController');
 const upload = require('../middleware/upload');
+const { protect } = require('../middleware/auth');
 
 const router = express.Router();
+
+router.use(protect);
 
 router.route('/')
   .get(controller.applications.list)

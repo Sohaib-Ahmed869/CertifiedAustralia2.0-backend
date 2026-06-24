@@ -128,6 +128,24 @@ const applicationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'PaymentPlan',
     },
+    // ── Completion flags (explicit booleans for reliable status derivation) ──
+    // Mirrors old project: full_paid = fully paid, partialPayment = at least one payment made
+    paymentCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    partialPayment: {
+      type: Boolean,
+      default: false,
+    },
+    intakeFormSubmitted: {
+      type: Boolean,
+      default: false,
+    },
+    documentsUploaded: {
+      type: Boolean,
+      default: false,
+    },
     // Forms
     intakeFormId: {
       type: mongoose.Schema.Types.ObjectId,

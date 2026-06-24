@@ -57,7 +57,7 @@ const DOC_TYPE_MAP = {
 
 const resolveDocType = (fieldName) => DOC_TYPE_MAP[fieldName] || 'Other';
 
-/* Ensure the application has a Google Drive folder */
+/* Ensure the application has a Google Drive folder (uses cache + dedup like old project) */
 const ensureDriveFolder = async (application) => {
   if (application.googleDriveFolderId) return application.googleDriveFolderId;
 
@@ -67,14 +67,20 @@ const ensureDriveFolder = async (application) => {
     studentName = `${s.firstName || ''} ${s.lastName || ''}`.trim();
   }
 
-  const folder = await driveService.createApplicationFolder({
-    applicationId: application.applicationId,
-    studentName,
-  });
+  // Build a descriptive folder name like the old project
+  const parts = [application.applicationId];
+  if (studentName) parts.push(studentName);
+  const folderName = parts.join(' - ');
 
-  application.googleDriveFolderId = folder.id;
+  // getOrCreateAppFolder checks cache first, then searches Drive, then creates
+  const folderId = await driveService.getOrCreateAppFolder(
+    application.applicationId,
+    folderName,
+  );
+
+  application.googleDriveFolderId = folderId;
   await application.save();
-  return folder.id;
+  return folderId;
 };
 
 /* ── Upload single file ── */
@@ -117,12 +123,14 @@ const uploadSingle = asyncHandler(async (req, res) => {
   const document = await Document.create({
     applicationId: appId,
     studentId: application.studentId._id || application.studentId,
+    fieldName,
     fileName: file.originalname,
     fileType: mime,
     googleDriveFileId: driveFile.id,
     googleDriveLink: driveFile.webViewLink,
     documentType: resolveDocType(fieldName),
     uploadedBy: req.user?._id || application.studentId._id || application.studentId,
+    uploadedOnBehalf: req.body.uploadedOnBehalf === 'true' || req.body.uploadedOnBehalf === true,
     rtoAccessExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   });
 
@@ -188,6 +196,7 @@ const uploadMultiple = asyncHandler(async (req, res) => {
     const document = await Document.create({
       applicationId: appId,
       studentId: application.studentId._id || application.studentId,
+      fieldName,
       fileName: file.originalname,
       fileType: mime,
       googleDriveFileId: driveFile.id,

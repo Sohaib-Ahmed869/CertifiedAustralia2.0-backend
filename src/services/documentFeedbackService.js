@@ -87,7 +87,7 @@ const createAdminFeedback = async (applicationId, data) => {
         type: 'feedback_received',
         title: 'Document Correction Required',
         message: `A correction has been requested for your ${data.documentLabel || 'document'}.`,
-        link: '/student/applications',
+        link: `/student/documents/${applicationId}`,
         relatedId: applicationId,
       });
     }
@@ -270,26 +270,28 @@ const rtoRejectResolution = async (feedbackId, { rejectionMessage, rtoName }) =>
 /* ── Auto-resolve: called from documentController when student re-uploads ── */
 
 const autoResolveOnReupload = async (applicationId, documentField) => {
-  const active = await DocumentFeedback.findOne({
+  // Find ALL active (non-resolved) feedback for this document field
+  const activeList = await DocumentFeedback.find({
     applicationId,
     documentField,
-    status: 'forwarded_to_student',
-    sentToStudent: true,
+    status: { $nin: ['resolved', 'completed', 'student_resolved'] },
   });
-  if (!active) return null;
+  if (!activeList.length) return null;
 
-  active.studentMarkedComplete = true;
-  active.studentMarkedCompleteAt = new Date();
-  active.status = 'student_resolved';
-  active.thread.push({
-    role: 'student',
-    authorName: 'Student',
-    content: 'Document re-uploaded — correction submitted.',
-    sentToStudent: true,
-    createdAt: new Date(),
-  });
-  await active.save();
-  return active;
+  for (const active of activeList) {
+    active.studentMarkedComplete = true;
+    active.studentMarkedCompleteAt = new Date();
+    active.status = 'student_resolved';
+    active.thread.push({
+      role: 'student',
+      authorName: 'Student',
+      content: 'Document re-uploaded — correction submitted.',
+      sentToStudent: true,
+      createdAt: new Date(),
+    });
+    await active.save();
+  }
+  return activeList[0];
 };
 
 /* ── Stats ── */

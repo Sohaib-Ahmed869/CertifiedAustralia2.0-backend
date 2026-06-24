@@ -13,6 +13,9 @@ const documentSchema = new mongoose.Schema(
       required: true,
     },
     // File details
+    fieldName: {
+      type: String,
+    },
     fileName: {
       type: String,
       required: true,

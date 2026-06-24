@@ -47,24 +47,30 @@ const createPaymentPlan = async (data) => {
 
 const allocateToPlan = async (paymentPlan, paymentId, amount) => {
   let remaining = Number(amount);
-  const installments = [...paymentPlan.installments].sort((left, right) => left.index - right.index);
 
-  for (const installment of installments) {
-    if (remaining <= 0) {
-      break;
-    }
+  // Iterate directly on paymentPlan.installments (Mongoose subdocuments) — NOT a spread copy
+  // Sorting in-place by index to ensure sequential allocation
+  const sorted = paymentPlan.installments.sort((a, b) => a.index - b.index);
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (remaining <= 0) break;
+
+    const installment = sorted[i];
+
+    // Skip already-paid and skipped installments
+    if (installment.status === 'paid' || installment.status === 'skipped') continue;
 
     const alreadyPaid = Number(installment.paidAmount || 0);
     const outstanding = Math.max(0, Number(installment.amount) - alreadyPaid);
 
-    if (outstanding === 0) {
+    if (outstanding <= 0) {
       installment.status = 'paid';
       continue;
     }
 
     const applied = Math.min(outstanding, remaining);
     installment.paidAmount = alreadyPaid + applied;
-    installment.paymentIds = installment.paymentIds || [];
+    if (!installment.paymentIds) installment.paymentIds = [];
     installment.paymentIds.push(paymentId);
     remaining -= applied;
 
@@ -81,6 +87,9 @@ const allocateToPlan = async (paymentPlan, paymentId, amount) => {
   if (paymentPlan.totalPaidAmount >= paymentPlan.totalAmount) {
     paymentPlan.status = 'completed';
   }
+
+  // Mark installments array as modified so Mongoose saves the changes
+  paymentPlan.markModified('installments');
 
   return paymentPlan;
 };
@@ -114,7 +123,31 @@ const createPaymentRecord = async (data) => {
       application.paymentIds.push(payment._id);
 
       if (payment.type === 'upfront' || payment.type === 'manualMarkPaid') {
+        // Full payment in one go
+        application.paymentCompleted = true;
         application.status = 'StudentIntakeForm';
+      } else if (payment.type === 'plan') {
+        // Plan installment — allocate to plan installments
+        application.partialPayment = true;
+
+        // Auto-allocate to the payment plan if one exists
+        if (application.paymentPlanId) {
+          try {
+            const planDoc = await PaymentPlan.findById(application.paymentPlanId);
+            if (planDoc && planDoc.status !== 'cancelled') {
+              await allocateToPlan(planDoc, payment._id, payment.amount);
+              await planDoc.save();
+
+              // If plan is now completed, mark application as fully paid
+              if (planDoc.status === 'completed') {
+                application.paymentCompleted = true;
+                application.status = 'StudentIntakeForm';
+              }
+            }
+          } catch (err) {
+            console.error('[PaymentService] Failed to allocate to plan:', err.message);
+          }
+        }
       }
 
       await application.save();
@@ -164,6 +197,13 @@ const applyPaymentToPlan = async (paymentPlanId, data) => {
   await allocateToPlan(paymentPlan, payment._id, data.amount);
   await paymentPlan.save();
 
+  // Set payment flags based on plan completion status
+  const paymentFlags = { partialPayment: true };
+  if (paymentPlan.status === 'completed') {
+    paymentFlags.paymentCompleted = true;
+  }
+  await Application.findByIdAndUpdate(paymentPlan.applicationId, paymentFlags);
+
   // Check if all 3 student obligations are met — auto-start 21-day timer
   await tryAutoStartTimer(paymentPlan.applicationId);
 
@@ -204,8 +244,11 @@ const updatePaymentPlan = async (id, data) => {
       const current = currentByIndex.get(installment.index);
 
       if (current && current.status === 'paid') {
-        const sameAmount = Number(current.amount) === Number(installment.amount);
-        const sameDueDate = String(current.dueDate) === String(installment.dueDate);
+        const sameAmount = Math.abs(Number(current.amount) - Number(installment.amount)) < 0.01;
+        // Compare dates by day only — ignore time/format differences
+        const currentDate = current.dueDate ? new Date(current.dueDate).toISOString().slice(0, 10) : '';
+        const newDate = installment.dueDate ? new Date(installment.dueDate).toISOString().slice(0, 10) : '';
+        const sameDueDate = currentDate === newDate;
 
         if (!sameAmount || !sameDueDate) {
           throw new AppError('Paid installments cannot be changed', 400);
@@ -355,6 +398,12 @@ const getStats = async () => {
 
   const planData = planTotals[0] || { planTotal: 0, planPaid: 0, planCount: 0 };
 
+  // Build per-type lookup from revenueByType aggregation
+  const typeMap = {};
+  revenueByType.forEach((r) => {
+    typeMap[r._id] = { total: r.total, count: r.count };
+  });
+
   return {
     totalRevenue: (statusMap.completed || { total: 0 }).total,
     outstandingBalance: (statusMap.pending || { total: 0 }).total,
@@ -365,6 +414,13 @@ const getStats = async () => {
       total: r.total,
       count: r.count,
     })),
+    // Per-type totals for dashboard KPIs
+    manualTotal: (typeMap.manualMarkPaid || { total: 0 }).total,
+    manualCount: (typeMap.manualMarkPaid || { count: 0 }).count,
+    upfrontTotal: (typeMap.upfront || { total: 0 }).total,
+    upfrontCount: (typeMap.upfront || { count: 0 }).count,
+    discountTotal: (typeMap.discount || { total: 0 }).total,
+    discountCount: (typeMap.discount || { count: 0 }).count,
     revenueThisMonth: thisMonthData.total,
     revenueThisMonthCount: thisMonthData.count,
     totalRefunds: refundData.total,

@@ -18,6 +18,99 @@ router.get('/marketing/export', controller.exportMarketing);
 router.post('/marketing/spend', controller.createMarketingSpend);
 router.get('/supplier-liability', controller.getSupplierLiability);
 
+// ── Expense Management routes ──
+const Expense = require('../models/Expense');
+const asyncHandler = require('../utils/asyncHandler');
+
+router.get('/expenses', asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.startDate) filter.date = { ...filter.date, $gte: new Date(req.query.startDate) };
+  if (req.query.endDate) filter.date = { ...filter.date, $lte: new Date(req.query.endDate) };
+  if (req.query.category) filter.category = req.query.category;
+  if (req.query.rtoName) filter.rtoName = req.query.rtoName;
+
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 50;
+  const [items, total] = await Promise.all([
+    Expense.find(filter).populate('applicationId', 'applicationId status').populate('createdBy', 'firstName lastName')
+      .sort({ date: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    Expense.countDocuments(filter),
+  ]);
+  res.json({ items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+}));
+
+router.get('/expenses/summary', asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.startDate) filter.date = { $gte: new Date(req.query.startDate) };
+  if (req.query.endDate) filter.date = { ...filter.date, $lte: new Date(req.query.endDate) };
+
+  const expenses = await Expense.find(filter).lean();
+  const totals = { rtoCost: 0, studentRevenue: 0, profit: 0, count: expenses.length };
+  const byRto = {};
+  const byCategory = {};
+  const byQualification = {};
+  const monthly = {};
+
+  for (const e of expenses) {
+    totals.rtoCost += e.rtoCost || 0;
+    totals.studentRevenue += e.studentRevenue || 0;
+    totals.profit += e.profit || 0;
+
+    const rto = e.rtoName || 'Unknown';
+    if (!byRto[rto]) byRto[rto] = { rtoName: rto, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0 };
+    byRto[rto].rtoCost += e.rtoCost || 0;
+    byRto[rto].studentRevenue += e.studentRevenue || 0;
+    byRto[rto].profit += e.profit || 0;
+    byRto[rto].count++;
+
+    const cat = e.category || 'Other';
+    if (!byCategory[cat]) byCategory[cat] = { category: cat, total: 0, count: 0 };
+    byCategory[cat].total += e.rtoCost || 0;
+    byCategory[cat].count++;
+
+    const month = e.date ? new Date(e.date).toISOString().slice(0, 7) : 'Unknown';
+    if (!monthly[month]) monthly[month] = { month, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0 };
+    monthly[month].rtoCost += e.rtoCost || 0;
+    monthly[month].studentRevenue += e.studentRevenue || 0;
+    monthly[month].profit += e.profit || 0;
+    monthly[month].count++;
+
+    const qual = e.qualification || 'Unspecified';
+    if (!byQualification[qual]) byQualification[qual] = { qualification: qual, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0 };
+    byQualification[qual].rtoCost += e.rtoCost || 0;
+    byQualification[qual].studentRevenue += e.studentRevenue || 0;
+    byQualification[qual].profit += e.profit || 0;
+    byQualification[qual].count++;
+  }
+
+  totals.avgMargin = totals.studentRevenue > 0 ? ((totals.profit / totals.studentRevenue) * 100).toFixed(1) : 0;
+
+  res.json({
+    totals,
+    byRto: Object.values(byRto).sort((a, b) => b.rtoCost - a.rtoCost),
+    byCategory: Object.values(byCategory).sort((a, b) => b.total - a.total),
+    byQualification: Object.values(byQualification).sort((a, b) => b.rtoCost - a.rtoCost),
+    monthly: Object.values(monthly).sort((a, b) => a.month.localeCompare(b.month)),
+  });
+}));
+
+router.post('/expenses', asyncHandler(async (req, res) => {
+  const item = await Expense.create({ ...req.body, createdBy: req.user._id });
+  res.status(201).json({ item });
+}));
+
+router.patch('/expenses/:id', asyncHandler(async (req, res) => {
+  const item = await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+  if (!item) return res.status(404).json({ message: 'Expense not found' });
+  res.json({ item });
+}));
+
+router.delete('/expenses/:id', asyncHandler(async (req, res) => {
+  const item = await Expense.findByIdAndDelete(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Expense not found' });
+  res.json({ message: 'Expense deleted' });
+}));
+
 // ── Cashflow routes ──
 router.get('/cashflow/range', controller.getCashflowRange);
 router.get('/cashflow/config', controller.getCashflowConfig);

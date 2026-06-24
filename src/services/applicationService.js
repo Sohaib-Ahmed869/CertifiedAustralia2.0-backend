@@ -9,48 +9,45 @@ const Certificate = require('../models/Certificate');
 const Payment = require('../models/Payment');
 
 /**
- * Auto-start the 21-day KPI timer when ALL conditions are met:
- *   1. Payment received (at least one completed payment)
- *   2. Intake form submitted
- *   3. At least one document uploaded
- *   4. RTO has been assigned to the application
+ * Check if the student has completed their 3 obligations and advance status.
+ * Then, if RTO is also assigned, start the 21-day KPI timer.
  *
- * Both student completion AND RTO assignment must happen before the timer starts.
+ * Student completion (3 conditions): payment, intake form, documents uploaded.
+ * Timer start (4th condition): RTO assigned.
+ *
  * Called from: payment creation, intake form submission, document upload, RTO assignment.
- * Skips if the timer has already been started.
  */
 const tryAutoStartTimer = async (applicationId) => {
   const app = await Application.findById(applicationId);
   if (!app) return;
 
-  // Already started — don't restart
-  if (app.timerStartedAt || app.studentCompletionDate) return;
+  // Check 3 student obligations via boolean flags
+  // paymentCompleted = full payment only (not partial plan payments)
+  const hasPaid = app.paymentCompleted;
+  const hasIntake = app.intakeFormSubmitted || !!app.intakeFormId;
+  const hasDocs = app.documentsUploaded || (app.documentIds?.length > 0);
 
-  // Check condition 1: has completed payment
-  const hasPaid = app.paymentIds && app.paymentIds.length > 0
-    ? await Payment.exists({
-        _id: { $in: app.paymentIds },
-        status: 'completed',
-        type: { $in: ['upfront', 'plan', 'manualMarkPaid'] },
-      })
-    : false;
-  if (!hasPaid) return;
+  if (!hasPaid || !hasIntake || !hasDocs) return;
 
-  // Check condition 2: intake form submitted
-  if (!app.intakeFormId) return;
+  // All 3 student obligations met — advance to StudentCompleted if still in a pre-completion status
+  const preStudentStatuses = [
+    'New', 'WaitingForPayment', 'StudentIntakeForm', 'UploadDocuments', 'DocumentsUploaded',
+  ];
+  if (preStudentStatuses.includes(app.status)) {
+    // Use findByIdAndUpdate to avoid race conditions with concurrent saves
+    await Application.findByIdAndUpdate(applicationId, {
+      status: 'StudentCompleted',
+      studentCompletionDate: app.studentCompletionDate || new Date(),
+    });
+  }
 
-  // Check condition 3: at least one document uploaded
-  if (!app.documentIds || app.documentIds.length === 0) return;
+  // Check condition 4: RTO assigned — start the 21-day timer
+  // Re-read to get latest state
+  const refreshed = await Application.findById(applicationId);
+  if (!refreshed || !refreshed.assignedRTOId || refreshed.timerStartedAt) return;
 
-  // Check condition 4: RTO assigned
-  if (!app.assignedRTOId) return;
-
-  // All 4 conditions met — mark student as completed and start 21-day timer
-  const now = new Date();
-  app.status = 'StudentCompleted';
-  app.timerStartedAt = now;
-  app.studentCompletionDate = now; // legacy compat
-  await app.save();
+  refreshed.timerStartedAt = new Date();
+  await refreshed.save();
 };
 
 const applicationCrud = buildCrud(Application, {
@@ -62,6 +59,7 @@ const applicationCrud = buildCrud(Application, {
     'assignedRTOId',
     'paymentPlanId',
     'certificateId',
+    'screeningFormId',
   ],
 });
 
@@ -259,6 +257,11 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
 const updateStatus = async (applicationId, status) => {
   const update = { status };
 
+  // Set boolean flag when documents are submitted
+  if (status === 'DocumentsUploaded') {
+    update.documentsUploaded = true;
+  }
+
   // Stop the 21-day timer when RTO invoice is uploaded
   if (status === 'RTOInvoiceUploaded') {
     const app = await Application.findById(applicationId).lean();
@@ -271,17 +274,25 @@ const updateStatus = async (applicationId, status) => {
     }
   }
 
-  const application = await Application.findByIdAndUpdate(
+  await Application.findByIdAndUpdate(
     applicationId,
     update,
-    { new: true, runValidators: true }
-  )
-    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    { runValidators: true }
+  );
+
+  // Check if all student obligations are met — auto-advance to StudentCompleted
+  await tryAutoStartTimer(applicationId);
+
+  // Re-read after tryAutoStartTimer may have advanced the status
+  const application = await Application.findById(applicationId)
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId screeningFormId')
     .lean();
 
   if (!application) {
     throw new AppError('Application not found', 404);
   }
+
+  const finalStatus = application.status;
 
   // Send notifications for key status changes (non-fatal)
   try {
@@ -297,6 +308,17 @@ const updateStatus = async (applicationId, status) => {
       CertificateGenerated: 'Great news — your certificate has been generated!',
       StudentCompleted: 'Your student requirements are now complete.',
     };
+    // Also notify if auto-advanced to StudentCompleted
+    if (finalStatus === 'StudentCompleted' && status !== 'StudentCompleted' && studentStatuses.StudentCompleted && studentId) {
+      await createNotification({
+        userId: studentId,
+        type: 'status_changed',
+        title: 'Status: Student Completed',
+        message: studentStatuses.StudentCompleted,
+        link: '/student/applications',
+        relatedId: application._id,
+      });
+    }
     if (studentStatuses[status] && studentId) {
       await createNotification({
         userId: studentId,
@@ -374,6 +396,7 @@ const createIntakeForm = async (applicationId, data) => {
   });
 
   application.intakeFormId = intakeForm._id;
+  application.intakeFormSubmitted = true;
   if (data.markSubmitted !== false) {
     application.status = 'UploadDocuments';
   }
@@ -675,12 +698,20 @@ const addDiscount = async (applicationId, { amount, note, createdBy }) => {
   if (!application) throw new AppError('Application not found', 404);
   if (!amount || amount <= 0) throw new AppError('Discount amount must be greater than 0', 400);
 
+  // Ensure discounts array exists (legacy documents may not have it)
+  if (!application.discounts) application.discounts = [];
+
   application.discounts.push({
-    amount,
+    amount: Number(amount),
     note: note || '',
-    createdBy,
+    createdBy: createdBy || undefined,
     createdAt: new Date(),
   });
+
+  // Apply automatic $500 signup discount flag if applicable
+  if (Number(amount) === 500 && !application.signupDiscountApplied) {
+    application.signupDiscountApplied = true;
+  }
 
   await application.save();
   return refreshApplication(application._id);

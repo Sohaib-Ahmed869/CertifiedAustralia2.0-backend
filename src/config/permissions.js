@@ -35,8 +35,12 @@ const PERMISSION_KEYS = [
   'tab_finance_accounts',
   'tab_forecasting',
   'tab_expenses',
+  'tab_calendar',
+  'tab_rto_invoices',
+  'tab_batch_payments',
   'tab_settings_password',
   'tab_settings_calendar',
+  'tab_settings_xero',
 
   // Feature-level permissions
   'feature_assign_agent',
@@ -63,6 +67,9 @@ const PERMISSION_KEYS = [
   'feature_manage_tickets',
   'feature_archive_applications',
   'feature_restore_applications',
+  'feature_manage_expenses',
+  'feature_manage_campaigns',
+  'feature_manage_rto_invoices',
 ];
 
 // Default permissions per role
@@ -124,8 +131,12 @@ const ROLE_DEFAULTS = {
     tab_finance_accounts: false,
     tab_forecasting: false,
     tab_expenses: false,
+    tab_calendar: false,
+    tab_rto_invoices: false,
+    tab_batch_payments: false,
     tab_settings_password: true,
     tab_settings_calendar: false,
+    tab_settings_xero: false,
     // Features
     feature_assign_agent: false,
     feature_assign_rto: false,
@@ -151,6 +162,9 @@ const ROLE_DEFAULTS = {
     feature_manage_tickets: false,
     feature_archive_applications: false,
     feature_restore_applications: false,
+    feature_manage_expenses: false,
+    feature_manage_campaigns: false,
+    feature_manage_rto_invoices: false,
   },
 
   InternalRTO: {
@@ -183,8 +197,12 @@ const ROLE_DEFAULTS = {
     tab_finance_accounts: false,
     tab_forecasting: false,
     tab_expenses: false,
+    tab_calendar: false,
+    tab_rto_invoices: false,
+    tab_batch_payments: false,
     tab_settings_password: true,
     tab_settings_calendar: false,
+    tab_settings_xero: false,
     feature_assign_agent: false,
     feature_assign_rto: false,
     feature_update_status: true,
@@ -209,6 +227,9 @@ const ROLE_DEFAULTS = {
     feature_manage_tickets: false,
     feature_archive_applications: false,
     feature_restore_applications: false,
+    feature_manage_expenses: false,
+    feature_manage_campaigns: false,
+    feature_manage_rto_invoices: false,
   },
 
   Support: {
@@ -241,8 +262,12 @@ const ROLE_DEFAULTS = {
     tab_finance_accounts: false,
     tab_forecasting: false,
     tab_expenses: false,
+    tab_calendar: false,
+    tab_rto_invoices: false,
+    tab_batch_payments: false,
     tab_settings_password: true,
     tab_settings_calendar: false,
+    tab_settings_xero: false,
     feature_assign_agent: false,
     feature_assign_rto: false,
     feature_update_status: false,
@@ -267,6 +292,9 @@ const ROLE_DEFAULTS = {
     feature_manage_tickets: true,
     feature_archive_applications: false,
     feature_restore_applications: false,
+    feature_manage_expenses: false,
+    feature_manage_campaigns: false,
+    feature_manage_rto_invoices: false,
   },
 
   Marketing: {

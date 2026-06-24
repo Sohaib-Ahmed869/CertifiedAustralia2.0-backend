@@ -23,6 +23,11 @@ const buildCrud = (Model, options = {}) => {
       delete filter.sort;
       delete filter.populate;
 
+      // Handle comma-separated status filter → $in query
+      if (filter.status && typeof filter.status === 'string' && filter.status.includes(',')) {
+        filter.status = { $in: filter.status.split(',').map((s) => s.trim()) };
+      }
+
       // Handle callAttempts filter (contactAttempts on Application model)
       if (filter.callAttempts !== undefined) {
         const val = filter.callAttempts;
@@ -42,7 +47,7 @@ const buildCrud = (Model, options = {}) => {
       delete filter.search;
       if (searchTerm) {
         const regex = { $regex: searchTerm, $options: 'i' };
-        filter.$or = [
+        const orConditions = [
           { name: regex },
           { title: regex },
           { email: regex },
@@ -50,6 +55,19 @@ const buildCrud = (Model, options = {}) => {
           { lastName: regex },
           { applicationId: regex },
         ];
+
+        // For Application model: also search by student name/email
+        try {
+          const User = require('../models/User');
+          const matchingUsers = await User.find({
+            $or: [{ firstName: regex }, { lastName: regex }, { email: regex }],
+          }).select('_id').lean();
+          if (matchingUsers.length > 0) {
+            orConditions.push({ studentId: { $in: matchingUsers.map((u) => u._id) } });
+          }
+        } catch { /* User model may not exist for non-app collections — ignore */ }
+
+        filter.$or = orConditions;
       }
 
       const mongoQuery = applyPopulate(Model.find(filter).sort(sort))

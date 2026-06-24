@@ -34,9 +34,11 @@ const processDueInstallments = async () => {
 
   try {
     // Find active plans with direct debit enabled and pending/overdue installments
+    // Exclude paused plans and plans with failed debit status
     const plans = await PaymentPlan.find({
       status: 'active',
       directDebitEnabled: true,
+      directDebitStatus: { $nin: ['disabled', 'processing'] },
       'installments.status': { $in: ['pending', 'partiallyPaid'] },
       'installments.dueDate': { $lte: endOfDay },
     }).populate('studentId', 'firstName lastName email');
@@ -44,34 +46,79 @@ const processDueInstallments = async () => {
     let processed = 0;
     let succeeded = 0;
     let failed = 0;
+    let skipped = 0;
 
     for (const plan of plans) {
-      const dueInstallments = plan.installments.filter(
-        (inst) =>
+      // Verify the plan has a saved card — skip if no card-on-file
+      if (!plan.directDebitAccountDetails?.squareCardId) {
+        console.log(`[Scheduler] Skipping plan ${plan._id} — no saved card`);
+        skipped++;
+        continue;
+      }
+
+      // Cross-reference with actual completed payments to detect early payments
+      const existingPayments = await Payment.find({
+        paymentPlanId: plan._id,
+        status: 'completed',
+        type: 'plan',
+      }).lean();
+      const totalAlreadyPaid = existingPayments.reduce((s, p) => s + (p.amount || 0), 0);
+
+      // Recalculate what's actually outstanding per installment
+      let runningPaid = totalAlreadyPaid;
+      const installmentOutstanding = plan.installments.map((inst) => {
+        if (inst.status === 'paid' || inst.status === 'skipped') return { inst, outstanding: 0 };
+        const instAmount = inst.amount || 0;
+        if (runningPaid >= instAmount) {
+          runningPaid -= instAmount;
+          return { inst, outstanding: 0 }; // Already covered by early payment
+        }
+        const owed = instAmount - runningPaid;
+        runningPaid = 0;
+        return { inst, outstanding: owed };
+      });
+
+      // Only charge installments that are due AND actually have outstanding balance
+      const dueInstallments = installmentOutstanding.filter(
+        ({ inst, outstanding }) =>
+          outstanding > 0 &&
           (inst.status === 'pending' || inst.status === 'partiallyPaid') &&
           inst.dueDate <= endOfDay
       );
 
-      for (const installment of dueInstallments) {
-        const outstanding = installment.amount - (installment.paidAmount || 0);
-        if (outstanding <= 0) continue;
-
+      for (const { inst: installment, outstanding } of dueInstallments) {
         processed++;
+
+        // Mark plan as processing to prevent double-charges
+        plan.directDebitStatus = 'processing';
+        await plan.save();
+
         const result = await processAutoDebit(plan, installment, outstanding);
 
         if (result.success) {
           succeeded++;
+          plan.directDebitStatus = 'scheduled';
+          plan.directDebitFailedAt = null;
+          plan.directDebitFailReason = null;
         } else {
           failed++;
+          plan.directDebitStatus = 'failed';
+          plan.directDebitFailedAt = new Date();
+          plan.directDebitFailReason = result.error;
         }
+        await plan.save();
+      }
+
+      if (dueInstallments.length === 0) {
+        skipped++;
       }
     }
 
     console.log(
-      `[Scheduler] Auto-debit complete: ${processed} processed, ${succeeded} succeeded, ${failed} failed`
+      `[Scheduler] Auto-debit complete: ${processed} processed, ${succeeded} succeeded, ${failed} failed, ${skipped} skipped (early payment or no card)`
     );
 
-    return { processed, succeeded, failed };
+    return { processed, succeeded, failed, skipped };
   } catch (err) {
     console.error('[Scheduler] Auto-debit batch error:', err.message);
     return { processed: 0, succeeded: 0, failed: 0, error: err.message };

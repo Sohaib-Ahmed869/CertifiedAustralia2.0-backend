@@ -67,18 +67,11 @@ async function seedUsers() {
       continue;
     }
 
-    // Generate MFA secret for non-student users
-    const secret = speakeasy.generateSecret({
-      name: `CertifiedAustralia (${userData.email})`,
-      issuer: 'CertifiedAustralia',
-    });
-
     const user = await User.create({
       ...userData,
-      mfaEnabled: true,
-      mfaSecret: secret.base32,
+      mfaEnabled: false,
     });
-    console.log(`  Created ${userData.role}: ${userData.email} (MFA enabled)`);
+    console.log(`  Created ${userData.role}: ${userData.email}`);
   }
 
   console.log('\nUser seeding complete.');

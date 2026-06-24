@@ -82,16 +82,17 @@ module.exports = {
       throw new AppError('Application not found', 404);
     }
 
-    // Ensure Google Drive folder exists
+    // Ensure Google Drive folder exists (uses cache + dedup)
     let folderId = application.googleDriveFolderId;
     if (!folderId) {
       const s = application.studentId;
       const studentName = s ? `${s.firstName || ''} ${s.lastName || ''}`.trim() : '';
-      const folder = await driveService.createApplicationFolder({
-        applicationId: application.applicationId,
-        studentName,
-      });
-      folderId = folder.id;
+      const parts = [application.applicationId];
+      if (studentName) parts.push(studentName);
+      folderId = await driveService.getOrCreateAppFolder(
+        application.applicationId,
+        parts.join(' - '),
+      );
       application.googleDriveFolderId = folderId;
       await application.save();
     }

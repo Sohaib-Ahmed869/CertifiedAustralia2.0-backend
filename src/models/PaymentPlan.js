@@ -69,10 +69,23 @@ const paymentPlanSchema = new mongoose.Schema(
       default: false,
     },
     directDebitAccountDetails: {
+      // Square card-on-file for recurring charges
+      squareCustomerId: String,
+      squareCardId: String,
+      cardBrand: String,    // e.g. 'VISA', 'MASTERCARD'
+      cardLast4: String,    // e.g. '4242'
+      // Legacy bank details (kept for backwards compat)
       accountHolderName: String,
       accountNumber: String,
       bsb: String,
     },
+    directDebitStatus: {
+      type: String,
+      enum: ['scheduled', 'processing', 'failed', 'disabled'],
+      default: 'scheduled',
+    },
+    directDebitFailedAt: Date,
+    directDebitFailReason: String,
     status: {
       type: String,
       enum: ['active', 'completed', 'cancelled', 'paused'],

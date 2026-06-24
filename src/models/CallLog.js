@@ -23,6 +23,8 @@ const callLogSchema = new mongoose.Schema({
     enum: [
       'answered',
       'not_answered',
+      'voicemail',
+      'callback',
       'converted',
       'follow_up_required',
       'progressed',
@@ -30,6 +32,10 @@ const callLogSchema = new mongoose.Schema({
       'no_action',
     ],
     required: true,
+  },
+  duration: {
+    type: Number,
+    min: 0,
   },
   notes: {
     type: String,

@@ -40,7 +40,7 @@ const { google } = require('googleapis');
   console.log('');
 
   // 2. Authenticate
-  console.log('[1/4] Authenticating...');
+  console.log('[1/5] Authenticating...');
   const auth = new google.auth.JWT({
     email: creds.client_email,
     key: creds.private_key,
@@ -64,8 +64,32 @@ const { google } = require('googleapis');
 
   const drive = google.drive({ version: 'v3', auth });
 
+  // 2.5 Check if target folder is accessible
+  console.log('[2/5] Checking target folder access...');
+  try {
+    const folderRes = await drive.files.get({
+      fileId: folderId,
+      fields: 'id, name, mimeType, driveId',
+      supportsAllDrives: true,
+    });
+    console.log('  OK: Folder accessible');
+    console.log('  Name:', folderRes.data.name);
+    if (folderRes.data.driveId) {
+      console.log('  Shared Drive ID:', folderRes.data.driveId, '(supportsAllDrives is required!)');
+    } else {
+      console.log('  Type: My Drive / Regular shared folder');
+    }
+    console.log('');
+  } catch (err) {
+    console.error('  FAIL: Cannot access target folder');
+    console.error('  Error:', err.message);
+    console.error('\n  The folder', folderId, 'is not accessible by', creds.client_email);
+    console.error('  Share the folder with the service account email (Content Manager or Editor role).');
+    process.exit(1);
+  }
+
   // 3. Test upload
-  console.log('[2/4] Uploading test file...');
+  console.log('[3/5] Uploading test file...');
   let fileId;
   try {
     const res = await drive.files.create({
@@ -79,25 +103,34 @@ const { google } = require('googleapis');
         body: 'Certified Australia v2 Drive test — ' + new Date().toISOString(),
       },
       fields: 'id, name, webViewLink',
+      supportsAllDrives: true,
     });
     fileId = res.data.id;
     console.log('  OK: File created');
     console.log('  ID:', fileId);
-    console.log('  Link:', res.data.webViewLink, '\n');
+    console.log('  Link:', res.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`);
+    console.log('');
   } catch (err) {
     console.error('  FAIL: Upload failed');
     console.error('  Error:', err.message);
     if (err.code === 404) {
       console.error('\n  The target folder does not exist or is not shared with the service account.');
       console.error('  Share folder', folderId, 'with', creds.client_email);
+    } else if (err.code === 403) {
+      console.error('\n  Permission denied. The service account needs Content Manager or Editor role on the folder.');
+      console.error('  Service account:', creds.client_email);
     }
     process.exit(1);
   }
 
   // 4. Verify file exists
-  console.log('[3/4] Verifying file...');
+  console.log('[4/5] Verifying file...');
   try {
-    const check = await drive.files.get({ fileId, fields: 'id, name' });
+    const check = await drive.files.get({
+      fileId,
+      fields: 'id, name',
+      supportsAllDrives: true,
+    });
     console.log('  OK: File verified:', check.data.name, '\n');
   } catch (err) {
     console.error('  FAIL: Could not verify file:', err.message);
@@ -105,9 +138,9 @@ const { google } = require('googleapis');
   }
 
   // 5. Cleanup
-  console.log('[4/4] Cleaning up...');
+  console.log('[5/5] Cleaning up...');
   try {
-    await drive.files.delete({ fileId });
+    await drive.files.delete({ fileId, supportsAllDrives: true });
     console.log('  OK: Test file deleted\n');
   } catch (err) {
     console.error('  WARN: Could not delete test file:', err.message);
