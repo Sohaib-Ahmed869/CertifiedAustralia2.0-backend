@@ -68,6 +68,20 @@ const createTask = async (data) => {
     );
   }
 
+  // Auto-sync deadline to connected calendars if task has a due date
+  if (data.dueDate && data.assignedTo) {
+    try {
+      const { syncDeadline } = require('./calendarService');
+      await syncDeadline(data.assignedTo, {
+        title: data.title,
+        description: data.description || '',
+        dueDate: data.dueDate,
+      });
+    } catch {
+      // Non-fatal — calendar sync failure shouldn't block task creation
+    }
+  }
+
   return populated;
 };
 

@@ -20,10 +20,11 @@ const knowledgeBaseSchema = new mongoose.Schema({
   applicationStage: {
     type: String,
     enum: [
-      'New', 'WaitingForPayment', 'StudentIntakeForm', 'UploadDocuments',
-      'DocumentsUploaded', 'StudentCompleted', 'SentToRTO',
-      'WaitingForVerification', 'ReadyForRTOPayment', 'RTOInvoiceUploaded',
-      'CertificateGenerated', 'CertificateIssued', null,
+      'LeadCaptured', 'ScreeningCompleted', 'AgentAssigned', 'PaymentPending',
+      'PaymentCompleted', 'IntakeFormCompleted', 'DocumentsUploaded',
+      'SubmissionReview', 'ResubmissionRequired', 'SentToRTO', 'RTOReview',
+      'RTOFeedback', 'RTOCompleted', 'CertificateIssued', 'InDelivery',
+      'Delivered', 'Archived', null,
     ],
   },
   // Priority for matching (higher = more relevant)

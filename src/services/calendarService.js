@@ -342,6 +342,113 @@ const syncFollowUp = async (userId, eventData) => {
 };
 
 /**
+ * Sync a deadline event to all connected calendars for a user.
+ * Used for task due dates and application deadlines.
+ */
+const syncDeadline = async (userId, eventData) => {
+  const connections = await CalendarConnection.find({
+    userId,
+    status: 'connected',
+    syncDeadlines: true,
+  });
+
+  const results = [];
+
+  for (const conn of connections) {
+    try {
+      // Deadlines are all-day events
+      const allDayData = {
+        ...eventData,
+        scheduledFor: eventData.scheduledFor || eventData.dueDate,
+      };
+
+      if (conn.provider === 'google') {
+        const event = await syncDeadlineToGoogle(conn, allDayData);
+        results.push({ provider: 'google', success: true, eventId: event.id });
+      } else if (conn.provider === 'outlook') {
+        const event = await syncDeadlineToOutlook(conn, allDayData);
+        results.push({ provider: 'outlook', success: true, eventId: event.id });
+      }
+    } catch (err) {
+      console.error(`[Calendar] Deadline sync to ${conn.provider} failed:`, err.message);
+      results.push({ provider: conn.provider, success: false, error: err.message });
+
+      if (err.message?.includes('invalid_grant') || err.message?.includes('401')) {
+        await CalendarConnection.updateOne({ _id: conn._id }, { status: 'expired' });
+      }
+    }
+  }
+
+  return results;
+};
+
+const syncDeadlineToGoogle = async (connection, eventData) => {
+  let oauth2Client;
+  if (connection.tokenExpiresAt && new Date(connection.tokenExpiresAt) < new Date()) {
+    oauth2Client = await refreshGoogleToken(connection);
+  } else {
+    oauth2Client = getGoogleOAuth2Client();
+    oauth2Client.setCredentials({
+      access_token: connection.accessToken,
+      refresh_token: connection.refreshToken,
+    });
+  }
+
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  const dueDate = new Date(eventData.scheduledFor).toISOString().split('T')[0];
+
+  const event = {
+    summary: `📋 ${eventData.title}`,
+    description: eventData.description || '',
+    start: { date: dueDate },
+    end: { date: dueDate },
+    reminders: {
+      useDefault: false,
+      overrides: [{ method: 'popup', minutes: 60 * 24 }], // 1 day before
+    },
+  };
+
+  const result = await calendar.events.insert({
+    calendarId: connection.calendarId || 'primary',
+    resource: event,
+  });
+
+  await CalendarConnection.updateOne({ _id: connection._id }, { lastSyncAt: new Date() });
+  return result.data;
+};
+
+const syncDeadlineToOutlook = async (connection, eventData) => {
+  const dueDate = new Date(eventData.scheduledFor).toISOString().split('T')[0];
+
+  const event = {
+    subject: `📋 ${eventData.title}`,
+    body: { contentType: 'text', content: eventData.description || '' },
+    start: { dateTime: `${dueDate}T00:00:00`, timeZone: 'AUS Eastern Standard Time' },
+    end: { dateTime: `${dueDate}T23:59:59`, timeZone: 'AUS Eastern Standard Time' },
+    isAllDay: true,
+    isReminderOn: true,
+    reminderMinutesBeforeStart: 60 * 24,
+  };
+
+  const response = await fetch('https://graph.microsoft.com/v1.0/me/events', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${connection.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(event),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error?.message || 'Outlook calendar sync failed');
+  }
+
+  await CalendarConnection.updateOne({ _id: connection._id }, { lastSyncAt: new Date() });
+  return response.json();
+};
+
+/**
  * Get calendar events for a date range — aggregates tasks, follow-ups, and deadlines.
  */
 const getCalendarEvents = async (userId, dateFrom, dateTo) => {
@@ -457,5 +564,6 @@ module.exports = {
   getConnections,
   updateSyncPreferences,
   syncFollowUp,
+  syncDeadline,
   getCalendarEvents,
 };

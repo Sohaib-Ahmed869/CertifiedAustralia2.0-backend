@@ -7,6 +7,7 @@ const {
   flagOverdueInstallments,
   sendApplicationReminders,
 } = require('../services/schedulerService');
+const xeroService = require('../services/xeroService');
 
 const router = express.Router();
 
@@ -46,6 +47,20 @@ router.post(
   asyncHandler(async (req, res) => {
     const result = await sendApplicationReminders();
     res.json({ message: 'Application reminders sent', ...result });
+  })
+);
+
+// POST /api/scheduler/run-xero-sync — manually trigger Xero sync + reconciliation
+router.post(
+  '/run-xero-sync',
+  asyncHandler(async (req, res) => {
+    const syncResult = await xeroService.syncAll();
+    const reconcileResult = await xeroService.reconcile();
+    res.json({
+      message: 'Xero sync + reconciliation complete',
+      sync: syncResult,
+      reconciliation: reconcileResult,
+    });
   })
 );
 

@@ -48,7 +48,7 @@ const paymentSchema = new mongoose.Schema(
     xeroSyncStatus: {
       type: String,
       enum: ['pending', 'synced', 'failed'],
-      default: 'pending',
+      default: null,
     },
     xeroSyncedAt: Date,
     // For payments within plans

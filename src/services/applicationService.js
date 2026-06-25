@@ -766,7 +766,8 @@ const createAdditionalDocRequest = async (applicationId, { items, deadline, requ
 };
 
 const submitAdditionalDocs = async (applicationId, requestId) => {
-  const application = await Application.findById(applicationId);
+  const application = await Application.findById(applicationId)
+    .populate('studentId', 'firstName lastName');
   if (!application) throw new AppError('Application not found', 404);
 
   const request = application.additionalDocRequests.id(requestId);
@@ -776,6 +777,27 @@ const submitAdditionalDocs = async (applicationId, requestId) => {
   request.status = 'submitted';
   request.submittedAt = new Date();
   await application.save();
+
+  // Notify admins that additional docs have been submitted
+  const { notifyMany } = require('./notificationService');
+  const User = require('../models/User');
+  const admins = await User.find({ role: { $in: ['Admin', 'CEOReportingManager'] }, isActive: true }).select('_id').lean();
+  const studentName = application.studentId
+    ? `${application.studentId.firstName} ${application.studentId.lastName}`
+    : 'Student';
+  if (admins.length > 0) {
+    await notifyMany(
+      admins.map((a) => a._id),
+      {
+        type: 'feedback_received',
+        title: 'Additional Documents Submitted',
+        message: `${studentName} has submitted additional documents for ${application.applicationId}. Review required.`,
+        link: `/admin/students/${application.studentId?._id || application.studentId}`,
+        relatedId: application._id,
+      }
+    );
+  }
+
   return refreshApplication(application._id);
 };
 
@@ -791,6 +813,26 @@ const reviewAdditionalDocs = async (applicationId, requestId, { status, reviewNo
   request.reviewedAt = new Date();
   request.reviewNotes = reviewNotes || '';
   await application.save();
+
+  // Notify student of approval/rejection
+  const { notifyWithEmail } = require('./notificationService');
+  if (application.studentId) {
+    const isApproved = status === 'approved';
+    await notifyWithEmail(
+      application.studentId,
+      {
+        type: 'document_reviewed',
+        title: isApproved ? 'Documents Approved' : 'Documents Need Attention',
+        message: isApproved
+          ? `Your additional documents for ${application.applicationId} have been approved.`
+          : `Your additional documents for ${application.applicationId} were not approved. ${reviewNotes || 'Please check with admin.'}`,
+        link: `/student/documents`,
+        relatedId: application._id,
+      },
+      { subject: isApproved ? 'Documents Approved — Certified Australia' : 'Documents Need Attention — Certified Australia' }
+    );
+  }
+
   return refreshApplication(application._id);
 };
 

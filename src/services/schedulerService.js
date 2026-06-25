@@ -670,6 +670,7 @@ let autoDebitJob = null;
 let reminderJob = null;
 let overdueJob = null;
 let appReminderJob = null;
+let xeroSyncJob = null;
 
 const startScheduler = () => {
   console.log('[Scheduler] Starting schedulers...');
@@ -742,12 +743,31 @@ const startScheduler = () => {
     if (sent) console.log(`[Scheduler] Follow-up call reminders sent: ${sent}`);
   });
 
+  // Xero daily sync — 10:00 PM (after business hours)
+  xeroSyncJob = cron.schedule('0 22 * * *', async () => {
+    try {
+      const xeroService = require('./xeroService');
+      const status = await xeroService.getConnectionStatus();
+      if (!status.connected) return;
+
+      console.log('[Scheduler] Running daily Xero sync...');
+      const syncResult = await xeroService.syncAll();
+      console.log(`[Scheduler] Xero sync: ${syncResult.synced} synced, ${syncResult.failed} failed, ${syncResult.skipped} skipped`);
+
+      const reconcileResult = await xeroService.reconcile();
+      console.log(`[Scheduler] Xero reconciliation: ${reconcileResult.reconciled} reconciled`);
+    } catch (err) {
+      console.error('[Scheduler] Xero sync error:', err.message);
+    }
+  });
+
   console.log('[Scheduler] All schedulers started:');
   console.log('  - Auto-debit: daily at 6:00 AM');
   console.log('  - Overdue flagging: daily at 7:00 AM');
   console.log('  - Application reminders: daily at 8:00 AM');
   console.log('  - Payment reminders: daily at 9:00 AM (3 days before due)');
   console.log('  - Follow-up call checks: every 2 hours (7AM–7PM)');
+  console.log('  - Xero sync + reconciliation: daily at 10:00 PM');
 };
 
 const stopScheduler = () => {
@@ -755,6 +775,7 @@ const stopScheduler = () => {
   if (reminderJob) reminderJob.stop();
   if (overdueJob) overdueJob.stop();
   if (appReminderJob) appReminderJob.stop();
+  if (xeroSyncJob) xeroSyncJob.stop();
   console.log('[Scheduler] All schedulers stopped');
 };
 

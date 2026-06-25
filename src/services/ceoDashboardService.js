@@ -45,16 +45,18 @@ const COLOR_SOURCE_MAP = {
  * Canonical marketing source platforms (matches ?source= query param keys).
  */
 const SOURCE_PLATFORMS = [
-  { key: 'tiktok',   name: 'TikTok' },
-  { key: 'meta',     name: 'Meta Paid' },
-  { key: 'meta_ads', name: 'Meta Ads' },
-  { key: 'linkedin', name: 'LinkedIn' },
-  { key: 'google',   name: 'Google' },
-  { key: 'print',    name: 'Print / QR' },
-  { key: 'mainline', name: 'Mainline' },
-  { key: 'vip',      name: 'VIP Line' },
-  { key: 'gabby',    name: "Gabby's Line" },
-  { key: 'rsg',      name: 'Rehman Sheriff Group' },
+  { key: 'tiktok',         name: 'TikTok' },
+  { key: 'facebook',       name: 'Facebook' },
+  { key: 'facebook_ads',   name: 'Facebook Ads' },
+  { key: 'instagram',      name: 'Instagram' },
+  { key: 'instagram_ads',  name: 'Instagram Ads' },
+  { key: 'linkedin',       name: 'LinkedIn' },
+  { key: 'google',         name: 'Google' },
+  { key: 'print',          name: 'Print / QR' },
+  { key: 'mainline',       name: 'Mainline' },
+  { key: 'vip',            name: 'VIP Line' },
+  { key: 'gabby',          name: "Gabby's Line" },
+  { key: 'rsg',            name: 'Rehman Sheriff Group' },
 ];
 
 /**
@@ -63,9 +65,15 @@ const SOURCE_PLATFORMS = [
  */
 const SPEND_KEY_TO_SOURCE = {
   tiktok: 'tiktok',
-  meta: 'meta',
-  meta_paid: 'meta',
-  meta_ads: 'meta_ads',
+  // Legacy meta keys → map to facebook for backwards compatibility
+  meta: 'facebook',
+  meta_paid: 'facebook',
+  meta_ads: 'facebook_ads',
+  // New separate keys
+  facebook: 'facebook',
+  facebook_ads: 'facebook_ads',
+  instagram: 'instagram',
+  instagram_ads: 'instagram_ads',
   linkedin: 'linkedin',
   google: 'google',
   print: 'print',

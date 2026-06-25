@@ -12,6 +12,8 @@ router.post('/ask', asyncHandler(async (req, res) => {
   const result = await chatbotService.getAnswer({
     studentId: req.user._id,
     message: req.body.message,
+    applicationId: req.body.applicationId || null,
+    chatHistory: req.body.chatHistory || [],
   });
   res.json(result);
 }));

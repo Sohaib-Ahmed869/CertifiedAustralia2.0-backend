@@ -108,7 +108,23 @@ const uploadSingle = asyncHandler(async (req, res) => {
   const application = await Application.findById(appId).populate('studentId');
   if (!application) { cleanupFile(file.path); throw new AppError('Application not found', 404); }
 
-  const folderId = await ensureDriveFolder(application);
+  let folderId = await ensureDriveFolder(application);
+
+  // For additional doc requests, create/use a dated subfolder (CA-08 / CA-14)
+  const additionalDocRequestId = req.body.additionalDocRequestId;
+  if (additionalDocRequestId) {
+    try {
+      const dateStr = new Date().toISOString().split('T')[0];
+      const subfolder = await driveService.createSubmissionSubfolder({
+        parentFolderId: folderId,
+        name: `Additional - ${dateStr}`,
+      });
+      folderId = subfolder.id;
+    } catch {
+      // Fall back to root application folder if subfolder creation fails
+    }
+  }
+
   const driveName = `${fieldName}_${crypto.randomUUID()}_${file.originalname}`;
 
   const driveFile = await driveService.uploadFileFromDisk({
@@ -120,7 +136,7 @@ const uploadSingle = asyncHandler(async (req, res) => {
 
   cleanupFile(file.path);
 
-  const document = await Document.create({
+  const docData = {
     applicationId: appId,
     studentId: application.studentId._id || application.studentId,
     fieldName,
@@ -132,11 +148,27 @@ const uploadSingle = asyncHandler(async (req, res) => {
     uploadedBy: req.user?._id || application.studentId._id || application.studentId,
     uploadedOnBehalf: req.body.uploadedOnBehalf === 'true' || req.body.uploadedOnBehalf === true,
     rtoAccessExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-  });
+  };
+
+  // Link document to an additional doc request if specified (CA-08 gated upload)
+  if (additionalDocRequestId) {
+    docData.additionalDocRequestId = additionalDocRequestId;
+  }
+
+  const document = await Document.create(docData);
 
   if (!application.documentIds.includes(document._id)) {
     application.documentIds.push(document._id);
     await application.save();
+  }
+
+  // Link document to the additional doc request's documentIds array
+  if (additionalDocRequestId) {
+    const request = application.additionalDocRequests?.id(additionalDocRequestId);
+    if (request && !request.documentIds.includes(document._id)) {
+      request.documentIds.push(document._id);
+      await application.save();
+    }
   }
 
   // Check if all 3 student obligations are met — auto-start 21-day timer
