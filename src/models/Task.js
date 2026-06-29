@@ -67,4 +67,9 @@ const taskSchema = new mongoose.Schema(
   }
 );
 
+taskSchema.index({ assignedTo: 1 });
+taskSchema.index({ applicationId: 1 });
+taskSchema.index({ studentId: 1 });
+taskSchema.index({ status: 1 });
+
 module.exports = mongoose.model('Task', taskSchema);

@@ -27,6 +27,11 @@ const knowledgeBaseSchema = new mongoose.Schema({
       'Delivered', 'Archived', null,
     ],
   },
+  // OpenAI embedding vector for semantic search
+  embedding: {
+    type: [Number],
+    default: undefined,
+  },
   // Priority for matching (higher = more relevant)
   priority: {
     type: Number,

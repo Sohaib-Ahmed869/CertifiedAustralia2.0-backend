@@ -4,7 +4,8 @@ const Payment = require('../models/Payment');
 const Application = require('../models/Application');
 const Notification = require('../models/Notification');
 const { createSquarePayment } = require('./squareService');
-const { sendTemplatedEmail } = require('./emailService');
+const { sendTemplatedEmail, buildEmail, sendEmail, heading2, greeting, paragraph, detailsTable, successCard, warningCard, infoCard, buttonGroup, signOff } = require('./emailService');
+const appEmails = require('./applicationEmailService');
 const crypto = require('crypto');
 
 // ---------------------------------------------------------------------------
@@ -198,24 +199,21 @@ const processAutoDebit = async (plan, installment, amount) => {
 
     // Send confirmation email
     if (student?.email) {
-      await sendTemplatedEmail({
-        to: student.email,
-        subject: 'Payment Processed - Certified Australia',
-        preheader: `Installment #${installment.index + 1} of $${amount.toFixed(2)} processed`,
-        templateContent: `
-          <h2 style="margin:0 0 16px 0;color:#0a9d42;">Payment Confirmation</h2>
-          <p>Hi ${student.firstName || 'there'},</p>
-          <p>Your scheduled payment has been successfully processed:</p>
-          <table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;">
-            <tr><td style="padding:8px 0;color:#6b7280;">Installment</td><td style="padding:8px 0;font-weight:600;">#${installment.index + 1}</td></tr>
-            <tr><td style="padding:8px 0;color:#6b7280;">Amount</td><td style="padding:8px 0;font-weight:600;">$${amount.toFixed(2)} AUD</td></tr>
-            <tr><td style="padding:8px 0;color:#6b7280;">Date</td><td style="padding:8px 0;font-weight:600;">${new Date().toLocaleDateString('en-AU')}</td></tr>
-          </table>
-          <p>Log in to your portal to view your payment history.</p>
-        `,
-        ctaText: 'View Payments',
-        ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/payments`,
-      }).catch((err) => console.error('[Scheduler] Email send error:', err.message));
+      const baseUrl = process.env.APP_BASE_URL || 'http://localhost:5173';
+      const body = heading2('Payment Confirmation') +
+        greeting(student.firstName || 'there') +
+        paragraph('Your scheduled payment has been successfully processed:') +
+        successCard(null, 'Your payment was processed successfully.') +
+        detailsTable('Payment Details', [
+          { label: 'Installment', value: `#${installment.index + 1}` },
+          { label: 'Amount', value: `$${amount.toFixed(2)} AUD` },
+          { label: 'Date', value: new Date().toLocaleDateString('en-AU') },
+        ]) +
+        buttonGroup({ text: 'View Payments', url: `${baseUrl}/student/payments` }) +
+        signOff();
+      const html = buildEmail(body, `Installment #${installment.index + 1} of $${amount.toFixed(2)} processed`);
+      await sendEmail({ to: student.email, subject: 'Payment Processed - Certified Australia', html })
+        .catch((err) => console.error('[Scheduler] Email send error:', err.message));
     }
 
     console.log(
@@ -255,6 +253,15 @@ const processAutoDebit = async (plan, installment, amount) => {
         link: `/admin/payments`,
         relatedId: plan._id,
       });
+    }
+
+    // Send failure email to student
+    if (student?.email) {
+      const application = await Application.findById(plan.applicationId).lean();
+      if (application) {
+        appEmails.sendPaymentFailureEmail(student, application, installment, err.message)
+          .catch((e) => console.error('[Scheduler] Payment failure email error:', e.message));
+      }
     }
 
     return { success: false, error: err.message };
@@ -323,27 +330,25 @@ const sendPaymentReminders = async () => {
         });
 
         // Email reminder
-        await sendTemplatedEmail({
-          to: student.email,
-          subject: 'Payment Reminder - Certified Australia',
-          preheader: `Installment of $${outstanding.toFixed(2)} due on ${dueDate}`,
-          templateContent: `
-            <h2 style="margin:0 0 16px 0;color:#0a9d42;">Payment Reminder</h2>
-            <p>Hi ${student.firstName || 'there'},</p>
-            <p>This is a friendly reminder that you have an upcoming payment:</p>
-            <table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;">
-              <tr><td style="padding:8px 0;color:#6b7280;">Installment</td><td style="padding:8px 0;font-weight:600;">#${installment.index + 1}</td></tr>
-              <tr><td style="padding:8px 0;color:#6b7280;">Amount Due</td><td style="padding:8px 0;font-weight:600;">$${outstanding.toFixed(2)} AUD</td></tr>
-              <tr><td style="padding:8px 0;color:#6b7280;">Due Date</td><td style="padding:8px 0;font-weight:600;">${dueDate}</td></tr>
-            </table>
-            ${plan.directDebitEnabled
-              ? '<p>This payment will be automatically debited from your saved payment method.</p>'
-              : '<p>Please log in to your portal to make your payment before the due date.</p>'
-            }
-          `,
-          ctaText: 'View Payment Plan',
-          ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/payments`,
-        }).catch((err) => console.error('[Scheduler] Reminder email error:', err.message));
+        const baseUrl = process.env.APP_BASE_URL || 'http://localhost:5173';
+        const reminderBody = heading2('Payment Reminder') +
+          greeting(student.firstName || 'there') +
+          paragraph('This is a friendly reminder that you have an upcoming payment:') +
+          warningCard('Upcoming Payment', `Installment #${installment.index + 1} of <strong>$${outstanding.toFixed(2)} AUD</strong> is due on <strong>${dueDate}</strong>.`) +
+          detailsTable('Payment Details', [
+            { label: 'Installment', value: `#${installment.index + 1}` },
+            { label: 'Amount Due', value: `$${outstanding.toFixed(2)} AUD` },
+            { label: 'Due Date', value: dueDate },
+          ]) +
+          paragraph(plan.directDebitEnabled
+            ? 'This payment will be automatically debited from your saved payment method.'
+            : 'Please log in to your portal to make your payment before the due date.'
+          ) +
+          buttonGroup({ text: 'View Payment Plan', url: `${baseUrl}/student/payments` }) +
+          signOff();
+        const reminderHtml = buildEmail(reminderBody, `Installment of $${outstanding.toFixed(2)} due on ${dueDate}`);
+        await sendEmail({ to: student.email, subject: 'Payment Reminder - Certified Australia', html: reminderHtml })
+          .catch((err) => console.error('[Scheduler] Reminder email error:', err.message));
 
         sent++;
       }
@@ -409,6 +414,15 @@ const flagOverdueInstallments = async () => {
           link: '/admin/payments',
           relatedId: plan._id,
         });
+      }
+
+      // Send overdue email to student for each overdue installment
+      if (student?.email) {
+        for (const inst of overdueInstallments) {
+          const daysOverdue = Math.floor((now - new Date(inst.dueDate)) / (1000 * 60 * 60 * 24));
+          appEmails.sendPaymentOverdueEmail(student, plan.applicationId, inst, daysOverdue)
+            .catch((e) => console.error('[Scheduler] Overdue email error:', e.message));
+        }
       }
 
       flagged += overdueInstallments.length;
@@ -503,19 +517,14 @@ const sendApplicationReminders = async () => {
         relatedId: app._id,
       });
 
-      await sendTemplatedEmail({
-        to: student.email,
-        subject: 'Action Required: Complete Your Intake Form - Certified Australia',
-        preheader: 'Your intake form is pending',
-        templateContent: `
-          <h2 style="margin:0 0 16px 0;color:#0a9d42;">Intake Form Reminder</h2>
-          <p>Hi ${student.firstName || 'there'},</p>
-          <p>Your application <strong>${app.applicationId}</strong> has been paid, but we're still waiting for your intake form.</p>
-          <p>Please complete it as soon as possible so we can move forward with your RPL assessment.</p>
-        `,
-        ctaText: 'Complete Intake Form',
-        ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/intake`,
-      }).catch((err) => console.error('[Scheduler] Intake reminder email error:', err.message));
+      const intakeBody = heading2('Intake Form Reminder') +
+        greeting(student.firstName || 'there') +
+        paragraph(`Your application <strong>${app.applicationId}</strong> has been paid, but we're still waiting for your intake form.`) +
+        warningCard('Action Required', 'Please complete your Student Intake Form as soon as possible so we can move forward with your RPL assessment.') +
+        buttonGroup({ text: 'Complete Intake Form', url: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/intake` }) +
+        signOff();
+      await sendEmail({ to: student.email, subject: 'Action Required: Complete Your Intake Form - Certified Australia', html: buildEmail(intakeBody, 'Your intake form is pending') })
+        .catch((err) => console.error('[Scheduler] Intake reminder email error:', err.message));
 
       sent++;
     }
@@ -544,20 +553,20 @@ const sendApplicationReminders = async () => {
         relatedId: app._id,
       });
 
-      await sendTemplatedEmail({
-        to: student.email,
-        subject: 'Action Required: Upload Documents - Certified Australia',
-        preheader: 'We need your supporting documents',
-        templateContent: `
-          <h2 style="margin:0 0 16px 0;color:#0a9d42;">Document Upload Reminder</h2>
-          <p>Hi ${student.firstName || 'there'},</p>
-          <p>Your intake form for <strong>${app.applicationId}</strong> is complete — great work!</p>
-          <p>The next step is to upload your supporting documents (evidence of prior learning, qualifications, work references, etc.).</p>
-          <p>Please submit them so we can begin the assessment process.</p>
-        `,
-        ctaText: 'Upload Documents',
-        ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/documents`,
-      }).catch((err) => console.error('[Scheduler] Document reminder email error:', err.message));
+      const docsBody = heading2('Document Upload Reminder') +
+        greeting(student.firstName || 'there') +
+        successCard(null, `Your intake form for <strong>${app.applicationId}</strong> is complete — great work!`) +
+        paragraph('The next step is to upload your supporting documents (evidence of prior learning, qualifications, work references, etc.).') +
+        infoCard('Documents Needed', [
+          'Evidence of prior learning and work experience',
+          'Qualifications and certificates',
+          'Work references or employer letters',
+          'Any other supporting documentation',
+        ]) +
+        buttonGroup({ text: 'Upload Documents', url: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/documents` }) +
+        signOff();
+      await sendEmail({ to: student.email, subject: 'Action Required: Upload Documents - Certified Australia', html: buildEmail(docsBody, 'We need your supporting documents') })
+        .catch((err) => console.error('[Scheduler] Document reminder email error:', err.message));
 
       sent++;
     }
@@ -628,19 +637,14 @@ const sendApplicationReminders = async () => {
         relatedId: app._id,
       });
 
-      await sendTemplatedEmail({
-        to: student.email,
-        subject: 'Resubmission Required - Certified Australia',
-        preheader: 'Please address the feedback on your application',
-        templateContent: `
-          <h2 style="margin:0 0 16px 0;color:#f59e0b;">Resubmission Required</h2>
-          <p>Hi ${student.firstName || 'there'},</p>
-          <p>Your application <strong>${app.applicationId}</strong> requires some changes before it can proceed. Our team has provided feedback on what needs to be updated.</p>
-          <p>Please review the feedback and resubmit your documents as soon as possible.</p>
-        `,
-        ctaText: 'View Feedback',
-        ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/documents`,
-      }).catch((err) => console.error('[Scheduler] Resubmission reminder email error:', err.message));
+      const resubBody = heading2('Resubmission Required') +
+        greeting(student.firstName || 'there') +
+        warningCard('Changes Needed', `Your application <strong>${app.applicationId}</strong> requires some changes before it can proceed. Our team has provided feedback on what needs to be updated.`) +
+        paragraph('Please review the feedback and resubmit your documents as soon as possible.') +
+        buttonGroup({ text: 'View Feedback', url: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/documents` }) +
+        signOff();
+      await sendEmail({ to: student.email, subject: 'Resubmission Required - Certified Australia', html: buildEmail(resubBody, 'Please address the feedback on your application') })
+        .catch((err) => console.error('[Scheduler] Resubmission reminder email error:', err.message));
 
       sent++;
     }

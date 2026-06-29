@@ -113,4 +113,8 @@ const paymentPlanSchema = new mongoose.Schema(
   }
 );
 
+paymentPlanSchema.index({ applicationId: 1 });
+paymentPlanSchema.index({ studentId: 1 });
+paymentPlanSchema.index({ status: 1 });
+
 module.exports = mongoose.model('PaymentPlan', paymentPlanSchema);

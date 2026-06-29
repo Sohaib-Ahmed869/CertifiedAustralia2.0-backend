@@ -95,4 +95,7 @@ const documentSchema = new mongoose.Schema(
   }
 );
 
+documentSchema.index({ applicationId: 1 });
+documentSchema.index({ studentId: 1 });
+
 module.exports = mongoose.model('Document', documentSchema);

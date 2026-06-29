@@ -7,6 +7,7 @@ const ScreeningForm = require('../models/ScreeningForm');
 const Document = require('../models/Document');
 const Certificate = require('../models/Certificate');
 const Payment = require('../models/Payment');
+const appEmails = require('./applicationEmailService');
 
 /**
  * Check if the student has completed their 3 obligations and advance status.
@@ -25,7 +26,7 @@ const tryAutoStartTimer = async (applicationId) => {
   // paymentCompleted = full payment only (not partial plan payments)
   const hasPaid = app.paymentCompleted;
   const hasIntake = app.intakeFormSubmitted || !!app.intakeFormId;
-  const hasDocs = app.documentsUploaded || (app.documentIds?.length > 0);
+  const hasDocs = app.documentsUploaded === true;
 
   if (!hasPaid || !hasIntake || !hasDocs) return;
 
@@ -216,13 +217,17 @@ const sendToRTOPortal = async (applicationId, rtoUserId) => {
   const rtoUser = await UserModel.findById(rtoUserId).lean();
   if (!rtoUser) throw new AppError('RTO user not found', 404);
 
+  const rtoName = `${rtoUser.firstName || ''} ${rtoUser.lastName || ''}`.trim();
+
   const application = await Application.findByIdAndUpdate(
     applicationId,
     {
+      assignedRTOId: rtoUserId,
+      rtoAssignmentDate: new Date(),
       sentToRTOPortal: true,
       sentToRTOPortalAt: new Date(),
       portalRtoEmail: rtoUser.email,
-      portalRtoName: `${rtoUser.firstName || ''} ${rtoUser.lastName || ''}`.trim(),
+      portalRtoName: rtoName,
       status: 'SentToRTO',
     },
     { new: true, runValidators: true }
@@ -231,6 +236,34 @@ const sendToRTOPortal = async (applicationId, rtoUserId) => {
     .lean();
 
   if (!application) throw new AppError('Application not found', 404);
+
+  // Notify RTO user — in-portal + email (non-fatal)
+  try {
+    const { notifyWithEmail } = require('./notificationService');
+    const student = application.studentId;
+    const studentName = student ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : 'a student';
+    const qualName = application.qualificationId?.name || '';
+    await notifyWithEmail(
+      rtoUserId,
+      {
+        type: 'application_assigned',
+        title: 'New Application Sent for Review',
+        message: `Application ${application.applicationId} for ${studentName}${qualName ? ` — ${qualName}` : ''} has been sent to you for review.`,
+        link: '/rto/applications',
+        relatedId: application._id,
+      },
+      {
+        subject: `New Application for Review: ${application.applicationId} — ${studentName}`,
+        ctaText: 'Review Application',
+      }
+    );
+  } catch (err) {
+    console.error('[SendToRTOPortal] Failed to notify:', err.message);
+  }
+
+  // Try to start the 21-day timer — requires both student completion + RTO assignment
+  await tryAutoStartTimer(applicationId);
+
   return application;
 };
 
@@ -257,8 +290,70 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
 const updateStatus = async (applicationId, status) => {
   const update = { status };
 
-  // Set boolean flag when documents are submitted
+  // Save previous status before archiving so it can be restored later
+  if (status === 'Archived') {
+    const currentApp = await Application.findById(applicationId).select('status').lean();
+    if (currentApp && currentApp.status !== 'Archived') {
+      update.previousStatus = currentApp.status;
+    }
+  }
+
+  // Validate required documents before allowing DocumentsUploaded status
   if (status === 'DocumentsUploaded') {
+    const app = await Application.findById(applicationId)
+      .populate('qualificationId industryId')
+      .lean();
+    if (!app) throw new AppError('Application not found', 404);
+
+    const docs = await Document.find({ applicationId }).select('fieldName').lean();
+    const uploadedFields = new Set(docs.map((d) => d.fieldName));
+    const fieldCount = (name) => docs.filter((d) => d.fieldName === name).length;
+
+    const missing = [];
+
+    // 1. ID Verification — need >= 100 points
+    const idDocs = [
+      { name: "Driver's License", points: 40 }, { name: 'ID Card', points: 40 },
+      { name: 'Passport', points: 70 }, { name: 'Birth Certificate', points: 70 },
+      { name: 'Medicare Card', points: 25 }, { name: 'Credit Card', points: 15 },
+      { name: 'Australian Citizenship', points: 70 },
+    ];
+    const idPoints = idDocs.reduce((sum, d) => sum + (uploadedFields.has(d.name) ? d.points : 0), 0);
+    if (idPoints < 100) missing.push(`ID Verification (${idPoints}/100 points)`);
+
+    // 2. Educational Documents
+    const qual = typeof app.qualificationId === 'object' ? app.qualificationId : null;
+    const eduRequired = ['USI VET Transcript', 'USI Portal Screenshot'];
+    if (qual?.requiresWhiteCard || qual?.category === 'trade') eduRequired.push('White Card');
+    if (qual?.requiresFirstAid) eduRequired.push('First Aid Certificate');
+    eduRequired.push('Previous Qualifications');
+    eduRequired.forEach((name) => { if (!uploadedFields.has(name)) missing.push(name); });
+
+    // 3. Employment Details
+    const empRequired = [
+      { name: 'Resume' }, { name: 'Employment Letter' }, { name: 'Reference One' },
+      { name: 'Payslips/Invoices', min: 3 },
+    ];
+    empRequired.forEach((d) => {
+      if (d.min) { if (fieldCount(d.name) < d.min) missing.push(`${d.name} (${fieldCount(d.name)}/${d.min})`); }
+      else { if (!uploadedFields.has(d.name)) missing.push(d.name); }
+    });
+
+    // 4. Visual Evidence — only for specific industries
+    const VISUAL_EVIDENCE_INDUSTRIES = [
+      'automotive', 'building & construction', 'hospitality',
+      'information & communications technology', 'beauty therapy & hairdressing',
+    ];
+    const industryName = (typeof app.industryId === 'object' ? app.industryId?.name : '').toLowerCase();
+    if (VISUAL_EVIDENCE_INDUSTRIES.some((n) => industryName.includes(n))) {
+      if (fieldCount('images') < 10) missing.push(`Photos (${fieldCount('images')}/10)`);
+      if (fieldCount('videos') < 5) missing.push(`Videos (${fieldCount('videos')}/5)`);
+    }
+
+    if (missing.length > 0) {
+      throw new AppError(`Cannot submit documents. Missing: ${missing.join(', ')}`, 400);
+    }
+
     update.documentsUploaded = true;
   }
 
@@ -377,6 +472,45 @@ const updateStatus = async (applicationId, status) => {
       console.error('[UpdateStatus] Failed to create RTO payable:', err.message);
     }
   }
+
+  return application;
+};
+
+/**
+ * Restore an archived application to its previous status.
+ * Uses previousStatus if saved, otherwise derives from completion flags.
+ */
+const restoreFromArchive = async (applicationId) => {
+  const app = await Application.findById(applicationId);
+  if (!app) throw new AppError('Application not found', 404);
+  if (app.status !== 'Archived') throw new AppError('Application is not archived', 400);
+
+  let restoredStatus = app.previousStatus;
+
+  // Fallback: derive status from completion flags if previousStatus not stored
+  if (!restoredStatus) {
+    if (app.certificateId) {
+      restoredStatus = 'CertificateGenerated';
+    } else if (app.documentsUploaded && app.intakeFormSubmitted && app.paymentCompleted) {
+      restoredStatus = 'StudentCompleted';
+    } else if (app.documentsUploaded) {
+      restoredStatus = 'DocumentsUploaded';
+    } else if (app.intakeFormSubmitted) {
+      restoredStatus = 'UploadDocuments';
+    } else if (app.paymentCompleted || app.partialPayment) {
+      restoredStatus = 'StudentIntakeForm';
+    } else {
+      restoredStatus = 'New';
+    }
+  }
+
+  app.status = restoredStatus;
+  app.previousStatus = undefined;
+  await app.save();
+
+  const application = await Application.findById(applicationId)
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId screeningFormId')
+    .lean();
 
   return application;
 };
@@ -614,6 +748,8 @@ const addNote = async (applicationId, note) => {
   application.notes.push({
     content: note.content,
     addedBy: note.addedBy,
+    authorRole: note.authorRole,
+    authorName: note.authorName,
     visibility: note.visibility,
     addedAt: note.addedAt || new Date(),
   });
@@ -714,7 +850,29 @@ const addDiscount = async (applicationId, { amount, note, createdBy }) => {
   }
 
   await application.save();
-  return refreshApplication(application._id);
+
+  const freshApp = await refreshApplication(application._id);
+
+  // Send discount notification email to student (non-blocking)
+  const User = require('../models/User');
+  User.findById(application.studentId)
+    .select('firstName email')
+    .lean()
+    .then((student) => {
+      if (student?.email && freshApp.applicationId) {
+        // caPrice is the qualification list price; derive original and new effective prices
+        const caPrice = freshApp.qualificationId?.caPrice || 0;
+        const totalDiscountAfter = (freshApp.discounts || []).reduce((s, d) => s + (d.amount || 0), 0);
+        const newPrice = Math.max(0, caPrice - totalDiscountAfter);
+        const originalPrice = newPrice + Number(amount);
+        appEmails
+          .sendDiscountAppliedEmail(student, freshApp, originalPrice, Number(amount), newPrice)
+          .catch((err) => console.error('[ApplicationService] sendDiscountAppliedEmail error:', err.message));
+      }
+    })
+    .catch((err) => console.error('[ApplicationService] addDiscount student lookup error:', err.message));
+
+  return freshApp;
 };
 
 const removeDiscount = async (applicationId, discountId) => {
@@ -1241,6 +1399,121 @@ const exportCsv = async (filters) => {
   });
 };
 
+/* ═══════════════════════════════════════════════════════
+   STUDENT DETAIL — OPTIMIZED SINGLE-APP LOAD
+   ═══════════════════════════════════════════════════════ */
+
+const getStudentDetail = async (studentId, applicationId) => {
+  // 1. Full details for the selected application
+  const selectedApp = await Application.findOne({
+    _id: applicationId,
+    studentId,
+  })
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .lean();
+
+  if (!selectedApp) throw new AppError('Application not found', 404);
+
+  // 2. Payments, documents for this application only
+  const [payments, documents] = await Promise.all([
+    Payment.find({ applicationId }).sort('-createdAt').lean(),
+    Document.find({ applicationId }).sort('-createdAt').lean(),
+  ]);
+
+  // 3. Lightweight snapshots of sibling applications
+  const siblings = await Application.find({
+    studentId,
+    _id: { $ne: applicationId },
+  })
+    .select('applicationId status qualificationId industryId createdAt')
+    .populate('qualificationId', 'name code')
+    .populate('industryId', 'name')
+    .sort('-createdAt')
+    .lean();
+
+  return {
+    application: selectedApp,
+    payments,
+    documents,
+    siblings,
+  };
+};
+
+/* ═══════════════════════════════════════════════════════
+   FOLLOW-UP CALLS
+   ═══════════════════════════════════════════════════════ */
+
+const addFollowUp = async (applicationId, { scheduledFor, notes, loggedBy }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  application.followUpCalls.push({ scheduledFor, notes, loggedBy });
+  await application.save();
+
+  // Sync to connected calendars (non-blocking)
+  if (loggedBy) {
+    try {
+      const { syncFollowUp } = require('./calendarService');
+      const studentName = await Application.findById(applicationId)
+        .populate('studentId', 'firstName lastName')
+        .lean()
+        .then((a) => {
+          const s = a?.studentId;
+          return s ? `${s.firstName || ''} ${s.lastName || ''}`.trim() : '';
+        });
+
+      await syncFollowUp(loggedBy, {
+        title: `Follow-up: ${studentName || application.applicationId}`,
+        description: notes || '',
+        scheduledFor,
+      });
+    } catch (err) {
+      // Calendar sync is non-fatal
+      console.error('[FollowUp] Calendar sync failed:', err.message);
+    }
+  }
+
+  // Send follow-up scheduled email to student (non-blocking)
+  try {
+    const User = require('../models/User');
+    const student = await User.findById(application.studentId).select('firstName email').lean();
+    if (student?.email) {
+      appEmails.sendFollowUpScheduledEmail(student, application, scheduledFor, notes)
+        .catch((e) => console.error('[FollowUp] Follow-up email error:', e.message));
+    }
+  } catch (e) {
+    console.error('[FollowUp] Failed to send follow-up scheduled email:', e.message);
+  }
+
+  return refreshApplication(application._id);
+};
+
+const completeFollowUp = async (applicationId, followUpId, { outcome, notes }) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  const followUp = application.followUpCalls.id(followUpId);
+  if (!followUp) throw new AppError('Follow-up not found', 404);
+
+  followUp.completedAt = new Date();
+  if (outcome) followUp.outcome = outcome;
+  if (notes) followUp.notes = notes;
+  await application.save();
+  return refreshApplication(application._id);
+};
+
+const deleteFollowUp = async (applicationId, followUpId) => {
+  const application = await Application.findById(applicationId);
+  if (!application) throw new AppError('Application not found', 404);
+
+  const followUp = application.followUpCalls.id(followUpId);
+  if (!followUp) throw new AppError('Follow-up not found', 404);
+
+  followUp.deleteOne();
+  await application.save();
+  return refreshApplication(application._id);
+};
+
 module.exports = {
   applications: {
     ...applicationCrud,
@@ -1267,6 +1540,7 @@ module.exports = {
   sendToRTOPortal,
   sendRTOSubmission,
   updateStatus,
+  restoreFromArchive,
   createIntakeForm,
   createScreeningForm,
   uploadDocument,
@@ -1289,4 +1563,8 @@ module.exports = {
   submitAdditionalDocs,
   reviewAdditionalDocs,
   createRTOSubmission,
+  addFollowUp,
+  completeFollowUp,
+  deleteFollowUp,
+  getStudentDetail,
 };

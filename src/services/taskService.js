@@ -8,7 +8,7 @@ const taskCrud = buildCrud(Task, {
   populate: [
     { path: 'assignedTo', select: 'firstName lastName email' },
     { path: 'createdBy', select: 'firstName lastName' },
-    { path: 'applicationId', select: 'applicationId studentId status' },
+    { path: 'applicationId', select: 'applicationId studentId status', populate: { path: 'studentId', select: 'firstName lastName' } },
   ],
 });
 

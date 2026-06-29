@@ -28,6 +28,17 @@ const buildCrud = (Model, options = {}) => {
         filter.status = { $in: filter.status.split(',').map((s) => s.trim()) };
       }
 
+      // Handle excludeStatus — exclude specific status(es) from results
+      if (filter.excludeStatus) {
+        const excluded = filter.excludeStatus.includes(',')
+          ? filter.excludeStatus.split(',').map((s) => s.trim())
+          : [filter.excludeStatus];
+        filter.status = filter.status
+          ? { ...filter.status, $nin: excluded }
+          : { $nin: excluded };
+        delete filter.excludeStatus;
+      }
+
       // Handle callAttempts filter (contactAttempts on Application model)
       if (filter.callAttempts !== undefined) {
         const val = filter.callAttempts;
@@ -56,16 +67,18 @@ const buildCrud = (Model, options = {}) => {
           { applicationId: regex },
         ];
 
-        // For Application model: also search by student name/email
-        try {
-          const User = require('../models/User');
-          const matchingUsers = await User.find({
-            $or: [{ firstName: regex }, { lastName: regex }, { email: regex }],
-          }).select('_id').lean();
-          if (matchingUsers.length > 0) {
-            orConditions.push({ studentId: { $in: matchingUsers.map((u) => u._id) } });
-          }
-        } catch { /* User model may not exist for non-app collections — ignore */ }
+        // For models with studentId field: also search by student name/email
+        if (Model.schema.path('studentId')) {
+          try {
+            const User = require('../models/User');
+            const matchingUsers = await User.find({
+              $or: [{ firstName: regex }, { lastName: regex }, { email: regex }],
+            }).select('_id').lean();
+            if (matchingUsers.length > 0) {
+              orConditions.push({ studentId: { $in: matchingUsers.map((u) => u._id) } });
+            }
+          } catch { /* ignore */ }
+        }
 
         filter.$or = orConditions;
       }

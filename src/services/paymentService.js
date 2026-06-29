@@ -6,6 +6,7 @@ const Payment = require('../models/Payment');
 const PaymentPlan = require('../models/PaymentPlan');
 const Application = require('../models/Application');
 const { tryAutoStartTimer } = require('./applicationService');
+const appEmails = require('./applicationEmailService');
 
 const paymentCrud = buildCrud(Payment, {
   populate: ['applicationId', 'studentId', 'paymentPlanId', 'authorizedBy', 'approvedByMFA'],
@@ -42,7 +43,23 @@ const createPaymentPlan = async (data) => {
   application.status = 'StudentIntakeForm';
   await application.save();
 
-  return refreshPlan(paymentPlan._id);
+  const freshPlan = await refreshPlan(paymentPlan._id);
+
+  // Notify student of new payment plan (non-blocking)
+  const User = require('../models/User');
+  User.findById(freshPlan.studentId?._id || freshPlan.studentId)
+    .select('firstName email')
+    .lean()
+    .then((student) => {
+      if (student?.email) {
+        appEmails
+          .sendPaymentPlanCreatedEmail(student, freshPlan.applicationId || application, freshPlan)
+          .catch((err) => console.error('[PaymentService] sendPaymentPlanCreatedEmail error:', err.message));
+      }
+    })
+    .catch((err) => console.error('[PaymentService] sendPaymentPlanCreatedEmail lookup error:', err.message));
+
+  return freshPlan;
 };
 
 const allocateToPlan = async (paymentPlan, paymentId, amount) => {
@@ -157,7 +174,42 @@ const createPaymentRecord = async (data) => {
     }
   }
 
-  return refreshPayment(payment._id);
+  const freshPayment = await refreshPayment(payment._id);
+
+  // Send payment emails (non-blocking)
+  if (freshPayment.status === 'completed') {
+    const student = freshPayment.studentId;
+    const application = freshPayment.applicationId;
+    const isFullPayment =
+      freshPayment.type === 'upfront' ||
+      freshPayment.type === 'manualMarkPaid';
+
+    if (student?.email && application?.applicationId) {
+      if (freshPayment.type === 'manualMarkPaid') {
+        // Manual mark paid — use the dedicated manual confirmation email
+        appEmails
+          .sendManualMarkPaidEmail(
+            student,
+            application,
+            freshPayment.amount,
+            freshPayment.manualPaymentReference || 'Manual'
+          )
+          .catch((err) => console.error('[PaymentService] sendManualMarkPaidEmail error:', err.message));
+      } else {
+        // Upfront / plan payment — standard receipt
+        appEmails
+          .sendPaymentReceivedEmail(student, application, freshPayment)
+          .catch((err) => console.error('[PaymentService] sendPaymentReceivedEmail error:', err.message));
+      }
+
+      // Admin notification for all completed payments
+      appEmails
+        .sendAdminPaymentNotification(student, application, freshPayment, isFullPayment)
+        .catch((err) => console.error('[PaymentService] sendAdminPaymentNotification error:', err.message));
+    }
+  }
+
+  return freshPayment;
 };
 
 const applyPaymentToPlan = async (paymentPlanId, data) => {
@@ -224,8 +276,24 @@ const applyPaymentToPlan = async (paymentPlanId, data) => {
     }
   }
 
+  const freshPaymentForPlan = await refreshPayment(payment._id);
+
+  // Send payment receipt + admin notification (non-blocking)
+  if (freshPaymentForPlan.status === 'completed') {
+    const student = freshPaymentForPlan.studentId;
+    const application = freshPaymentForPlan.applicationId;
+    if (student?.email && application?.applicationId) {
+      appEmails
+        .sendPaymentReceivedEmail(student, application, freshPaymentForPlan)
+        .catch((err) => console.error('[PaymentService] applyPaymentToPlan sendPaymentReceivedEmail error:', err.message));
+      appEmails
+        .sendAdminPaymentNotification(student, application, freshPaymentForPlan, false)
+        .catch((err) => console.error('[PaymentService] applyPaymentToPlan sendAdminPaymentNotification error:', err.message));
+    }
+  }
+
   return {
-    payment: await refreshPayment(payment._id),
+    payment: freshPaymentForPlan,
     paymentPlan: await refreshPlan(paymentPlan._id),
   };
 };
@@ -236,6 +304,10 @@ const updatePaymentPlan = async (id, data) => {
   if (!paymentPlan) {
     throw new AppError('Payment plan not found', 404);
   }
+
+  // Track whether direct debit is being enabled for the first time
+  const directDebitJustEnabled =
+    data.directDebitEnabled === true && !paymentPlan.directDebitEnabled;
 
   if (Array.isArray(data.installments)) {
     const currentByIndex = new Map(paymentPlan.installments.map((installment) => [installment.index, installment]));
@@ -260,7 +332,25 @@ const updatePaymentPlan = async (id, data) => {
   Object.assign(paymentPlan, data);
   await paymentPlan.save();
 
-  return refreshPlan(paymentPlan._id);
+  const freshUpdatedPlan = await refreshPlan(paymentPlan._id);
+
+  // If direct debit was just enabled, send confirmation email (non-blocking)
+  if (directDebitJustEnabled) {
+    const User = require('../models/User');
+    User.findById(freshUpdatedPlan.studentId?._id || freshUpdatedPlan.studentId)
+      .select('firstName email')
+      .lean()
+      .then((student) => {
+        if (student?.email && freshUpdatedPlan.applicationId?.applicationId) {
+          appEmails
+            .sendDirectDebitSetupEmail(student, freshUpdatedPlan.applicationId, freshUpdatedPlan)
+            .catch((err) => console.error('[PaymentService] updatePaymentPlan sendDirectDebitSetupEmail error:', err.message));
+        }
+      })
+      .catch((err) => console.error('[PaymentService] updatePaymentPlan student lookup error:', err.message));
+  }
+
+  return freshUpdatedPlan;
 };
 
 const getStats = async () => {
@@ -495,7 +585,23 @@ const pausePlan = async (planId) => {
   plan.pausedAt = new Date();
   await plan.save();
 
-  return refreshPlan(plan._id);
+  const freshPausedPlan = await refreshPlan(plan._id);
+
+  // Notify student that plan is paused (non-blocking)
+  const User = require('../models/User');
+  User.findById(freshPausedPlan.studentId?._id || freshPausedPlan.studentId)
+    .select('firstName email')
+    .lean()
+    .then((student) => {
+      if (student?.email && freshPausedPlan.applicationId?.applicationId) {
+        appEmails
+          .sendPaymentPlanStatusEmail(student, freshPausedPlan.applicationId, freshPausedPlan, 'paused')
+          .catch((err) => console.error('[PaymentService] pausePlan sendPaymentPlanStatusEmail error:', err.message));
+      }
+    })
+    .catch((err) => console.error('[PaymentService] pausePlan student lookup error:', err.message));
+
+  return freshPausedPlan;
 };
 
 const resumePlan = async (planId) => {
@@ -517,7 +623,23 @@ const resumePlan = async (planId) => {
   plan.pausedAt = null;
   await plan.save();
 
-  return refreshPlan(plan._id);
+  const freshResumedPlan = await refreshPlan(plan._id);
+
+  // Notify student that plan is resumed (non-blocking)
+  const User = require('../models/User');
+  User.findById(freshResumedPlan.studentId?._id || freshResumedPlan.studentId)
+    .select('firstName email')
+    .lean()
+    .then((student) => {
+      if (student?.email && freshResumedPlan.applicationId?.applicationId) {
+        appEmails
+          .sendPaymentPlanStatusEmail(student, freshResumedPlan.applicationId, freshResumedPlan, 'resumed')
+          .catch((err) => console.error('[PaymentService] resumePlan sendPaymentPlanStatusEmail error:', err.message));
+      }
+    })
+    .catch((err) => console.error('[PaymentService] resumePlan student lookup error:', err.message));
+
+  return freshResumedPlan;
 };
 
 const cancelPlan = async (planId) => {
@@ -545,7 +667,23 @@ const cancelPlan = async (planId) => {
 
   await plan.save();
 
-  return refreshPlan(plan._id);
+  const freshCancelledPlan = await refreshPlan(plan._id);
+
+  // Notify student that plan is cancelled (non-blocking)
+  const User = require('../models/User');
+  User.findById(freshCancelledPlan.studentId?._id || freshCancelledPlan.studentId)
+    .select('firstName email')
+    .lean()
+    .then((student) => {
+      if (student?.email && freshCancelledPlan.applicationId?.applicationId) {
+        appEmails
+          .sendPaymentPlanStatusEmail(student, freshCancelledPlan.applicationId, freshCancelledPlan, 'cancelled')
+          .catch((err) => console.error('[PaymentService] cancelPlan sendPaymentPlanStatusEmail error:', err.message));
+      }
+    })
+    .catch((err) => console.error('[PaymentService] cancelPlan student lookup error:', err.message));
+
+  return freshCancelledPlan;
 };
 
 const skipInstallment = async (planId, installmentIndex) => {

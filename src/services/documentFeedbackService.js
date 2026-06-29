@@ -1,5 +1,6 @@
 const AppError = require('../utils/AppError');
 const DocumentFeedback = require('../models/DocumentFeedback');
+const appEmails = require('./applicationEmailService');
 
 /* ── Queries ── */
 
@@ -79,8 +80,9 @@ const createAdminFeedback = async (applicationId, data) => {
   // Notify student (non-fatal)
   try {
     const Application = require('../models/Application');
+    const User = require('../models/User');
     const { createNotification } = require('./notificationService');
-    const app = await Application.findById(applicationId).select('studentId').lean();
+    const app = await Application.findById(applicationId).select('studentId applicationId').lean();
     if (app?.studentId) {
       await createNotification({
         userId: app.studentId,
@@ -90,6 +92,14 @@ const createAdminFeedback = async (applicationId, data) => {
         link: `/student/documents/${applicationId}`,
         relatedId: applicationId,
       });
+
+      // Send feedback email to student
+      const student = await User.findById(app.studentId).select('firstName email').lean();
+      if (student?.email) {
+        const sender = { firstName: data.adminName || 'Admin', lastName: '' };
+        appEmails.sendDocumentFeedbackEmail(student, app, data.documentLabel || 'document', data.comment, sender)
+          .catch((e) => console.error('[DocFeedback] Failed to send feedback email:', e.message));
+      }
     }
   } catch (err) {
     console.error('[DocFeedback] Failed to create notification:', err.message);
@@ -150,8 +160,9 @@ const forwardToStudent = async (feedbackId, { studentMessage, adminName }) => {
   // Notify student (non-fatal)
   try {
     const Application = require('../models/Application');
+    const User = require('../models/User');
     const { createNotification } = require('./notificationService');
-    const app = await Application.findById(feedback.applicationId).select('studentId').lean();
+    const app = await Application.findById(feedback.applicationId).select('studentId applicationId').lean();
     if (app?.studentId) {
       await createNotification({
         userId: app.studentId,
@@ -161,6 +172,14 @@ const forwardToStudent = async (feedbackId, { studentMessage, adminName }) => {
         link: '/student/applications',
         relatedId: feedback.applicationId,
       });
+
+      // Send feedback email to student
+      const student = await User.findById(app.studentId).select('firstName email').lean();
+      if (student?.email) {
+        const sender = { firstName: adminName || 'Admin', lastName: '' };
+        appEmails.sendDocumentFeedbackEmail(student, app, feedback.documentLabel || 'document', studentMessage, sender)
+          .catch((e) => console.error('[DocFeedback] Failed to send forward feedback email:', e.message));
+      }
     }
   } catch (err) {
     console.error('[DocFeedback] Failed to create forward notification:', err.message);

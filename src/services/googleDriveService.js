@@ -351,6 +351,31 @@ const streamDriveFileToResponse = async (fileId, res, inline = false) => {
 };
 
 /* ═══════════════════════════════════════════════════════
+   DOWNLOAD FILE AS BUFFER
+   ═══════════════════════════════════════════════════════ */
+
+const downloadFileBuffer = async (fileId) => {
+  const drive = createDriveClient();
+
+  const metaRes = await drive.files.get({
+    fileId,
+    fields: 'name, mimeType',
+    supportsAllDrives: true,
+  });
+
+  const fileRes = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'arraybuffer' },
+  );
+
+  return {
+    buffer: Buffer.from(fileRes.data),
+    fileName: metaRes.data.name,
+    mimeType: metaRes.data.mimeType || 'application/octet-stream',
+  };
+};
+
+/* ═══════════════════════════════════════════════════════
    GET FILE METADATA
    ═══════════════════════════════════════════════════════ */
 
@@ -377,6 +402,7 @@ module.exports = {
   shareWithEmail,
   getOrCreateAppFolder,
   streamDriveFileToResponse,
+  downloadFileBuffer,
   getFileMetadata,
   isDriveUrl,
   extractDriveFileId,

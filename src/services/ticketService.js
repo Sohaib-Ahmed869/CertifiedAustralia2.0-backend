@@ -1,6 +1,7 @@
 const Ticket = require('../models/Ticket');
 const AppError = require('../utils/AppError');
 const buildCrud = require('./commonCrud');
+const appEmails = require('./applicationEmailService');
 
 const ticketCrud = buildCrud(Ticket, {
   populate: ['requesterId', 'assignedTo', 'applicationId', 'messages.senderId'],
@@ -94,6 +95,18 @@ const addMessage = async (ticketId, messageData) => {
         link: `/student/support`,
         relatedId: ticket._id,
       });
+
+      // Send email to student
+      try {
+        const User = require('../models/User');
+        const student = await User.findById(ticket.requesterId).select('firstName email').lean();
+        if (student?.email) {
+          appEmails.sendSupportTicketReplyEmail(student, ticket)
+            .catch((e) => console.error('[TicketService] Ticket reply email error:', e.message));
+        }
+      } catch (emailErr) {
+        console.error('[TicketService] Failed to fetch student for reply email:', emailErr.message);
+      }
     }
   } catch (err) {
     console.error('[TicketService] Failed to create message notification:', err.message);

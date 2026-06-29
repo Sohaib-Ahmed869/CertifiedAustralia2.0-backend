@@ -7,6 +7,11 @@ const Application = require('../models/Application');
 const ScreeningForm = require('../models/ScreeningForm');
 const AppError = require('../utils/AppError');
 const { sendTemplatedEmail } = require('./emailService');
+const {
+  sendWelcomeEmail,
+  sendAgentWelcomeEmail,
+  sendAdminNewRegistrationEmail,
+} = require('./applicationEmailService');
 
 const SIGNUP_DISCOUNT_AMOUNT = 500;
 
@@ -34,6 +39,7 @@ const register = async (data) => {
     industryId, qualificationId,
     yearsOfExperience, experienceLocation, state,
     hasFormalQualifications, formalQualifications,
+    registeredById,
   } = data;
 
   if (!firstName || !lastName || !email || !password) {
@@ -103,6 +109,43 @@ const register = async (data) => {
 
   const token = signToken(student._id, true);
   const { password: _, ...userData } = student.toObject();
+
+  // --- Non-blocking registration emails ---
+  if (registeredById) {
+    // Agent-registered customer: look up the agent then send agent welcome + admin notification
+    User.findById(registeredById)
+      .select('firstName lastName')
+      .lean()
+      .then((agent) => {
+        if (agent) {
+          sendAgentWelcomeEmail(student.toObject(), application, agent).catch((err) =>
+            console.error('[AuthService] sendAgentWelcomeEmail error:', err.message)
+          );
+          sendAdminNewRegistrationEmail(student.toObject(), application, agent).catch((err) =>
+            console.error('[AuthService] sendAdminNewRegistrationEmail (agent) error:', err.message)
+          );
+        } else {
+          // Agent not found — fall back to self-registration emails
+          sendWelcomeEmail(student.toObject(), application).catch((err) =>
+            console.error('[AuthService] sendWelcomeEmail (fallback) error:', err.message)
+          );
+          sendAdminNewRegistrationEmail(student.toObject(), application, 'self').catch((err) =>
+            console.error('[AuthService] sendAdminNewRegistrationEmail (fallback) error:', err.message)
+          );
+        }
+      })
+      .catch((err) =>
+        console.error('[AuthService] Agent lookup for registration email error:', err.message)
+      );
+  } else {
+    // Self-registered student
+    sendWelcomeEmail(student.toObject(), application).catch((err) =>
+      console.error('[AuthService] sendWelcomeEmail error:', err.message)
+    );
+    sendAdminNewRegistrationEmail(student.toObject(), application, 'self').catch((err) =>
+      console.error('[AuthService] sendAdminNewRegistrationEmail error:', err.message)
+    );
+  }
 
   return { token, user: userData };
 };

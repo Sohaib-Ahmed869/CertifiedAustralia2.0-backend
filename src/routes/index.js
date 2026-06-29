@@ -24,6 +24,7 @@ const chatbotRoutes = require('./chatbotRoutes');
 const competencyBookingRoutes = require('./competencyBookingRoutes');
 const paymentBatchRoutes = require('./paymentBatchRoutes');
 const xeroRoutes = require('./xeroRoutes');
+const searchRoutes = require('./searchRoutes');
 const applicationController = require('../controllers/applicationController');
 
 const router = express.Router();
@@ -53,6 +54,7 @@ router.use('/chatbot', chatbotRoutes);
 router.use('/competency-bookings', competencyBookingRoutes);
 router.use('/payment-batches', paymentBatchRoutes);
 router.use('/xero', xeroRoutes);
+router.use('/search', searchRoutes);
 
 // Standalone intake form access (read-only)
 router.get('/intake-forms/:id', applicationController.intakeForms.getById);

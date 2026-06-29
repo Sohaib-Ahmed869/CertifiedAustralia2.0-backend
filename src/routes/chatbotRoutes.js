@@ -44,6 +44,8 @@ router.post('/knowledge',
       ...req.body,
       updatedBy: req.user._id,
     });
+    // Auto-generate embedding for new entry
+    try { await chatbotService.generateKBEmbedding(item._id); } catch { /* non-fatal */ }
     res.status(201).json({ item });
   })
 );
@@ -56,7 +58,18 @@ router.patch('/knowledge/:id',
       updatedBy: req.user._id,
       updatedAt: new Date(),
     });
+    // Re-generate embedding on update
+    try { await chatbotService.generateKBEmbedding(req.params.id); } catch { /* non-fatal */ }
     res.json({ item });
+  })
+);
+
+// Generate embeddings for all KB entries (admin only)
+router.post('/knowledge/generate-embeddings',
+  authorize('Admin', 'CEOReportingManager'),
+  asyncHandler(async (req, res) => {
+    const count = await chatbotService.generateAllEmbeddings();
+    res.json({ message: `Generated embeddings for ${count} entries` });
   })
 );
 

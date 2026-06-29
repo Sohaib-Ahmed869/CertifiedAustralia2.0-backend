@@ -80,4 +80,10 @@ const paymentSchema = new mongoose.Schema(
   }
 );
 
+paymentSchema.index({ applicationId: 1 });
+paymentSchema.index({ studentId: 1 });
+paymentSchema.index({ status: 1 });
+paymentSchema.index({ xeroSyncStatus: 1 });
+paymentSchema.index({ applicationId: 1, status: 1 });
+
 module.exports = mongoose.model('Payment', paymentSchema);

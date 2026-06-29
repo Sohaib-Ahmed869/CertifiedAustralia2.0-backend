@@ -4,6 +4,11 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Public routes — token-based auth for third-party form access
+router.get('/third-party/validate/:token', controller.validateThirdPartyToken);
+router.post('/third-party/submit/:token', controller.submitThirdPartyForm);
+
+// All other routes require auth
 router.use(protect);
 
 // --- Form definitions ---
@@ -43,6 +48,18 @@ router.delete(
 // --- Form Submissions ---
 
 router.get('/submissions/by-application/:appId', controller.listSubmissionsByApplication);
+
+// Third-party management (protected)
+router.post('/third-party/setup', authorize('Admin', 'CEOReportingManager'), controller.setupThirdPartyAccess);
+router.get('/third-party/:appId', controller.listThirdPartyAccess);
+
+// Email submissions to RTO
+router.post('/email-to-rto/:appId', authorize('Admin', 'CEOReportingManager'), controller.emailToRTO);
+
+// Draft endpoints
+router.get('/draft/:appId/:formId', controller.getDraft);
+router.post('/draft/:appId/:formId', controller.saveDraft);
+router.delete('/draft/:appId/:formId', controller.deleteDraft);
 
 router
   .route('/submissions')

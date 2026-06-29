@@ -44,6 +44,23 @@ const applicationSchema = new mongoose.Schema(
       ],
       default: 'New',
     },
+    previousStatus: {
+      type: String,
+      enum: [
+        'New',
+        'WaitingForPayment',
+        'StudentIntakeForm',
+        'UploadDocuments',
+        'DocumentsUploaded',
+        'StudentCompleted',
+        'SentToRTO',
+        'WaitingForVerification',
+        'ReadyForRTOPayment',
+        'RTOInvoiceUploaded',
+        'CertificateGenerated',
+        'CertificateIssued',
+      ],
+    },
     assignedAgentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -178,6 +195,8 @@ const applicationSchema = new mongoose.Schema(
           type: mongoose.Schema.Types.ObjectId,
           ref: 'User',
         },
+        authorRole: String,
+        authorName: String,
         addedAt: {
           type: Date,
           default: Date.now,
@@ -354,7 +373,18 @@ const applicationSchema = new mongoose.Schema(
     lastContactedAt: {
       type: Date,
     },
+    // Dynamic forms — opt-in per application
+    dynamicFormsEnabled: {
+      type: Boolean,
+      default: false,
+    },
   }
 );
+
+applicationSchema.index({ studentId: 1 });
+applicationSchema.index({ status: 1 });
+applicationSchema.index({ assignedAgentId: 1 });
+applicationSchema.index({ assignedRTOId: 1 });
+applicationSchema.index({ studentId: 1, status: 1 });
 
 module.exports = mongoose.model('Application', applicationSchema);

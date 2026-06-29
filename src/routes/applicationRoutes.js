@@ -17,6 +17,9 @@ router.get('/stats', controller.getStats);
 router.get('/export', controller.exportCsv);
 router.get('/notes/search', controller.searchNotes);
 
+// Optimized student detail — full app + lightweight siblings
+router.get('/student/:studentId/detail/:id', controller.getStudentDetail);
+
 router.route('/:id')
   .get(controller.getApplication)
   .patch(controller.updateApplication)
@@ -27,6 +30,7 @@ router.patch('/:id/assign-rto', controller.assignRTO);
 router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);
 router.post('/:id/rto-submission', controller.sendRTOSubmission);
 router.patch('/:id/status', controller.updateStatus);
+router.patch('/:id/restore', controller.restoreFromArchive);
 router.post('/:id/notes', controller.addNote);
 router.patch('/:id/notes/:noteId', controller.editNote);
 router.delete('/:id/notes/:noteId', controller.deleteNote);
@@ -63,6 +67,27 @@ router.delete('/:id/documents/:docId', docController.deleteDocument);
 router.put('/:id/certificate', upload.single('certificate'), controller.uploadCertificate);
 router.post('/:id/certificate/:certId/notify-soft-copy', controller.notifySoftCopy);
 router.post('/:id/certificate/:certId/dispatch-hard-copy', controller.dispatchHardCopy);
+
+// Dynamic forms
+router.post('/:id/toggle-dynamic-forms', controller.toggleDynamicForms);
+router.get('/:id/available-forms', controller.getAvailableForms);
+
+// Follow-up calls
+router.post('/:id/follow-ups', controller.addFollowUp);
+router.patch('/:id/follow-ups/:followUpId/complete', controller.completeFollowUp);
+router.delete('/:id/follow-ups/:followUpId', controller.deleteFollowUp);
+
+// Post-certification form email
+router.post('/:id/send-post-cert-form', controller.sendPostCertForm);
+
+// Reference letter template email
+router.post('/:id/send-ref-letter-template', controller.sendRefLetterTemplate);
+
+// Resend context-based application email
+router.post('/:id/resend-email', controller.resendEmail);
+
+// Predefined email templates
+router.post('/:id/send-predefined-email', controller.sendPredefinedEmail);
 
 // RTO activity logging
 router.post('/:id/rto-activity', controller.logRTOActivity);

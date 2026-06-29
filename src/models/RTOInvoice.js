@@ -105,4 +105,7 @@ rtoInvoiceSchema.pre('save', async function (next) {
   next();
 });
 
+rtoInvoiceSchema.index({ applicationId: 1 });
+rtoInvoiceSchema.index({ status: 1 });
+
 module.exports = mongoose.model('RTOInvoice', rtoInvoiceSchema);
