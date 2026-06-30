@@ -266,6 +266,17 @@ const sendToRTOPortal = async (applicationId, rtoUserId) => {
   // Try to start the 21-day timer — requires both student completion + RTO assignment
   await tryAutoStartTimer(applicationId);
 
+  // Create RTO submission version record
+  try {
+    await createRTOSubmission(applicationId, {
+      sentBy: rtoUserId,
+      documentsIncluded: [],
+      emailSent: false,
+    });
+  } catch (err) {
+    console.error('[SendToRTOPortal] Failed to create submission record:', err.message);
+  }
+
   return application;
 };
 
@@ -430,6 +441,17 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
     });
 
     console.log('[RTO Submission] Email sent to %s for app %s (%d PDFs, %d doc links)', rtoEmail, application.applicationId, pdfAttachments.length, docCount);
+
+    // Create RTO submission version record
+    try {
+      await createRTOSubmission(applicationId, {
+        sentBy: null,
+        documentsIncluded: documents.map((d) => d.fileName || d.fieldName || 'document'),
+        emailSent: true,
+      });
+    } catch (vErr) {
+      console.error('[RTO Submission] Version record failed:', vErr.message);
+    }
   } catch (emailErr) {
     console.error('[RTO Submission] Email failed for app %s:', application.applicationId, emailErr.message);
     // Don't throw — the DB update succeeded, email is best-effort
