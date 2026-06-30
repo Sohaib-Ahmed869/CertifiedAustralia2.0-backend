@@ -276,6 +276,17 @@ const createApplicationFolder = async ({ applicationId, studentName, qualificati
 const createSubmissionSubfolder = async ({ parentFolderId, name }) => {
   const drive = createDriveClient();
 
+  // Reuse existing subfolder with same name (avoid duplicates for "Initial Submission")
+  try {
+    const search = await drive.files.list({
+      q: `'${parentFolderId}' in parents and name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id, webViewLink)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    if (search.data.files?.length > 0) return search.data.files[0];
+  } catch { /* search failed — create new */ }
+
   const response = await drive.files.create({
     requestBody: {
       name,

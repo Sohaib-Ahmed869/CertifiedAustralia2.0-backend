@@ -111,6 +111,76 @@ router.delete('/expenses/:id', asyncHandler(async (req, res) => {
   res.json({ message: 'Expense deleted' });
 }));
 
+// ── Manual Revenue (Reconciliation) routes ──
+const Payment = require('../models/Payment');
+const Application = require('../models/Application');
+
+// Get or create the reconciliation dummy application
+async function getReconApp() {
+  let app = await Application.findOne({ applicationId: 'RECONCILIATION' }).lean();
+  if (!app) {
+    app = await Application.create({
+      applicationId: 'RECONCILIATION',
+      status: 'New',
+      notes: [{ content: 'Dummy application for off-portal revenue reconciliation', visibility: 'admin', addedAt: new Date() }],
+    });
+  }
+  return app;
+}
+
+router.get('/manual-revenue', asyncHandler(async (req, res) => {
+  const reconApp = await getReconApp();
+  const filter = { applicationId: reconApp._id, type: 'manualMarkPaid' };
+  if (req.query.dateFrom) filter.createdAt = { ...filter.createdAt, $gte: new Date(req.query.dateFrom) };
+  if (req.query.dateTo) filter.createdAt = { ...filter.createdAt, $lte: new Date(req.query.dateTo) };
+
+  const items = await Payment.find(filter)
+    .populate('authorizedBy', 'firstName lastName')
+    .sort({ createdAt: -1 })
+    .limit(parseInt(req.query.limit, 10) || 100)
+    .lean();
+  res.json({ items, reconApplicationId: reconApp._id });
+}));
+
+router.post('/manual-revenue', asyncHandler(async (req, res) => {
+  const reconApp = await getReconApp();
+  const { amount, description, reference, date } = req.body;
+  if (!amount || amount <= 0) return res.status(400).json({ message: 'Amount is required and must be positive' });
+
+  const payment = await Payment.create({
+    applicationId: reconApp._id,
+    amount,
+    type: 'manualMarkPaid',
+    paymentMethod: 'manual',
+    status: 'completed',
+    manualPaymentReference: reference || '',
+    manualPaymentReason: description || 'Off-portal revenue',
+    notes: description || '',
+    authorizedBy: req.user._id,
+    createdAt: date ? new Date(date) : new Date(),
+  });
+  res.status(201).json({ item: payment });
+}));
+
+router.patch('/manual-revenue/:id', asyncHandler(async (req, res) => {
+  const { amount, description, reference, date } = req.body;
+  const update = {};
+  if (amount !== undefined) update.amount = amount;
+  if (description !== undefined) { update.manualPaymentReason = description; update.notes = description; }
+  if (reference !== undefined) update.manualPaymentReference = reference;
+  if (date !== undefined) update.createdAt = new Date(date);
+
+  const item = await Payment.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+  if (!item) return res.status(404).json({ message: 'Revenue entry not found' });
+  res.json({ item });
+}));
+
+router.delete('/manual-revenue/:id', asyncHandler(async (req, res) => {
+  const item = await Payment.findByIdAndDelete(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Revenue entry not found' });
+  res.json({ message: 'Revenue entry deleted' });
+}));
+
 // ── Cashflow routes ──
 router.get('/cashflow/range', controller.getCashflowRange);
 router.get('/cashflow/config', controller.getCashflowConfig);

@@ -117,9 +117,10 @@ const uploadSingle = asyncHandler(async (req, res) => {
 
   let folderId = await ensureDriveFolder(application);
 
-  // For additional doc requests, create/use a dated subfolder (CA-08 / CA-14)
+  // Separate subfolders for initial vs additional submissions (CA-14)
   const additionalDocRequestId = req.body.additionalDocRequestId;
   if (additionalDocRequestId) {
+    // Additional doc requests go into dated subfolders
     try {
       const dateStr = new Date().toISOString().split('T')[0];
       const subfolder = await driveService.createSubmissionSubfolder({
@@ -129,6 +130,17 @@ const uploadSingle = asyncHandler(async (req, res) => {
       folderId = subfolder.id;
     } catch {
       // Fall back to root application folder if subfolder creation fails
+    }
+  } else {
+    // Initial submissions go into "Initial Submission" subfolder
+    try {
+      const subfolder = await driveService.createSubmissionSubfolder({
+        parentFolderId: folderId,
+        name: 'Initial Submission',
+      });
+      folderId = subfolder.id;
+    } catch {
+      // Fall back to root application folder
     }
   }
 
