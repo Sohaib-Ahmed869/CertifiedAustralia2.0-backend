@@ -206,7 +206,7 @@ const applicationSchema = new mongoose.Schema(
         },
         visibility: {
           type: String,
-          enum: ['admin', 'rto', 'adminAndRTO'],
+          enum: ['admin', 'rto', 'adminAndRTO', 'rtoToStudent', 'student'],
           default: 'admin',
         },
       },

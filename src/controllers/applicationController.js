@@ -133,12 +133,40 @@ module.exports = {
     res.status(201).json({ item: result });
   }),
   addNote: asyncHandler(async (req, res) => {
+    // Validate rtoToStudent visibility — only allowed if RTO has directStudentCommunication enabled
+    if (req.body.visibility === 'rtoToStudent') {
+      if (req.user.role !== 'InternalRTO' || !req.user.directStudentCommunication) {
+        return res.status(403).json({ message: 'Direct student communication is not enabled for this RTO account' });
+      }
+    }
+
     const result = await service.addNote(req.params.id, {
       ...req.body,
       addedBy: req.user._id,
       authorRole: req.user.role,
       authorName: `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email,
     });
+
+    // Notify student when RTO sends a direct note
+    if (req.body.visibility === 'rtoToStudent') {
+      try {
+        const app = await Application.findById(req.params.id).select('studentId applicationId').lean();
+        if (app?.studentId) {
+          const { notifyWithEmail } = require('../services/notificationService');
+          const authorName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'RTO';
+          await notifyWithEmail(app.studentId, {
+            type: 'feedback_received',
+            title: 'New Message from RTO',
+            message: `${authorName} has sent you a message regarding your application ${app.applicationId}.`,
+            link: '/student/application',
+            relatedId: app._id,
+          }, { subject: `New Message from RTO — ${app.applicationId}` });
+        }
+      } catch (err) {
+        console.error('[AddNote] Failed to notify student:', err.message);
+      }
+    }
+
     res.status(201).json({ item: result });
   }),
 
