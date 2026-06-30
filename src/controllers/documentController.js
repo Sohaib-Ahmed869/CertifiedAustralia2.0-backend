@@ -155,6 +155,19 @@ const uploadSingle = asyncHandler(async (req, res) => {
 
   cleanupFile(file.path);
 
+  // Check for existing document with same fieldName for versioning (CA-14)
+  const existingDoc = await Document.findOne({
+    applicationId: appId,
+    fieldName,
+    ...(additionalDocRequestId ? { additionalDocRequestId } : { additionalDocRequestId: { $exists: false } }),
+  }).sort({ version: -1 }).lean();
+
+  const prevVersion = existingDoc?.version || 0;
+  const prevFileIds = existingDoc?.previousVersionFileIds || [];
+  if (existingDoc?.googleDriveFileId) {
+    prevFileIds.push(existingDoc.googleDriveFileId);
+  }
+
   const docData = {
     applicationId: appId,
     studentId: application.studentId._id || application.studentId,
@@ -167,6 +180,8 @@ const uploadSingle = asyncHandler(async (req, res) => {
     uploadedBy: req.user?._id || application.studentId._id || application.studentId,
     uploadedOnBehalf: req.body.uploadedOnBehalf === 'true' || req.body.uploadedOnBehalf === true,
     rtoAccessExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    version: prevVersion + 1,
+    previousVersionFileIds: prevFileIds,
   };
 
   // Link document to an additional doc request if specified (CA-08 gated upload)
