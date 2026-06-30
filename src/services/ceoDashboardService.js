@@ -88,8 +88,14 @@ const SPEND_KEY_TO_SOURCE = {
 
 /**
  * Compute a dateFrom based on the period query parameter.
+ * Also supports explicit `dateFrom` query param override.
  */
-function getDateFrom(period) {
+function getDateFrom(period, query = {}) {
+  // Explicit dateFrom takes priority over preset period
+  if (query.dateFrom) {
+    const d = new Date(query.dateFrom);
+    return isNaN(d.getTime()) ? null : d;
+  }
   if (!period || period === 'all') return null;
 
   const now = new Date();
@@ -112,11 +118,23 @@ function getDateFrom(period) {
 }
 
 /**
- * Build a date filter for createdAt queries.
+ * Parse optional dateTo from query.
  */
-function dateFilter(dateFrom) {
-  if (!dateFrom) return {};
-  return { createdAt: { $gte: dateFrom } };
+function getDateTo(query = {}) {
+  if (!query.dateTo) return null;
+  const d = new Date(query.dateTo);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Build a date filter for createdAt queries. Supports optional dateTo.
+ */
+function dateFilter(dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return {};
+  const filter = {};
+  if (dateFrom) filter.$gte = dateFrom;
+  if (dateTo) filter.$lte = dateTo;
+  return { createdAt: filter };
 }
 
 /**
@@ -171,8 +189,9 @@ function getLastNMonths(n) {
  * CEO Dashboard Overview
  */
 async function getOverview(query = {}) {
-  const dateFrom = getDateFrom(query.period);
-  const filter = dateFilter(dateFrom);
+  const dateFrom = getDateFrom(query.period, query);
+  const dateTo = getDateTo(query);
+  const filter = dateFilter(dateFrom, dateTo);
 
   // Core stats
   const [totalLeads, paidApps, completedApps, certificateCount] = await Promise.all([
@@ -446,8 +465,9 @@ async function getOverview(query = {}) {
  * CEO Dashboard Leads
  */
 async function getLeads(query = {}) {
-  const dateFrom = getDateFrom(query.period);
-  const filter = dateFilter(dateFrom);
+  const dateFrom = getDateFrom(query.period, query);
+  const dateTo = getDateTo(query);
+  const filter = dateFilter(dateFrom, dateTo);
 
   const [totalLeads, paidCount] = await Promise.all([
     Application.countDocuments(filter),
@@ -542,8 +562,9 @@ async function getLeads(query = {}) {
  * CEO Dashboard Call Attempts
  */
 async function getCallAttempts(query = {}) {
-  const dateFrom = getDateFrom(query.period);
-  const filter = dateFilter(dateFrom);
+  const dateFrom = getDateFrom(query.period, query);
+  const dateTo = getDateTo(query);
+  const filter = dateFilter(dateFrom, dateTo);
 
   // Aggregate call stats
   const callAgg = await Application.aggregate([
@@ -651,8 +672,9 @@ async function getCallAttempts(query = {}) {
  * CEO Dashboard Agent Performance
  */
 async function getAgentPerformance(query = {}) {
-  const dateFrom = getDateFrom(query.period);
-  const filter = dateFilter(dateFrom);
+  const dateFrom = getDateFrom(query.period, query);
+  const dateTo = getDateTo(query);
+  const filter = dateFilter(dateFrom, dateTo);
 
   // All agents
   const agents = await User.find({ role: 'Agent', status: 'active' }).select('firstName lastName').lean();
@@ -747,9 +769,15 @@ async function getAgentPerformance(query = {}) {
  * Application.color field which is an unrelated lead-categorization flag.
  */
 async function getMarketing(query = {}) {
-  const dateFrom = getDateFrom(query.period);
-  const appFilter = dateFilter(dateFrom);
-  const spendFilter = dateFrom ? { weekOf: { $gte: dateFrom } } : {};
+  const dateFrom = getDateFrom(query.period, query);
+  const dateTo = getDateTo(query);
+  const appFilter = dateFilter(dateFrom, dateTo);
+  const spendFilter = {};
+  if (dateFrom || dateTo) {
+    spendFilter.weekOf = {};
+    if (dateFrom) spendFilter.weekOf.$gte = dateFrom;
+    if (dateTo) spendFilter.weekOf.$lte = dateTo;
+  }
 
   // ── 1. Aggregate MarketingSpend by platform, then normalise to source keys ──
   const spendAgg = await MarketingSpend.aggregate([
@@ -924,12 +952,17 @@ const Qualification = require('../models/Qualification');
  * Shows which RTOs are owed money, from which applications, with forecasting.
  */
 async function getSupplierLiability(query = {}) {
-  const dateFrom = getDateFrom(query.period);
+  const dateFrom = getDateFrom(query.period, query);
+  const dateTo = getDateTo(query);
   const now = new Date();
 
   // 1. Applications with an assigned RTO (these generate RTO liabilities)
   const appFilter = { assignedRTOId: { $exists: true, $ne: null } };
-  if (dateFrom) appFilter.createdAt = { $gte: dateFrom };
+  if (dateFrom || dateTo) {
+    appFilter.createdAt = {};
+    if (dateFrom) appFilter.createdAt.$gte = dateFrom;
+    if (dateTo) appFilter.createdAt.$lte = dateTo;
+  }
 
   const applications = await Application.find(appFilter)
     .populate('assignedRTOId', 'firstName lastName email')

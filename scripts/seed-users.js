@@ -54,6 +54,16 @@ const users = [
     status: 'active',
     emailVerified: true,
   },
+  {
+    email: 'marketing@yopmail.com',
+    password: 'Marketing@1234',
+    firstName: 'Shahbaz',
+    lastName: 'Khan',
+    phone: '+61400000006',
+    role: 'Marketing',
+    status: 'active',
+    emailVerified: true,
+  },
 ];
 
 async function seedUsers() {
