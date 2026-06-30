@@ -656,7 +656,7 @@ const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => 
   }
 
   // Step 3: Get application context for app-specific intents
-  const appSpecificIntents = ['NEXT_STEP', 'APP_STATUS', 'DOCS_NEEDED', 'DOCS_PENDING', 'CERTIFICATE', 'PAYMENT'];
+  const appSpecificIntents = ['NEXT_STEP', 'APP_STATUS', 'DOCS_NEEDED', 'DOCS_PENDING', 'CERTIFICATE', 'PAYMENT', 'REFERENCE_LETTER'];
   let appContext = null;
 
   if (appSpecificIntents.includes(intent) && studentId) {
@@ -712,10 +712,22 @@ const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => 
     }
   }
 
-  // Step 5: Reference letter handler (no app context needed)
+  // Step 5: Reference letter handler (context-aware — checks if template exists)
   if (intent === 'REFERENCE_LETTER') {
+    let templateInfo = '';
+    try {
+      const ReferenceLetterTemplate = require('../models/ReferenceLetterTemplate');
+      // Try to find template for the student's qualification
+      if (appContext?.qualificationId) {
+        const qualId = typeof appContext.qualificationId === 'object' ? appContext.qualificationId._id : appContext.qualificationId;
+        const template = await ReferenceLetterTemplate.findOne({ qualificationId: qualId }).lean();
+        if (template) {
+          templateInfo = `\n\n**Good news!** A reference letter template is available for your qualification. Use the "Request Template from Admin" button in the Documents section, and it will be emailed to you automatically.`;
+        }
+      }
+    } catch (e) { /* non-fatal */ }
     return {
-      answer: handleReferenceLetter(),
+      answer: handleReferenceLetter() + templateInfo,
       matched: true,
       source: 'deterministic',
       intent,

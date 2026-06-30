@@ -21,6 +21,7 @@ const notificationSchema = new mongoose.Schema(
         'permission_changed',
         'certificate_issued',
         'task_assigned',
+        'task_status_updated',
         'chat_mention',
         'chat_message',
         'general',

@@ -66,9 +66,17 @@ const ensureDriveFolder = async (application) => {
     studentName = `${s.firstName || ''} ${s.lastName || ''}`.trim();
   }
 
-  // Build a descriptive folder name like the old project
+  // Get qualification code/name if populated
+  let qualCode = '';
+  if (application.populated('qualificationId') || typeof application.qualificationId === 'object') {
+    const q = application.qualificationId;
+    qualCode = q?.code || q?.name || '';
+  }
+
+  // Build a descriptive folder name: APP10000 - John Smith - CPC30220
   const parts = [application.applicationId];
   if (studentName) parts.push(studentName);
+  if (qualCode) parts.push(qualCode);
   const folderName = parts.join(' - ');
 
   // getOrCreateAppFolder checks cache first, then searches Drive, then creates
@@ -104,7 +112,7 @@ const uploadSingle = asyncHandler(async (req, res) => {
     throw new AppError(`File exceeds size limit`, 400);
   }
 
-  const application = await Application.findById(appId).populate('studentId');
+  const application = await Application.findById(appId).populate('studentId').populate('qualificationId', 'name code');
   if (!application) { cleanupFile(file.path); throw new AppError('Application not found', 404); }
 
   let folderId = await ensureDriveFolder(application);
