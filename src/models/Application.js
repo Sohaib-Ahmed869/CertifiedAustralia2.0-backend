@@ -360,6 +360,12 @@ const applicationSchema = new mongoose.Schema(
       enum: ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
       default: '',
     },
+    // Reference letter template request tracking
+    refLetterRequested: {
+      type: Boolean,
+      default: false,
+    },
+    refLetterRequestedAt: Date,
     // Contact tracking
     contactAttempts: {
       type: Number,

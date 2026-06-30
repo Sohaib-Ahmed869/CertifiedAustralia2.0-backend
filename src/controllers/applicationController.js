@@ -678,6 +678,11 @@ module.exports = {
 
     if (!result.success) throw new AppError('Failed to send email', 500);
 
+    // Clear the ref letter request badge
+    await Application.findByIdAndUpdate(req.params.id, {
+      refLetterRequested: false,
+    });
+
     res.status(200).json({ message: 'Reference letter template sent to student' });
   }),
 
@@ -697,6 +702,12 @@ module.exports = {
 
     const qualName = typeof app.qualificationId === 'object' ? (app.qualificationId.name || '') : '';
     const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+
+    // Mark the request on the application
+    await Application.findByIdAndUpdate(req.params.id, {
+      refLetterRequested: true,
+      refLetterRequestedAt: new Date(),
+    });
 
     // Try to auto-send template if one exists for this qualification
     const qualId = typeof app.qualificationId === 'object' ? app.qualificationId._id : app.qualificationId;
@@ -733,14 +744,23 @@ module.exports = {
 
     // Notify admin team regardless (so they know the student requested it)
     try {
-      await notifyMany({
-        roles: ['Admin', 'CEOReportingManager'],
+      const User = require('../models/User');
+      const adminUsers = await User.find({ role: { $in: ['Admin', 'CEOReportingManager'] }, isActive: { $ne: false } }).select('_id').lean();
+      const adminIds = adminUsers.map((u) => u._id);
+      const studentIdStr = typeof app.studentId === 'object' ? app.studentId._id : app.studentId;
+      const notifData = {
         type: 'general',
         title: 'Reference Letter Template Requested',
         message: `${studentName} has requested a reference letter template for ${qualName} (${app.applicationId}).${template ? ' Template was auto-sent.' : ' No template found — please send manually.'}`,
-        link: `/admin/students/${typeof app.studentId === 'object' ? app.studentId._id : app.studentId}`,
+        link: `/admin/students/${studentIdStr}`,
         relatedId: app._id,
-      });
+      };
+      // Also notify the assigned agent if any
+      if (app.assignedAgentId) {
+        const agentId = typeof app.assignedAgentId === 'object' ? app.assignedAgentId._id : app.assignedAgentId;
+        if (!adminIds.some((id) => String(id) === String(agentId))) adminIds.push(agentId);
+      }
+      await notifyMany(adminIds, notifData);
     } catch (err) {
       console.error('[RefLetterTemplate] Admin notification failed:', err.message);
     }
