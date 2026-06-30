@@ -1,6 +1,6 @@
 const asyncHandler = require('../utils/asyncHandler');
 const createCrudController = require('./crudController');
-const { tasks, createTask } = require('../services/taskService');
+const { tasks, createTask, updateTask } = require('../services/taskService');
 const Application = require('../models/Application');
 
 const crud = createCrudController(tasks);
@@ -36,5 +36,13 @@ module.exports = {
       createdBy: req.user._id,
     });
     res.status(201).json({ item: result });
+  }),
+  // Override update to send notifications on status change
+  update: asyncHandler(async (req, res) => {
+    const result = await updateTask(req.params.id, req.body, req.user);
+    if (!result) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    res.status(200).json({ item: result });
   }),
 };

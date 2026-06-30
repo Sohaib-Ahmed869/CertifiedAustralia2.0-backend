@@ -85,7 +85,85 @@ const createTask = async (data) => {
   return populated;
 };
 
+/**
+ * Update a task. If the status changed, notify relevant parties:
+ * - Agent updates status → notify the task creator (admin/CEO)
+ * - Admin/CEO updates status → notify the assignee
+ */
+const updateTask = async (id, data, currentUser) => {
+  const before = await Task.findById(id).lean();
+  if (!before) return null;
+
+  const oldStatus = before.status;
+  const updated = await Task.findByIdAndUpdate(id, data, { new: true })
+    .populate('assignedTo', 'firstName lastName email')
+    .populate('createdBy', 'firstName lastName email role')
+    .populate({
+      path: 'applicationId',
+      select: 'applicationId studentId qualificationId',
+      populate: [
+        { path: 'studentId', select: 'firstName lastName' },
+        { path: 'qualificationId', select: 'name' },
+      ],
+    })
+    .lean();
+
+  // Only send notifications when status actually changed
+  if (data.status && data.status !== oldStatus) {
+    const statusLabels = { todo: 'To Do', in_progress: 'In Progress', done: 'Completed' };
+    const newLabel = statusLabels[data.status] || data.status;
+    const updaterName = `${currentUser.firstName} ${currentUser.lastName}`;
+
+    const app = updated.applicationId;
+    const studentName = app?.studentId
+      ? `${app.studentId.firstName} ${app.studentId.lastName}`
+      : null;
+    const contextParts = [studentName, app?.applicationId].filter(Boolean);
+    const context = contextParts.length > 0 ? ` (${contextParts.join(' — ')})` : '';
+
+    // Notify the task creator when assignee updates status
+    if (updated.createdBy && String(updated.createdBy._id) !== String(currentUser._id)) {
+      await notifyWithEmail(
+        updated.createdBy._id,
+        {
+          type: 'task_status_updated',
+          title: `Task ${newLabel}: ${updated.title}`,
+          message: `${updaterName} moved "${updated.title}" to ${newLabel}${context}`,
+          link: app?.studentId ? `/admin/students/${app.studentId._id}` : '/admin/tasks',
+          relatedId: updated._id,
+        },
+        {
+          subject: `Task ${newLabel}: ${updated.title}`,
+          ctaText: 'View Task',
+        }
+      );
+    }
+
+    // Notify the assignee when someone else (admin/CEO) updates status
+    if (updated.assignedTo && String(updated.assignedTo._id) !== String(currentUser._id)
+        && String(updated.assignedTo._id) !== String(updated.createdBy?._id)) {
+      await notifyWithEmail(
+        updated.assignedTo._id,
+        {
+          type: 'task_status_updated',
+          title: `Task ${newLabel}: ${updated.title}`,
+          message: `${updaterName} moved "${updated.title}" to ${newLabel}${context}`,
+          link: app?.studentId ? `/admin/students/${app.studentId._id}` : '/admin/tasks',
+          relatedId: updated._id,
+        },
+        {
+          subject: `Task ${newLabel}: ${updated.title}`,
+          ctaText: 'View Task',
+        }
+      );
+    }
+  }
+
+  return updated;
+};
+
 module.exports = {
   tasks: taskCrud,
   createTask,
+  updateTask,
 };
