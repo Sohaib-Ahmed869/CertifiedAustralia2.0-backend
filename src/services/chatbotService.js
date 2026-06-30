@@ -392,7 +392,7 @@ const handleDocsPending = (ctx) => {
 };
 
 const handleReferenceLetter = () => {
-  return "You can request a **reference letter template** from the admin team. Here's how:\n\n1. Go to your **Documents** page\n2. Look for the **info icon** (ℹ️) near the Reference section\n3. Click to request a template — admin will be notified and send you the appropriate template by email\n\nYou'll need **two references** — these should be from employers or supervisors who can verify your work experience relevant to your qualification.\n\nIf you need further help, you can create a **support ticket** or contact us at **info@certifiedaustralia.com.au** or call **1300 044 927**.";
+  return "You can request a **reference letter template** from the admin team. Here's how:\n\n1. Go to your **Documents** page\n2. Find the **Reference One** or **Reference Two** upload section\n3. Click the **info icon** (ℹ️) next to the reference field name\n4. In the tooltip that appears, click **\"Request Template from Admin\"**\n5. The system will automatically email you the template for your qualification, and the admin team will also be notified\n\nYou'll need **two references** — these should be from employers or supervisors who can verify your work experience relevant to your qualification.\n\nIf you need further help, you can create a **support ticket** or contact us at **info@certifiedaustralia.com.au** or call **1300 044 927**.";
 };
 
 const handleHumanSupport = () => {

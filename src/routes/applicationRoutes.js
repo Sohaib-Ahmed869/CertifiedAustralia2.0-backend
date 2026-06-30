@@ -83,6 +83,7 @@ router.post('/:id/send-post-cert-form', controller.sendPostCertForm);
 
 // Reference letter template email
 router.post('/:id/send-ref-letter-template', controller.sendRefLetterTemplate);
+router.post('/:id/request-ref-letter-template', controller.requestRefLetterTemplate);
 
 // Resend context-based application email
 router.post('/:id/resend-email', controller.resendEmail);

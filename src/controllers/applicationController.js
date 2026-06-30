@@ -681,6 +681,76 @@ module.exports = {
     res.status(200).json({ message: 'Reference letter template sent to student' });
   }),
 
+  /* ── Student requests Reference Letter Template ── */
+  requestRefLetterTemplate: asyncHandler(async (req, res) => {
+    const ReferenceLetterTemplate = require('../models/ReferenceLetterTemplate');
+    const { createNotification, notifyMany } = require('../services/notificationService');
+
+    const app = await Application.findById(req.params.id)
+      .populate('studentId', 'firstName lastName email')
+      .populate('qualificationId', 'name code')
+      .lean();
+    if (!app) throw new AppError('Application not found', 404);
+
+    const student = app.studentId;
+    if (!student) throw new AppError('Student not found', 400);
+
+    const qualName = typeof app.qualificationId === 'object' ? (app.qualificationId.name || '') : '';
+    const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+
+    // Try to auto-send template if one exists for this qualification
+    const qualId = typeof app.qualificationId === 'object' ? app.qualificationId._id : app.qualificationId;
+    const template = qualId ? await ReferenceLetterTemplate.findOne({ qualificationId: qualId }).lean() : null;
+
+    if (template && student.email) {
+      // Auto-send the template directly to the student
+      try {
+        const { buffer, fileName: driveFileName, mimeType } = await driveService.downloadFileBuffer(template.googleDriveFileId);
+        const { buildEmailHtml } = require('../services/emailService');
+        const html = buildEmailHtml(`
+          <h2 style="font-size:20px;color:#1f2937;margin:0 0 16px;">Hi ${student.firstName || 'there'},</h2>
+          <p>You requested a reference letter template for <strong>${qualName}</strong>. Please find the template attached.</p>
+          <ol style="padding-left:20px; line-height:2; color:#333;">
+            <li>Open the attached template document.</li>
+            <li>Provide it to your referee (supervisor, employer, or manager).</li>
+            <li>Ask them to complete, sign, and date the letter.</li>
+            <li>Upload the completed letter to your portal under <strong>Documents</strong>.</li>
+          </ol>
+          <p>If you need help, contact us at <strong>info@certifiedaustralia.com.au</strong> or call <strong>1300 044 927</strong>.</p>
+          <p style="margin-top:16px;">Warm regards,<br/><strong>The Certified Australia Team</strong></p>
+        `, { ctaText: 'Upload Documents', ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/documents`, preheader: `Reference Letter Template for ${qualName}` });
+
+        await sendEmail({
+          to: student.email,
+          subject: `Reference Letter Template — ${qualName}`,
+          html,
+          attachments: [{ filename: template.fileName || driveFileName, content: buffer, contentType: mimeType }],
+        });
+      } catch (err) {
+        console.error('[RefLetterTemplate] Auto-send failed:', err.message);
+      }
+    }
+
+    // Notify admin team regardless (so they know the student requested it)
+    try {
+      await notifyMany({
+        roles: ['Admin', 'CEOReportingManager'],
+        type: 'general',
+        title: 'Reference Letter Template Requested',
+        message: `${studentName} has requested a reference letter template for ${qualName} (${app.applicationId}).${template ? ' Template was auto-sent.' : ' No template found — please send manually.'}`,
+        link: `/admin/students/${typeof app.studentId === 'object' ? app.studentId._id : app.studentId}`,
+        relatedId: app._id,
+      });
+    } catch (err) {
+      console.error('[RefLetterTemplate] Admin notification failed:', err.message);
+    }
+
+    res.status(200).json({
+      message: template ? 'Template sent to your email and admin has been notified.' : 'Admin team has been notified and will send the template to your email.',
+      autoSent: !!template,
+    });
+  }),
+
   /* ── Resend Context-Based Email ── */
   resendEmail: asyncHandler(async (req, res) => {
     const IntakeForm = require('../models/IntakeForm');
