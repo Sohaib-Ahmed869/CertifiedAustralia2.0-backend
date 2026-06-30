@@ -49,6 +49,10 @@ const certificateSchema = new mongoose.Schema(
     },
     dispatchedAt: Date,
     deliveredAt: Date,
+    deliveredConfirmedBy: {
+      type: String,
+      enum: ['student', 'staff'],
+    },
     // Notes
     notes: String,
     createdAt: {

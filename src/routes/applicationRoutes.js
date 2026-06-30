@@ -67,6 +67,7 @@ router.delete('/:id/documents/:docId', docController.deleteDocument);
 router.put('/:id/certificate', upload.single('certificate'), controller.uploadCertificate);
 router.post('/:id/certificate/:certId/notify-soft-copy', controller.notifySoftCopy);
 router.post('/:id/certificate/:certId/dispatch-hard-copy', controller.dispatchHardCopy);
+router.post('/:id/certificate/:certId/mark-delivered', controller.markCertificateDelivered);
 
 // Dynamic forms
 router.post('/:id/toggle-dynamic-forms', controller.toggleDynamicForms);

@@ -754,39 +754,7 @@ const issueCertificate = async (applicationId, data) => {
   application.status = 'CertificateIssued';
   await application.save();
 
-  // Send email notification (non-fatal)
-  try {
-    const student = application.studentId;
-    if (student?.email) {
-      const { sendTemplatedEmail } = require('./emailService');
-      const trackingHtml = data.trackingNumber
-        ? `<div style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:16px;margin:16px 0;">
-            <p style="margin:0 0 4px;font-weight:600;color:#065f46;">Certificate Tracking</p>
-            ${data.trackingNumber ? `<p style="margin:0;color:#047857;">Tracking ID: <strong>${data.trackingNumber}</strong></p>` : ''}
-            ${data.trackingLink ? `<p style="margin:4px 0 0;"><a href="${data.trackingLink}" style="color:#059669;text-decoration:underline;">Track your certificate &rarr;</a></p>` : ''}
-          </div>`
-        : '';
-
-      await sendTemplatedEmail({
-        to: student.email,
-        subject: 'Your Certificate is Ready — Certified Australia',
-        preheader: 'Congratulations! Your certificate has been issued.',
-        templateContent: `
-          <h2 style="margin:0 0 8px;">Congratulations! 🎉</h2>
-          <p>Hi ${student.firstName || 'there'},</p>
-          <p>Great news — your certificate has been issued and is ready for you! You can view and download it from your student portal.</p>
-          ${trackingHtml}
-          <p>If you have any questions, please don't hesitate to contact us.</p>
-        `,
-        ctaText: 'View Your Certificate',
-        ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/certificates`,
-      });
-    }
-  } catch (err) {
-    console.error('[CertificateService] Failed to send certificate email:', err.message);
-  }
-
-  // Create in-portal notification (non-fatal)
+  // Create in-portal notification only (email handled by notifySoftCopy)
   try {
     const { createNotification } = require('./notificationService');
     const studentId = application.studentId._id || application.studentId;
@@ -794,9 +762,7 @@ const issueCertificate = async (applicationId, data) => {
       userId: studentId,
       type: 'certificate_issued',
       title: 'Certificate Issued',
-      message: data.trackingNumber
-        ? `Your certificate is ready! Tracking ID: ${data.trackingNumber}`
-        : 'Your certificate has been issued and is ready for download.',
+      message: 'Your certificate soft copy has been uploaded and is ready for download.',
       link: '/student/certificates',
       relatedId: application._id,
     });
@@ -834,7 +800,7 @@ const notifySoftCopy = async (certificateId) => {
         <div style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:16px;margin:16px 0;">
           <p style="margin:0 0 8px;font-weight:600;color:#065f46;">We'd love your feedback!</p>
           <p style="margin:0;color:#047857;">If you had a great experience, we'd really appreciate a Google review:</p>
-          <p style="margin:8px 0 0;"><a href="https://g.page/r/CertifiedAustralia/review" style="color:#059669;text-decoration:underline;font-weight:600;">Leave a Google Review &rarr;</a></p>
+          <p style="margin:8px 0 0;"><a href="https://www.google.com/maps/search/Certified+Australia+Group" style="color:#059669;text-decoration:underline;font-weight:600;">Leave a Google Review &rarr;</a></p>
         </div>
         <p style="font-size:13px;color:#6b7280;">Note: Your hard-copy certificate will be posted separately. We'll send you a tracking number once it's dispatched.</p>
       `,
@@ -885,6 +851,21 @@ const dispatchHardCopy = async (certificateId, { trackingNumber, trackingLink })
       ctaUrl: trackingLink || `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/certificates`,
     }).catch((err) => console.error('[CertificateService] Hard-copy email error:', err.message));
   }
+
+  return Certificate.findById(certificateId).lean();
+};
+
+/**
+ * Mark certificate as delivered — triggered by admin or student.
+ */
+const markCertificateDelivered = async (certificateId, { confirmedBy = 'staff' } = {}) => {
+  const certificate = await Certificate.findById(certificateId);
+  if (!certificate) throw new AppError('Certificate not found', 404);
+
+  certificate.status = 'delivered';
+  certificate.deliveredAt = new Date();
+  certificate.deliveredConfirmedBy = confirmedBy;
+  await certificate.save();
 
   return Certificate.findById(certificateId).lean();
 };
@@ -1710,6 +1691,7 @@ module.exports = {
   logRTOActivity,
   notifySoftCopy,
   dispatchHardCopy,
+  markCertificateDelivered,
   createAdditionalDocRequest,
   submitAdditionalDocs,
   reviewAdditionalDocs,

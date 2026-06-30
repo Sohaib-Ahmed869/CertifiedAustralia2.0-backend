@@ -127,8 +127,6 @@ module.exports = {
       certificateLink: driveFile.webViewLink,
       googleDriveFileId: driveFile.id,
       issuedBy: req.user._id,
-      trackingNumber: req.body.trackingId || null,
-      trackingLink: req.body.trackingLink || null,
     };
 
     const result = await service.issueCertificate(appId, certData);
@@ -307,6 +305,12 @@ module.exports = {
 
   dispatchHardCopy: asyncHandler(async (req, res) => {
     const result = await service.dispatchHardCopy(req.params.certId, req.body);
+    res.status(200).json({ item: result });
+  }),
+
+  markCertificateDelivered: asyncHandler(async (req, res) => {
+    const confirmedBy = req.user.role === 'Student' ? 'student' : 'staff';
+    const result = await service.markCertificateDelivered(req.params.certId, { confirmedBy });
     res.status(200).json({ item: result });
   }),
 
