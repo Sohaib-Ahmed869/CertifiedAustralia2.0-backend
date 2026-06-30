@@ -116,12 +116,18 @@ const Payment = require('../models/Payment');
 const Application = require('../models/Application');
 
 // Get or create the reconciliation dummy application
+const mongoose = require('mongoose');
+const RECON_DUMMY_ID = new mongoose.Types.ObjectId('000000000000000000000000');
+
 async function getReconApp() {
   let app = await Application.findOne({ applicationId: 'RECONCILIATION' }).lean();
   if (!app) {
     app = await Application.create({
       applicationId: 'RECONCILIATION',
-      status: 'New',
+      status: 'Archived',
+      studentId: RECON_DUMMY_ID,
+      industryId: RECON_DUMMY_ID,
+      qualificationId: RECON_DUMMY_ID,
       notes: [{ content: 'Dummy application for off-portal revenue reconciliation', visibility: 'admin', addedAt: new Date() }],
     });
   }
