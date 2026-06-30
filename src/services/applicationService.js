@@ -1150,7 +1150,7 @@ const reviewAdditionalDocs = async (applicationId, requestId, { status, reviewNo
 
 // ── RTO Submission Versioning (CA-08 duplicate prevention) ──
 
-const createRTOSubmission = async (applicationId, { sentBy, documentsIncluded, emailSent }) => {
+async function createRTOSubmission(applicationId, { sentBy, documentsIncluded, emailSent }) {
   const application = await Application.findById(applicationId);
   if (!application) throw new AppError('Application not found', 404);
 
@@ -1171,7 +1171,7 @@ const createRTOSubmission = async (applicationId, { sentBy, documentsIncluded, e
 
   await application.save();
   return refreshApplication(application._id);
-};
+}
 
 const reviewDocument = async (applicationId, documentId, reviewData) => {
   const application = await Application.findById(applicationId);
