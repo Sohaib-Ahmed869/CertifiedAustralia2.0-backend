@@ -65,6 +65,9 @@ const applicationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    agentAssignedAt: {
+      type: Date,
+    },
     assignedRTOId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

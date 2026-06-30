@@ -159,8 +159,8 @@ const login = async ({ email, password }) => {
   }
   if (user.status !== 'active') throw new AppError('Account is deactivated', 403);
 
-  // MFA is not required for Students — only staff/admin roles
-  if (user.mfaEnabled && user.role !== 'Student') {
+  // MFA check — applies to all roles including Students when enabled
+  if (user.mfaEnabled) {
     const mfaToken = signMfaPendingToken(user._id);
     return {
       mfaRequired: true,

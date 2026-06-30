@@ -112,9 +112,11 @@ const createApplication = async (data) => {
 };
 
 const assignAgent = async (applicationId, assignedAgentId) => {
+  const update = { assignedAgentId };
+  if (assignedAgentId) update.agentAssignedAt = new Date();
   const application = await Application.findByIdAndUpdate(
     applicationId,
-    { assignedAgentId },
+    update,
     { new: true, runValidators: true }
   )
     .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
@@ -283,7 +285,156 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
 
   if (!application) throw new AppError('Application not found', 404);
 
-  // TODO: Integrate actual email sending (PDF generation + branded email) when email service is ready
+  // ── Build and send the RTO assessment email ──
+  // NOTE: No payment or internal process info is shared with external RTOs.
+  // Generates Student Intake Form PDF + collects all document links.
+  try {
+    const {
+      buildEmail, heading2, paragraph, detailsTable,
+      divider, signOff, sendEmail, T,
+    } = require('./emailService');
+    const Document = require('../models/Document');
+    const IntakeForm = require('../models/IntakeForm');
+    const generateStudentIntakePdf = require('../utils/generateStudentIntakePdf');
+
+    // Fetch intake form for student details
+    const intakeForm = application.intakeFormId
+      ? await IntakeForm.findById(application.intakeFormId).lean()
+      : null;
+
+    // Fetch all documents for this application
+    const documents = await Document.find({ applicationId: application._id }).lean();
+
+    // Student info
+    const student = application.studentId || {};
+    const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student';
+    const qualification = application.qualificationId || {};
+
+    // Generate Student Intake Form PDF
+    const pdfAttachments = [];
+    if (intakeForm) {
+      try {
+        const pdfBuffer = await generateStudentIntakePdf(
+          intakeForm,
+          application.applicationId,
+          qualification.name || ''
+        );
+        pdfAttachments.push({
+          filename: `Student_Intake_Form_${application.applicationId}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        });
+      } catch (pdfErr) {
+        console.error('[RTO Submission] PDF generation failed:', pdfErr.message);
+      }
+    }
+    const industry = application.industryId || {};
+
+    // Normalise Drive URL to a publicly accessible link
+    const toPublicUrl = (raw) => {
+      if (!raw) return null;
+      const m = raw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (m) return `https://drive.google.com/file/d/${m[1]}/view?usp=sharing`;
+      const m2 = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (m2) return `https://drive.google.com/file/d/${m2[1]}/view?usp=sharing`;
+      return raw;
+    };
+
+    // Build document links grouped by type
+    const docsByType = {};
+    documents.forEach((doc) => {
+      const type = doc.fieldName || doc.documentType || 'Other';
+      if (!docsByType[type]) docsByType[type] = [];
+      const rawLink = doc.googleDriveLink
+        || (doc.googleDriveFileId ? `https://drive.google.com/file/d/${doc.googleDriveFileId}/view` : null);
+      const link = toPublicUrl(rawLink);
+      if (link) {
+        docsByType[type].push({ name: doc.fileName, link });
+      }
+    });
+
+    // Build document links HTML — each doc as a clickable card-style link
+    const docCount = Object.values(docsByType).reduce((s, d) => s + d.length, 0);
+    const docLinksHtml = Object.entries(docsByType).map(([type, docs]) => {
+      const links = docs.map((d) =>
+        `<a href="${d.link}" target="_blank" style="display:block;padding:10px 14px;margin:4px 0;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;color:${T.primary};text-decoration:none;font-family:${T.fontStack};font-size:13px;font-weight:500;">` +
+          `&#128196; ${d.name}` +
+        `</a>`
+      ).join('');
+      return `<tr>` +
+        `<td style="padding:10px 0;border-bottom:1px solid ${T.dividerColor};font-family:${T.fontStack};font-size:13px;color:${T.textTertiary};font-weight:600;text-transform:uppercase;letter-spacing:0.4px;width:30%;vertical-align:top;">${type}</td>` +
+        `<td style="padding:6px 0 6px 16px;border-bottom:1px solid ${T.dividerColor};vertical-align:top;">${links}</td>` +
+      `</tr>`;
+    }).join('');
+
+    const docSection = docCount > 0
+      ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:20px 0;border-radius:12px;background:#fff;border:1px solid ${T.primaryBorder};overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.04);">` +
+          `<tr><td style="padding:18px 20px 0 20px;border-bottom:2px solid ${T.primaryLight};">` +
+            `<p style="margin:0 0 12px 0;font-family:${T.fontStack};font-size:14px;font-weight:700;color:${T.primary};text-transform:uppercase;letter-spacing:0.6px;">Supporting Documents (${docCount})</p>` +
+            `<p style="margin:0 0 14px 0;font-family:${T.fontStack};font-size:13px;color:${T.textTertiary};">Click on any document below to view or download:</p>` +
+          `</td></tr>` +
+          `<tr><td style="padding:4px 20px 16px 20px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">${docLinksHtml}</table></td></tr>` +
+        `</table>`
+      : '';
+
+    // PDF attachment notice for the email
+    const pdfNotice = pdfAttachments.length > 0
+      ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:20px 0;border-radius:12px;background:#eff6ff;border:1px solid #93c5fd;border-left:4px solid #2563eb;overflow:hidden;">` +
+          `<tr><td style="padding:16px 20px;">` +
+            `<p style="margin:0 0 6px 0;font-family:${T.fontStack};font-size:14px;font-weight:700;color:#1e40af;">&#128206; Attached Documents (${pdfAttachments.length} PDF${pdfAttachments.length > 1 ? 's' : ''})</p>` +
+            `<ul style="margin:4px 0 0 0;padding:0 0 0 18px;">` +
+              pdfAttachments.map((att) =>
+                `<li style="font-family:${T.fontStack};font-size:13px;color:#1e40af;margin-bottom:2px;"><strong>${att.filename}</strong></li>`
+              ).join('') +
+            `</ul>` +
+            `<p style="margin:8px 0 0 0;font-family:${T.fontStack};font-size:12px;color:#3b82f6;">These forms are attached to this email for your convenience.</p>` +
+          `</td></tr>` +
+        `</table>`
+      : '';
+
+    // Compose the email body — NO payment or internal process info
+    const emailBody = buildEmail(
+      heading2(`New Application Submission`) +
+      paragraph(`Application ID: <strong>${application.applicationId}</strong> &nbsp;|&nbsp; Submitted: ${new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' })}`) +
+      paragraph(`Dear RTO Assessment Team,`) +
+      paragraph(`Please find below the complete application details for your assessment. All supporting documents are securely hosted and accessible via the links provided.`) +
+      pdfNotice +
+      detailsTable('Student Information', [
+        { label: 'Full Name', value: studentName },
+        { label: 'Email', value: student.email || intakeForm?.email || '—' },
+        { label: 'Phone', value: student.phone || intakeForm?.phoneNumber || '—' },
+        { label: 'USI', value: student.usi || intakeForm?.usi || '—' },
+        { label: 'State', value: intakeForm?.state || '—' },
+        { label: 'Date of Birth', value: intakeForm?.dateOfBirth ? new Date(intakeForm.dateOfBirth).toLocaleDateString('en-AU') : '—' },
+        ...(intakeForm?.employmentStatus ? [{ label: 'Employment', value: intakeForm.employmentStatus }] : []),
+      ]) +
+      detailsTable('Course Information', [
+        { label: 'Industry', value: industry.name || '—' },
+        { label: 'Qualification', value: qualification.name || '—' },
+        { label: 'Qualification Code', value: qualification.code || '—' },
+        { label: 'Application ID', value: application.applicationId },
+      ]) +
+      docSection +
+      divider() +
+      paragraph('Should you require any additional information or documentation, please do not hesitate to reply to this email or contact our team directly.') +
+      signOff()
+    );
+
+    const subject = `[EXTERNAL] Application for ${studentName} — ${qualification.name || 'Assessment Ready'}`;
+
+    await sendEmail({
+      to: rtoEmail,
+      subject,
+      html: emailBody,
+      attachments: pdfAttachments,
+    });
+
+    console.log('[RTO Submission] Email sent to %s for app %s (%d PDFs, %d doc links)', rtoEmail, application.applicationId, pdfAttachments.length, docCount);
+  } catch (emailErr) {
+    console.error('[RTO Submission] Email failed for app %s:', application.applicationId, emailErr.message);
+    // Don't throw — the DB update succeeded, email is best-effort
+  }
+
   return application;
 };
 
