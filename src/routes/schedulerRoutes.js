@@ -6,6 +6,7 @@ const {
   sendPaymentReminders,
   flagOverdueInstallments,
   sendApplicationReminders,
+  checkRtoPaymentTimers,
 } = require('../services/schedulerService');
 const xeroService = require('../services/xeroService');
 
@@ -47,6 +48,15 @@ router.post(
   asyncHandler(async (req, res) => {
     const result = await sendApplicationReminders();
     res.json({ message: 'Application reminders sent', ...result });
+  })
+);
+
+// POST /api/scheduler/run-rto-timer-check — manually trigger RTO 21-day timer check
+router.post(
+  '/run-rto-timer-check',
+  asyncHandler(async (req, res) => {
+    const result = await checkRtoPaymentTimers();
+    res.json({ message: 'RTO timer check complete', ...result });
   })
 );
 

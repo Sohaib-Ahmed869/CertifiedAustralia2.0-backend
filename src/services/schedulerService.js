@@ -667,6 +667,52 @@ const sendApplicationReminders = async () => {
 };
 
 // ---------------------------------------------------------------------------
+// RTO payment timer — auto-transition after 21-day assessment period
+// ---------------------------------------------------------------------------
+
+const RTO_TIMER_DAYS = 21;
+
+/**
+ * Check all applications with an active 21-day timer.
+ * When the timer has elapsed (>= 21 days) and the application is still in a
+ * pre-payment status, auto-advance to ReadyForRTOPayment.
+ *
+ * Mirrors the old project's rtoPaymentScheduler.js.
+ */
+const checkRtoPaymentTimers = async () => {
+  const now = new Date();
+  console.log('[Scheduler] Checking RTO payment timers...');
+
+  try {
+    // Find applications with an active timer that haven't been stopped
+    const apps = await Application.find({
+      timerStartedAt: { $exists: true, $ne: null },
+      timerStoppedAt: { $in: [null, undefined] },
+      status: { $in: ['StudentCompleted', 'SentToRTO', 'WaitingForVerification'] },
+    }).lean();
+
+    let transitioned = 0;
+
+    for (const app of apps) {
+      const elapsed = Math.floor((now - new Date(app.timerStartedAt)) / (1000 * 60 * 60 * 24));
+
+      if (elapsed >= RTO_TIMER_DAYS) {
+        const applicationService = require('./applicationService');
+        await applicationService.updateStatus(app._id, 'ReadyForRTOPayment');
+        console.log(`[Scheduler] ${app.applicationId} → ReadyForRTOPayment (${elapsed} days elapsed)`);
+        transitioned++;
+      }
+    }
+
+    console.log(`[Scheduler] RTO timer check complete: ${apps.length} checked, ${transitioned} transitioned`);
+    return { checked: apps.length, transitioned };
+  } catch (err) {
+    console.error('[Scheduler] RTO timer check error:', err.message);
+    return { checked: 0, transitioned: 0, error: err.message };
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Scheduler initialization
 // ---------------------------------------------------------------------------
 
@@ -675,6 +721,7 @@ let reminderJob = null;
 let overdueJob = null;
 let appReminderJob = null;
 let xeroSyncJob = null;
+let rtoTimerJob = null;
 
 const startScheduler = () => {
   console.log('[Scheduler] Starting schedulers...');
@@ -747,6 +794,12 @@ const startScheduler = () => {
     if (sent) console.log(`[Scheduler] Follow-up call reminders sent: ${sent}`);
   });
 
+  // RTO 21-day timer check — daily at 1:00 AM
+  rtoTimerJob = cron.schedule('0 1 * * *', async () => {
+    console.log('[Scheduler] Running RTO payment timer check...');
+    await checkRtoPaymentTimers();
+  });
+
   // Xero daily sync — 10:00 PM (after business hours)
   xeroSyncJob = cron.schedule('0 22 * * *', async () => {
     try {
@@ -766,6 +819,7 @@ const startScheduler = () => {
   });
 
   console.log('[Scheduler] All schedulers started:');
+  console.log('  - RTO 21-day timer: daily at 1:00 AM');
   console.log('  - Auto-debit: daily at 6:00 AM');
   console.log('  - Overdue flagging: daily at 7:00 AM');
   console.log('  - Application reminders: daily at 8:00 AM');
@@ -775,6 +829,7 @@ const startScheduler = () => {
 };
 
 const stopScheduler = () => {
+  if (rtoTimerJob) rtoTimerJob.stop();
   if (autoDebitJob) autoDebitJob.stop();
   if (reminderJob) reminderJob.stop();
   if (overdueJob) overdueJob.stop();
@@ -790,4 +845,5 @@ module.exports = {
   sendPaymentReminders,
   flagOverdueInstallments,
   sendApplicationReminders,
+  checkRtoPaymentTimers,
 };

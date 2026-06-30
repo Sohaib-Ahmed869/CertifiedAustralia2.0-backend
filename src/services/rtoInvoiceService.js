@@ -20,6 +20,18 @@ const createInvoice = async (data) => {
     ...data,
     status: data.extractedData ? 'extracted' : 'draft',
   });
+
+  // Advance the linked application to RTOInvoiceUploaded if eligible
+  // Mirrors old project: invoice upload allowed from StudentCompleted or ReadyForRTOPayment
+  if (data.applicationId) {
+    const app = await Application.findById(data.applicationId).select('status').lean();
+    const invoiceEligibleStatuses = ['StudentCompleted', 'SentToRTO', 'WaitingForVerification', 'ReadyForRTOPayment'];
+    if (app && invoiceEligibleStatuses.includes(app.status)) {
+      const applicationService = require('./applicationService');
+      await applicationService.updateStatus(data.applicationId, 'RTOInvoiceUploaded');
+    }
+  }
+
   return RTOInvoice.findById(invoice._id).populate(POPULATE_FIELDS).lean();
 };
 

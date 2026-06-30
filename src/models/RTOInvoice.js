@@ -101,6 +101,9 @@ rtoInvoiceSchema.pre('save', async function (next) {
       this.invoiceId = `INV${num + 1}`;
     }
   }
+  if (!this.invoiceNumber) {
+    this.invoiceNumber = this.invoiceId;
+  }
   this.updatedAt = new Date();
   next();
 });
