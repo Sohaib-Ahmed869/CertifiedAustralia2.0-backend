@@ -50,6 +50,44 @@ const buildCrud = (Model, options = {}) => {
         }
       }
 
+      // Handle dateFrom/dateTo → createdAt range filter
+      if (filter.dateFrom || filter.dateTo) {
+        const dateRange = {};
+        if (filter.dateFrom) {
+          const d = new Date(filter.dateFrom);
+          if (!isNaN(d.getTime())) dateRange.$gte = d;
+        }
+        if (filter.dateTo) {
+          const d = new Date(filter.dateTo);
+          if (!isNaN(d.getTime())) {
+            d.setHours(23, 59, 59, 999);
+            dateRange.$lte = d;
+          }
+        }
+        if (Object.keys(dateRange).length) filter.createdAt = dateRange;
+        delete filter.dateFrom;
+        delete filter.dateTo;
+      }
+
+      // Handle period preset → createdAt range filter
+      if (filter.period) {
+        const now = new Date();
+        let from = null;
+        switch (filter.period) {
+          case '7d':  from = new Date(now.getTime() - 7 * 86400000); break;
+          case '15d': from = new Date(now.getTime() - 15 * 86400000); break;
+          case '1m':  from = new Date(now); from.setMonth(from.getMonth() - 1); break;
+          case '3m':  from = new Date(now); from.setMonth(from.getMonth() - 3); break;
+          case '6m':  from = new Date(now); from.setMonth(from.getMonth() - 6); break;
+          case '1y':  from = new Date(now); from.setFullYear(from.getFullYear() - 1); break;
+          default: break; // 'all' or unknown — no filter
+        }
+        if (from) {
+          filter.createdAt = { ...(filter.createdAt || {}), $gte: from };
+        }
+        delete filter.period;
+      }
+
       // Strip state filter — not a direct field on Application (handled via ScreeningForm)
       delete filter.state;
 

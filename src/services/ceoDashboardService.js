@@ -798,7 +798,8 @@ async function getMarketing(query = {}) {
   });
   const totalSpend = Object.values(spendBySource).reduce((sum, v) => sum + v, 0);
 
-  // ── 2. Leads & paid count per source (Application → Student lookup) ──
+  // ── 2. Leads & paid count per source ──
+  // First try Application.sourceAttribution.source (new field), fall back to Student lookup for legacy data
   const sourceKeys = SOURCE_PLATFORMS.map((p) => p.key);
 
   const leadsAgg = await Application.aggregate([
@@ -814,7 +815,9 @@ async function getMarketing(query = {}) {
     { $unwind: '$student' },
     {
       $addFields: {
-        marketingSource: { $ifNull: ['$student.sourceAttribution.source', 'direct'] },
+        marketingSource: {
+          $ifNull: ['$sourceAttribution.source', { $ifNull: ['$student.sourceAttribution.source', 'direct'] }],
+        },
       },
     },
     { $match: { marketingSource: { $in: sourceKeys } } },
@@ -865,7 +868,9 @@ async function getMarketing(query = {}) {
     { $unwind: '$student' },
     {
       $addFields: {
-        marketingSource: { $ifNull: ['$student.sourceAttribution.source', 'direct'] },
+        marketingSource: {
+          $ifNull: ['$app.sourceAttribution.source', { $ifNull: ['$student.sourceAttribution.source', 'direct'] }],
+        },
       },
     },
     { $match: { marketingSource: { $in: sourceKeys } } },
@@ -1133,6 +1138,203 @@ async function exportMarketingData(query = {}) {
   }));
 }
 
+/**
+ * Weekly Scorecard — EOS-style metrics for Monday review
+ */
+async function getWeeklyScorecard(query = {}) {
+  const CallLog = require('../models/CallLog');
+  const ScorecardTarget = require('../models/ScorecardTarget');
+
+  const DEFAULT_TARGETS = {
+    revenue: 60000, leads: 75, appsPaid: 10, appsCompleted: 10,
+    certsReleased: 10, callsPerAgent: 300, conversionPerAgent: 75, expenses: 35000,
+  };
+
+  // Determine week boundaries
+  let weekStart, weekEnd;
+  if (query.weekKey) {
+    weekStart = getWeekStartFromLabel(query.weekKey);
+  } else {
+    const now = new Date();
+    weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    weekStart.setHours(0, 0, 0, 0);
+  }
+  weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+
+  // Previous week for comparison
+  const prevStart = new Date(weekStart.getTime() - 7 * 86400000);
+  const prevEnd = new Date(weekStart);
+
+  const wFilter = { createdAt: { $gte: weekStart, $lt: weekEnd } };
+  const prevFilter = { createdAt: { $gte: prevStart, $lt: prevEnd } };
+
+  // ── Company-Level Metrics ──
+
+  // Revenue Collected (previous week — payments completed)
+  const [revenueAgg, prevRevenueAgg] = await Promise.all([
+    Payment.aggregate([
+      { $match: { ...wFilter, status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } } },
+      { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]),
+    Payment.aggregate([
+      { $match: { ...prevFilter, status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+  ]);
+  const revenue = revenueAgg[0]?.total || 0;
+  const prevRevenue = prevRevenueAgg[0]?.total || 0;
+
+  // Leads (new applications this week)
+  const [newLeads, prevNewLeads] = await Promise.all([
+    Application.countDocuments(wFilter),
+    Application.countDocuments(prevFilter),
+  ]);
+
+  // Leads by source (marketing attribution)
+  const sourceKeys = SOURCE_PLATFORMS.map((p) => p.key);
+  const leadsBySourceAgg = await Application.aggregate([
+    { $match: wFilter },
+    { $lookup: { from: 'users', localField: 'studentId', foreignField: '_id', as: 'student' } },
+    { $unwind: '$student' },
+    { $addFields: { src: { $ifNull: ['$sourceAttribution.source', { $ifNull: ['$student.sourceAttribution.source', 'direct'] }] } } },
+    { $group: { _id: '$src', count: { $sum: 1 } } },
+  ]);
+  const leadsBySource = {};
+  leadsBySourceAgg.forEach((r) => { leadsBySource[r._id] = r.count; });
+
+  // Proceeded by source (paid applications this week by source)
+  const proceededBySourceAgg = await Application.aggregate([
+    { $match: { ...wFilter, status: { $in: PAID_STATUSES } } },
+    { $lookup: { from: 'users', localField: 'studentId', foreignField: '_id', as: 'student' } },
+    { $unwind: '$student' },
+    { $addFields: { src: { $ifNull: ['$sourceAttribution.source', { $ifNull: ['$student.sourceAttribution.source', 'direct'] }] } } },
+    { $group: { _id: '$src', count: { $sum: 1 } } },
+  ]);
+  const proceededBySource = {};
+  proceededBySourceAgg.forEach((r) => { proceededBySource[r._id] = r.count; });
+
+  // Applications Paid
+  const [appsPaid, prevAppsPaid] = await Promise.all([
+    Application.countDocuments({ ...wFilter, status: { $in: PAID_STATUSES } }),
+    Application.countDocuments({ ...prevFilter, status: { $in: PAID_STATUSES } }),
+  ]);
+
+  // Applications Completed (student completed all obligations)
+  const [appsCompleted, prevAppsCompleted] = await Promise.all([
+    Application.countDocuments({ ...wFilter, status: { $in: ['StudentCompleted', 'SentToRTO', 'WaitingForVerification', 'ReadyForRTOPayment', 'RTOInvoiceUploaded', ...COMPLETED_STATUSES] } }),
+    Application.countDocuments({ ...prevFilter, status: { $in: ['StudentCompleted', 'SentToRTO', 'WaitingForVerification', 'ReadyForRTOPayment', 'RTOInvoiceUploaded', ...COMPLETED_STATUSES] } }),
+  ]);
+
+  // Certificates Released
+  const [certsReleased, prevCerts] = await Promise.all([
+    Certificate.countDocuments(wFilter),
+    Certificate.countDocuments(prevFilter),
+  ]);
+
+  // ── Role-Based Accountability Metrics ──
+
+  // All agents
+  const agents = await User.find({ role: 'Agent', status: 'active' }).select('firstName lastName email').lean();
+  const staffAll = await User.find({ role: { $in: ['Agent', 'Admin', 'CEOReportingManager'] }, status: 'active' }).select('firstName lastName email role').lean();
+
+  // Per-agent metrics
+  const agentMetrics = await Promise.all(
+    staffAll.map(async (agent) => {
+      const agentFilter = { ...wFilter, assignedAgentId: agent._id };
+
+      const [assigned, paid, completed, callsAgg] = await Promise.all([
+        Application.countDocuments(agentFilter),
+        Application.countDocuments({ ...agentFilter, status: { $in: PAID_STATUSES } }),
+        Application.countDocuments({ ...agentFilter, status: { $in: COMPLETED_STATUSES } }),
+        Application.aggregate([
+          { $match: { ...agentFilter, contactAttempts: { $gt: 0 } } },
+          { $group: { _id: null, totalCalls: { $sum: '$contactAttempts' }, incoming: { $sum: '$incomingCalls' } } },
+        ]),
+      ]);
+
+      // Also count call logs for this week if they exist
+      let callLogCount = 0;
+      try {
+        callLogCount = await CallLog.countDocuments({ agentId: agent._id, ...wFilter });
+      } catch { /* CallLog model may not exist */ }
+
+      const totalCalls = (callsAgg[0]?.totalCalls || 0) + callLogCount;
+      const conversionPct = assigned > 0 ? Math.round((paid / assigned) * 100) : 0;
+
+      // Revenue from this agent's applications
+      const agentRevenueAgg = await Payment.aggregate([
+        { $match: { ...wFilter, status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } } },
+        { $lookup: { from: 'applications', localField: 'applicationId', foreignField: '_id', as: 'app' } },
+        { $unwind: '$app' },
+        { $match: { 'app.assignedAgentId': agent._id } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]);
+
+      return {
+        _id: agent._id,
+        name: `${agent.firstName || ''} ${agent.lastName || ''}`.trim() || agent.email,
+        role: agent.role,
+        assigned,
+        paid,
+        completed,
+        totalCalls,
+        incoming: callsAgg[0]?.incoming || 0,
+        conversionPct,
+        revenue: agentRevenueAgg[0]?.total || 0,
+      };
+    })
+  );
+
+  // Forecast revenue (new leads × avg conversion × avg revenue per paid app)
+  const allTimePaid = await Application.countDocuments({ status: { $in: PAID_STATUSES } });
+  const allTimeTotal = await Application.countDocuments();
+  const avgConvRate = allTimeTotal > 0 ? allTimePaid / allTimeTotal : 0;
+
+  const allRevenueAgg = await Payment.aggregate([
+    { $match: { status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } } },
+    { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
+  ]);
+  const avgRevenuePerPaid = allTimePaid > 0 ? (allRevenueAgg[0]?.total || 0) / allTimePaid : 0;
+  const forecastRevenue = Math.round(newLeads * avgConvRate * avgRevenuePerPaid);
+
+  // Load targets: week-specific first, then 'default', then hardcoded fallback
+  const weekLabel = getISOWeekLabel(weekStart);
+  const weekTargetDoc = await ScorecardTarget.findOne({ weekKey: weekLabel }).lean();
+  const defaultTargetDoc = !weekTargetDoc ? await ScorecardTarget.findOne({ weekKey: 'default' }).lean() : null;
+  const tDoc = weekTargetDoc || defaultTargetDoc || {};
+  const targets = {
+    revenue: tDoc.revenue ?? DEFAULT_TARGETS.revenue,
+    leads: tDoc.leads ?? DEFAULT_TARGETS.leads,
+    appsPaid: tDoc.appsPaid ?? DEFAULT_TARGETS.appsPaid,
+    appsCompleted: tDoc.appsCompleted ?? DEFAULT_TARGETS.appsCompleted,
+    certsReleased: tDoc.certsReleased ?? DEFAULT_TARGETS.certsReleased,
+    callsPerAgent: tDoc.callsPerAgent ?? DEFAULT_TARGETS.callsPerAgent,
+    conversionPerAgent: tDoc.conversionPerAgent ?? DEFAULT_TARGETS.conversionPerAgent,
+    expenses: tDoc.expenses ?? DEFAULT_TARGETS.expenses,
+  };
+
+  return {
+    weekStart: weekStart.toISOString(),
+    weekEnd: weekEnd.toISOString(),
+    weekLabel,
+
+    companyMetrics: {
+      revenue: { actual: revenue, target: targets.revenue, prev: prevRevenue },
+      leads: { actual: newLeads, target: targets.leads, prev: prevNewLeads },
+      leadsBySource,
+      proceededBySource,
+      forecastRevenue,
+      appsPaid: { actual: appsPaid, target: targets.appsPaid, prev: prevAppsPaid },
+      appsCompleted: { actual: appsCompleted, target: targets.appsCompleted, prev: prevAppsCompleted },
+      certsReleased: { actual: certsReleased, target: targets.certsReleased, prev: prevCerts },
+    },
+
+    agentMetrics: agentMetrics.sort((a, b) => b.revenue - a.revenue),
+    targets,
+  };
+}
+
 module.exports = {
   marketingSpend: marketingSpendCrud,
   getOverview,
@@ -1142,4 +1344,5 @@ module.exports = {
   getMarketing,
   getSupplierLiability,
   exportMarketingData,
+  getWeeklyScorecard,
 };

@@ -26,10 +26,13 @@ const signMfaPendingToken = (id) =>
   });
 
 const generateApplicationId = async () => {
-  const last = await Application.findOne().sort('-applicationId').lean();
-  if (!last) return 'APP10000';
-  const num = parseInt(last.applicationId.replace('APP', ''), 10);
-  return `APP${num + 1}`;
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const suffix = String(10000 + Math.floor(Math.random() * 90000));
+    const applicationId = `APP${suffix}`;
+    const existing = await Application.exists({ applicationId });
+    if (!existing) return applicationId;
+  }
+  throw new AppError('Unable to generate application ID', 500);
 };
 
 const register = async (data) => {
@@ -69,7 +72,7 @@ const register = async (data) => {
     sourceAttribution: source ? { source, timestamp: new Date() } : undefined,
   });
 
-  // 2. Create application
+  // 2. Create application (carry source attribution from student)
   const applicationId = await generateApplicationId();
   const application = await Application.create({
     applicationId,
@@ -78,6 +81,7 @@ const register = async (data) => {
     qualificationId,
     status: 'New',
     leadStatus: 'new',
+    ...(source ? { sourceAttribution: { source, timestamp: new Date() } } : {}),
   });
 
   // 3. Create screening form

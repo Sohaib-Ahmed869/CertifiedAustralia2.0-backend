@@ -17,10 +17,30 @@ router.get('/marketing', controller.getMarketing);
 router.get('/marketing/export', controller.exportMarketing);
 router.post('/marketing/spend', controller.createMarketingSpend);
 router.get('/supplier-liability', controller.getSupplierLiability);
+router.get('/weekly-scorecard', controller.getWeeklyScorecard);
+
+// ── Scorecard Targets ──
+const asyncHandler = require('../utils/asyncHandler');
+const ScorecardTarget = require('../models/ScorecardTarget');
+
+router.get('/scorecard-targets/:weekKey', asyncHandler(async (req, res) => {
+  const doc = await ScorecardTarget.findOne({ weekKey: req.params.weekKey }).lean();
+  const defaultDoc = !doc ? await ScorecardTarget.findOne({ weekKey: 'default' }).lean() : null;
+  res.json({ targets: doc || defaultDoc || null, isDefault: !doc && !!defaultDoc, isHardcoded: !doc && !defaultDoc });
+}));
+
+router.put('/scorecard-targets/:weekKey', asyncHandler(async (req, res) => {
+  const { revenue, leads, appsPaid, appsCompleted, certsReleased, callsPerAgent, conversionPerAgent, expenses } = req.body;
+  const doc = await ScorecardTarget.findOneAndUpdate(
+    { weekKey: req.params.weekKey },
+    { revenue, leads, appsPaid, appsCompleted, certsReleased, callsPerAgent, conversionPerAgent, expenses, updatedBy: req.user._id },
+    { new: true, upsert: true, runValidators: true }
+  );
+  res.json({ targets: doc });
+}));
 
 // ── Expense Management routes ──
 const Expense = require('../models/Expense');
-const asyncHandler = require('../utils/asyncHandler');
 
 router.get('/expenses', asyncHandler(async (req, res) => {
   const filter = {};
@@ -28,6 +48,7 @@ router.get('/expenses', asyncHandler(async (req, res) => {
   if (req.query.endDate) filter.date = { ...filter.date, $lte: new Date(req.query.endDate) };
   if (req.query.category) filter.category = req.query.category;
   if (req.query.rtoName) filter.rtoName = req.query.rtoName;
+  if (req.query.expenseType) filter.expenseType = req.query.expenseType;
 
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 50;
@@ -51,44 +72,66 @@ router.get('/expenses/summary', asyncHandler(async (req, res) => {
   const byQualification = {};
   const monthly = {};
 
+  // Company expense aggregations
+  const companyTotals = { totalCost: 0, count: 0 };
+  const byCompanyCategory = {};
+
   for (const e of expenses) {
     totals.rtoCost += e.rtoCost || 0;
     totals.studentRevenue += e.studentRevenue || 0;
     totals.profit += e.profit || 0;
 
-    const rto = e.rtoName || 'Unknown';
-    if (!byRto[rto]) byRto[rto] = { rtoName: rto, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0 };
-    byRto[rto].rtoCost += e.rtoCost || 0;
-    byRto[rto].studentRevenue += e.studentRevenue || 0;
-    byRto[rto].profit += e.profit || 0;
-    byRto[rto].count++;
-
-    const cat = e.category || 'Other';
-    if (!byCategory[cat]) byCategory[cat] = { category: cat, total: 0, count: 0 };
-    byCategory[cat].total += e.rtoCost || 0;
-    byCategory[cat].count++;
-
     const month = e.date ? new Date(e.date).toISOString().slice(0, 7) : 'Unknown';
-    if (!monthly[month]) monthly[month] = { month, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0 };
-    monthly[month].rtoCost += e.rtoCost || 0;
-    monthly[month].studentRevenue += e.studentRevenue || 0;
-    monthly[month].profit += e.profit || 0;
+    if (!monthly[month]) monthly[month] = { month, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0, companyCost: 0 };
     monthly[month].count++;
 
-    const qual = e.qualification || 'Unspecified';
-    if (!byQualification[qual]) byQualification[qual] = { qualification: qual, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0 };
-    byQualification[qual].rtoCost += e.rtoCost || 0;
-    byQualification[qual].studentRevenue += e.studentRevenue || 0;
-    byQualification[qual].profit += e.profit || 0;
-    byQualification[qual].count++;
+    if (e.expenseType === 'company') {
+      // Company expense
+      companyTotals.totalCost += e.rtoCost || 0;
+      companyTotals.count++;
+
+      const catKey = e.companyCategory === 'Custom' ? (e.customCategory || 'Custom') : (e.companyCategory || 'Other');
+      if (!byCompanyCategory[catKey]) byCompanyCategory[catKey] = { category: catKey, total: 0, count: 0 };
+      byCompanyCategory[catKey].total += e.rtoCost || 0;
+      byCompanyCategory[catKey].count++;
+
+      monthly[month].companyCost += e.rtoCost || 0;
+      monthly[month].profit += e.profit || 0;
+    } else {
+      // Student expense
+      monthly[month].rtoCost += e.rtoCost || 0;
+      monthly[month].studentRevenue += e.studentRevenue || 0;
+      monthly[month].profit += e.profit || 0;
+
+      const rto = e.rtoName || 'Unknown';
+      if (!byRto[rto]) byRto[rto] = { rtoName: rto, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0 };
+      byRto[rto].rtoCost += e.rtoCost || 0;
+      byRto[rto].studentRevenue += e.studentRevenue || 0;
+      byRto[rto].profit += e.profit || 0;
+      byRto[rto].count++;
+
+      const cat = e.category || 'Other';
+      if (!byCategory[cat]) byCategory[cat] = { category: cat, total: 0, count: 0 };
+      byCategory[cat].total += e.rtoCost || 0;
+      byCategory[cat].count++;
+
+      const qual = e.qualification || 'Unspecified';
+      if (!byQualification[qual]) byQualification[qual] = { qualification: qual, rtoCost: 0, studentRevenue: 0, profit: 0, count: 0 };
+      byQualification[qual].rtoCost += e.rtoCost || 0;
+      byQualification[qual].studentRevenue += e.studentRevenue || 0;
+      byQualification[qual].profit += e.profit || 0;
+      byQualification[qual].count++;
+    }
   }
 
   totals.avgMargin = totals.studentRevenue > 0 ? ((totals.profit / totals.studentRevenue) * 100).toFixed(1) : 0;
 
   res.json({
     totals,
+    companyTotals,
     byRto: Object.values(byRto).sort((a, b) => b.rtoCost - a.rtoCost),
     byCategory: Object.values(byCategory).sort((a, b) => b.total - a.total),
+    byCompanyCategory: Object.values(byCompanyCategory).sort((a, b) => b.total - a.total),
     byQualification: Object.values(byQualification).sort((a, b) => b.rtoCost - a.rtoCost),
     monthly: Object.values(monthly).sort((a, b) => a.month.localeCompare(b.month)),
   });

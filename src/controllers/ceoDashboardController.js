@@ -42,9 +42,36 @@ module.exports = {
   }),
 
   createMarketingSpend: asyncHandler(async (req, res) => {
-    const data = { ...req.body, createdBy: req.user._id };
-    const item = await ceoDashboardService.marketingSpend.create(data);
-    res.status(201).json({ item });
+    const { weekKey, platforms } = req.body;
+    if (!weekKey || !platforms?.length) {
+      return res.status(400).json({ message: 'weekKey and platforms are required' });
+    }
+
+    // Convert ISO week key (e.g. '2026-W27') to a Monday date
+    const [year, weekNum] = weekKey.split('-W').map(Number);
+    const jan4 = new Date(year, 0, 4);
+    const dayOfWeek = jan4.getDay() || 7;
+    const monday = new Date(jan4);
+    monday.setDate(jan4.getDate() - dayOfWeek + 1 + (weekNum - 1) * 7);
+    monday.setHours(0, 0, 0, 0);
+
+    const items = await Promise.all(
+      platforms.map((p) =>
+        ceoDashboardService.marketingSpend.create({
+          platform: p.platform,
+          amount: p.amount,
+          weekOf: monday,
+          createdBy: req.user._id,
+        })
+      )
+    );
+
+    res.status(201).json({ items });
+  }),
+
+  getWeeklyScorecard: asyncHandler(async (req, res) => {
+    const result = await ceoDashboardService.getWeeklyScorecard(req.query);
+    res.status(200).json(result);
   }),
 
   // ── Cashflow endpoints ──

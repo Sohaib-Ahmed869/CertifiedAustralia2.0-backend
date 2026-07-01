@@ -102,10 +102,22 @@ const refreshApplication = async (applicationId) => {
 
 const createApplication = async (data) => {
   const applicationId = await generateApplicationId();
+
+  // Copy marketing source attribution from the student
+  let sourceAttribution = data.sourceAttribution || undefined;
+  if (!sourceAttribution && data.studentId) {
+    const Student = require('../models/Student');
+    const student = await Student.findById(data.studentId).select('sourceAttribution').lean();
+    if (student?.sourceAttribution?.source) {
+      sourceAttribution = student.sourceAttribution;
+    }
+  }
+
   const application = await Application.create({
     ...data,
     applicationId,
     status: data.status || 'New',
+    ...(sourceAttribution ? { sourceAttribution } : {}),
   });
 
   return refreshApplication(application._id);

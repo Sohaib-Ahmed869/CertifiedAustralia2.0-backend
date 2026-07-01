@@ -637,10 +637,46 @@ const generateLLMAnswer = async (message, chatHistory, kbEntries, appContext) =>
 // Main answer function
 // ---------------------------------------------------------------------------
 
+const KB_DIRECT_THRESHOLD = 0.55; // High-confidence KB matches bypass intent routing
+
 const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => {
   if (!message || message.trim().length < 3) {
     return { answer: "Could you tell me more about what you need help with?", matched: false };
   }
+
+  // Step 0: Check knowledge base FIRST for strong matches before intent classification.
+  // If an admin has added a specific Q&A to the KB, it should take priority over
+  // deterministic handlers which give generic status-based responses.
+  try {
+    const kbResults = await getKBContext(message, null);
+    if (kbResults.length > 0) {
+      const topMatch = kbResults[0];
+      // High-confidence embedding match
+      const hasStrongEmbedding = topMatch.similarity >= KB_DIRECT_THRESHOLD;
+      // Text search match — check if the question is a close match (case-insensitive containment)
+      const msgLower = message.toLowerCase().trim();
+      const qLower = (topMatch.question || '').toLowerCase().trim();
+      const hasStrongText = !topMatch.similarity && qLower && (
+        msgLower.includes(qLower) || qLower.includes(msgLower) ||
+        // Overlap check: >60% of words match
+        (() => {
+          const msgWords = msgLower.split(/\s+/).filter(w => w.length > 2);
+          const qWords = qLower.split(/\s+/).filter(w => w.length > 2);
+          const overlap = msgWords.filter(w => qWords.includes(w)).length;
+          return qWords.length > 0 && (overlap / qWords.length) >= 0.6;
+        })()
+      );
+
+      if (hasStrongEmbedding || hasStrongText) {
+        return {
+          answer: topMatch.answer,
+          matched: true,
+          source: 'knowledge_base',
+          meta: { kbEntryId: topMatch._id, category: topMatch.category },
+        };
+      }
+    }
+  } catch { /* KB search failed — continue with intent routing */ }
 
   // Step 1: Classify intent
   const intent = await classifyIntent(message);

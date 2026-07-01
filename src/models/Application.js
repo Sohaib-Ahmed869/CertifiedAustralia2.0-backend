@@ -387,6 +387,13 @@ const applicationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Marketing source attribution — copied from Student on creation
+    sourceAttribution: {
+      source: String,
+      platform: String,
+      campaign: String,
+      timestamp: Date,
+    },
   }
 );
 
