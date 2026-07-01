@@ -158,12 +158,32 @@ module.exports = {
             type: 'feedback_received',
             title: 'New Message from RTO',
             message: `${authorName} has sent you a message regarding your application ${app.applicationId}.`,
-            link: '/student/application',
+            link: '/student/messages',
             relatedId: app._id,
           }, { subject: `New Message from RTO — ${app.applicationId}` });
         }
       } catch (err) {
         console.error('[AddNote] Failed to notify student:', err.message);
+      }
+    }
+
+    // Notify RTO/admin when student sends a reply
+    if (req.body.visibility === 'student' && req.user.role === 'Student') {
+      try {
+        const app = await Application.findById(req.params.id).select('assignedRTOId assignedAgentId applicationId').lean();
+        const { notify } = require('../services/notificationService');
+        const studentName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Student';
+        const recipients = [app?.assignedRTOId, app?.assignedAgentId].filter(Boolean);
+        for (const recipientId of recipients) {
+          await notify(recipientId, {
+            type: 'feedback_received',
+            title: 'New Student Reply',
+            message: `${studentName} replied to a message on application ${app.applicationId}.`,
+            relatedId: app._id,
+          });
+        }
+      } catch (err) {
+        console.error('[AddNote] Failed to notify staff:', err.message);
       }
     }
 
