@@ -52,6 +52,24 @@ const createRtoFeedback = async (applicationId, data) => {
       createdAt: new Date(),
     }],
   });
+
+  // Notify admin/agent that RTO submitted document feedback
+  try {
+    const Application = require('../models/Application');
+    const { notify } = require('./notificationService');
+    const app = await Application.findById(applicationId).select('assignedAgentId applicationId').lean();
+    if (app?.assignedAgentId) {
+      await notify(app.assignedAgentId, {
+        type: 'feedback_received',
+        title: 'New RTO Document Feedback',
+        message: `${data.rtoName || 'RTO'} submitted feedback on "${data.documentLabel || data.documentField}" for application ${app.applicationId}. Review and forward to student if needed.`,
+        relatedId: applicationId,
+      });
+    }
+  } catch (err) {
+    console.error('[createRtoFeedback] Failed to notify admin:', err.message);
+  }
+
   return feedback;
 };
 
@@ -137,6 +155,25 @@ const studentReply = async (feedbackId, { content, studentName }) => {
   });
   feedback.status = 'student_replied';
   await feedback.save();
+
+  // Notify assigned agent/RTO about student reply
+  try {
+    const Application = require('../models/Application');
+    const { notify } = require('./notificationService');
+    const app = await Application.findById(feedback.applicationId).select('assignedAgentId assignedRTOId applicationId').lean();
+    const recipients = [app?.assignedAgentId, app?.assignedRTOId].filter(Boolean);
+    for (const recipientId of recipients) {
+      await notify(recipientId, {
+        type: 'feedback_received',
+        title: 'Student Replied to Feedback',
+        message: `${studentName || 'Student'} replied to feedback on "${feedback.documentLabel || feedback.documentField}" for ${app?.applicationId || 'an application'}.`,
+        relatedId: feedback.applicationId,
+      });
+    }
+  } catch (err) {
+    console.error('[studentReply] Failed to notify staff:', err.message);
+  }
+
   return feedback;
 };
 
