@@ -801,6 +801,8 @@ async function getMarketing(query = {}) {
   // ── 2. Leads & paid count per source ──
   // First try Application.sourceAttribution.source (new field), fall back to Student lookup for legacy data
   const sourceKeys = SOURCE_PLATFORMS.map((p) => p.key);
+  // Include unattributed "Direct" leads alongside the paid platforms.
+  const leadSourceKeys = [...sourceKeys, 'direct'];
 
   const leadsAgg = await Application.aggregate([
     { $match: appFilter },
@@ -820,7 +822,7 @@ async function getMarketing(query = {}) {
         },
       },
     },
-    { $match: { marketingSource: { $in: sourceKeys } } },
+    { $match: { marketingSource: { $in: leadSourceKeys } } },
     {
       $group: {
         _id: '$marketingSource',
@@ -873,7 +875,7 @@ async function getMarketing(query = {}) {
         },
       },
     },
-    { $match: { marketingSource: { $in: sourceKeys } } },
+    { $match: { marketingSource: { $in: leadSourceKeys } } },
     {
       $group: {
         _id: '$marketingSource',
@@ -888,8 +890,9 @@ async function getMarketing(query = {}) {
   });
 
   // ── 4. Build per-platform cards ──
-  const totalLeadsFromAds = Object.values(leadsMap).reduce((sum, v) => sum + v, 0);
-  const totalRevenueFromAds = Object.values(revenueMap).reduce((sum, v) => sum + v, 0);
+  // "From ads" totals exclude Direct (which has no ad spend).
+  const totalLeadsFromAds = sourceKeys.reduce((sum, k) => sum + (leadsMap[k] || 0), 0);
+  const totalRevenueFromAds = sourceKeys.reduce((sum, k) => sum + (revenueMap[k] || 0), 0);
   const overallROAS = totalSpend > 0 ? Math.round((totalRevenueFromAds / totalSpend) * 100) / 100 : 0;
 
   const platforms = SOURCE_PLATFORMS.map((p) => {
@@ -922,12 +925,36 @@ async function getMarketing(query = {}) {
     cpa: pc.cpa,
   }));
 
+  // ── 5. Direct (unattributed) leads — shown alongside the paid platforms ──
+  const direct = {
+    platform: 'direct',
+    label: 'Direct',
+    spend: 0,
+    leads: leadsMap.direct || 0,
+    paid: paidMap.direct || 0,
+    revenue: revenueMap.direct || 0,
+    cpa: 0,
+  };
+  platformCards.push(direct);
+  cpaBreakdown.push({
+    ...direct,
+    key: 'direct',
+    name: 'Direct',
+    cpaLead: 0,
+    cpaConverted: 0,
+    roas: 0,
+    color: '#64748b',
+  });
+
   return {
     stats: {
       totalSpend,
       totalLeadsFromAds,
       totalRevenueFromAds,
       overallROAS,
+      directLeads: direct.leads,
+      directPaid: direct.paid,
+      directRevenue: direct.revenue,
       // Keep legacy field names so old frontend code doesn't break
       leadsFromAds: totalLeadsFromAds,
       revenueFromAds: totalRevenueFromAds,
@@ -1142,7 +1169,6 @@ async function exportMarketingData(query = {}) {
  * Weekly Scorecard — EOS-style metrics for Monday review
  */
 async function getWeeklyScorecard(query = {}) {
-  const CallLog = require('../models/CallLog');
   const ScorecardTarget = require('../models/ScorecardTarget');
 
   const DEFAULT_TARGETS = {
@@ -1238,28 +1264,32 @@ async function getWeeklyScorecard(query = {}) {
   const agents = await User.find({ role: 'Agent', status: 'active' }).select('firstName lastName email').lean();
   const staffAll = await User.find({ role: { $in: ['Agent', 'Admin', 'CEOReportingManager'] }, status: 'active' }).select('firstName lastName email role').lean();
 
+  // Per-agent calls/quality come from the CallEvent log (single source of truth
+  // shared with the daily Call Scorecard), not the Application contact counters.
+  const callScorecardService = require('./callScorecardService');
+  const weekFromStr = callScorecardService.dateStrAEST(weekStart);
+  const weekToStr = callScorecardService.dateStrAEST(new Date(weekStart.getTime() + 6 * 86400000));
+  const weekCallEvents = await callScorecardService.queryEvents({ from: weekFromStr, to: weekToStr });
+  const callEventsByAgent = {};
+  weekCallEvents.forEach((e) => {
+    const key = String(e.agentId);
+    (callEventsByAgent[key] = callEventsByAgent[key] || []).push(e);
+  });
+
   // Per-agent metrics
   const agentMetrics = await Promise.all(
     staffAll.map(async (agent) => {
       const agentFilter = { ...wFilter, assignedAgentId: agent._id };
 
-      const [assigned, paid, completed, callsAgg] = await Promise.all([
+      const [assigned, paid, completed] = await Promise.all([
         Application.countDocuments(agentFilter),
         Application.countDocuments({ ...agentFilter, status: { $in: PAID_STATUSES } }),
         Application.countDocuments({ ...agentFilter, status: { $in: COMPLETED_STATUSES } }),
-        Application.aggregate([
-          { $match: { ...agentFilter, contactAttempts: { $gt: 0 } } },
-          { $group: { _id: null, totalCalls: { $sum: '$contactAttempts' }, incoming: { $sum: '$incomingCalls' } } },
-        ]),
       ]);
 
-      // Also count call logs for this week if they exist
-      let callLogCount = 0;
-      try {
-        callLogCount = await CallLog.countDocuments({ agentId: agent._id, ...wFilter });
-      } catch { /* CallLog model may not exist */ }
-
-      const totalCalls = (callsAgg[0]?.totalCalls || 0) + callLogCount;
+      const callAgg = callScorecardService.aggregate(callEventsByAgent[String(agent._id)] || []);
+      const totalCalls = callAgg.calls;
+      const quality = callAgg.quality;
       const conversionPct = assigned > 0 ? Math.round((paid / assigned) * 100) : 0;
 
       // Revenue from this agent's applications
@@ -1279,7 +1309,8 @@ async function getWeeklyScorecard(query = {}) {
         paid,
         completed,
         totalCalls,
-        incoming: callsAgg[0]?.incoming || 0,
+        quality,
+        incoming: callAgg.incoming,
         conversionPct,
         revenue: agentRevenueAgg[0]?.total || 0,
       };

@@ -1278,6 +1278,16 @@ const getStats = async (query = {}) => {
     periodTo = new Date(query.to); periodTo.setDate(periodTo.getDate() + 1);
   }
 
+  // Explicit date range (from the uniform DateFilterBar) takes priority over presets.
+  if (query.dateFrom) {
+    const d = new Date(query.dateFrom);
+    if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); periodFrom = d; }
+  }
+  if (query.dateTo) {
+    const d = new Date(query.dateTo);
+    if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); periodTo = d; }
+  }
+
   // Build match filter for period-scoped queries
   const periodMatch = {};
   if (periodFrom) periodMatch.createdAt = { $gte: periodFrom };
@@ -1373,13 +1383,14 @@ const getStats = async (query = {}) => {
       ]),
 
       User.countDocuments({ role: 'Agent', status: 'active' }),
-      Certificate.countDocuments(),
+      Certificate.countDocuments(periodMatch),
 
-      // Unique student count
-      Application.distinct('studentId').then((ids) => ids.length),
+      // Unique student count (period-scoped)
+      Application.distinct('studentId', periodMatch).then((ids) => ids.length),
 
-      // Top qualifications (top 8)
+      // Top qualifications (top 8, period-scoped)
       Application.aggregate([
+        ...(Object.keys(periodMatch).length ? [{ $match: periodMatch }] : []),
         { $group: { _id: '$qualificationId', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 8 },
@@ -1402,8 +1413,9 @@ const getStats = async (query = {}) => {
         },
       ]),
 
-      // Lead status color distribution
+      // Lead status color distribution (period-scoped)
       Application.aggregate([
+        ...(Object.keys(periodMatch).length ? [{ $match: periodMatch }] : []),
         { $group: { _id: { $ifNull: ['$color', ''] }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
       ]),

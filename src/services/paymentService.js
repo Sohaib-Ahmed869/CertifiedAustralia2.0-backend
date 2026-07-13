@@ -353,9 +353,22 @@ const updatePaymentPlan = async (id, data) => {
   return freshUpdatedPlan;
 };
 
-const getStats = async () => {
+const getStats = async (query = {}) => {
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Optional date-range scoping (dashboard date filter). When present, revenue
+  // aggregations are limited to payments created within the range.
+  const range = {};
+  if (query.dateFrom) {
+    const d = new Date(query.dateFrom);
+    if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); range.$gte = d; }
+  }
+  if (query.dateTo) {
+    const d = new Date(query.dateTo);
+    if (!isNaN(d.getTime())) { d.setHours(23, 59, 59, 999); range.$lte = d; }
+  }
+  const rangeMatch = Object.keys(range).length ? { createdAt: range } : {};
 
   const [
     revenueTotals,
@@ -365,8 +378,9 @@ const getStats = async () => {
     overdueInstallments,
     rtoPayables,
   ] = await Promise.all([
-    // Total revenue + outstanding
+    // Total revenue + outstanding (range-scoped)
     Payment.aggregate([
+      { $match: rangeMatch },
       {
         $group: {
           _id: '$status',
@@ -376,9 +390,9 @@ const getStats = async () => {
       },
     ]),
 
-    // Revenue by payment type (completed only)
+    // Revenue by payment type (completed only, range-scoped)
     Payment.aggregate([
-      { $match: { status: 'completed' } },
+      { $match: { status: 'completed', ...rangeMatch } },
       {
         $group: {
           _id: '$type',
@@ -406,9 +420,9 @@ const getStats = async () => {
       },
     ]),
 
-    // Total refunds
+    // Total refunds (range-scoped)
     Payment.aggregate([
-      { $match: { type: 'refund' } },
+      { $match: { type: 'refund', ...rangeMatch } },
       {
         $group: {
           _id: null,
@@ -443,12 +457,13 @@ const getStats = async () => {
       },
     ]),
 
-    // RTO payables (rtoPayable or rtoPayment that are not completed)
+    // RTO payables (rtoPayable or rtoPayment that are not completed, range-scoped)
     Payment.aggregate([
       {
         $match: {
           type: { $in: ['rtoPayable', 'rtoPayment'] },
           status: { $ne: 'completed' },
+          ...rangeMatch,
         },
       },
       {

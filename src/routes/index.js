@@ -19,12 +19,14 @@ const mailboxRoutes = require('./mailboxRoutes');
 const documentFeedbackRoutes = require('./documentFeedbackRoutes');
 const chatRoutes = require('./chatRoutes');
 const callLogRoutes = require('./callLogRoutes');
+const callScorecardRoutes = require('./callScorecardRoutes');
 const rtoInvoiceRoutes = require('./rtoInvoiceRoutes');
 const chatbotRoutes = require('./chatbotRoutes');
 const competencyBookingRoutes = require('./competencyBookingRoutes');
 const paymentBatchRoutes = require('./paymentBatchRoutes');
 const xeroRoutes = require('./xeroRoutes');
 const searchRoutes = require('./searchRoutes');
+const guardrailRoutes = require('./guardrailRoutes');
 const applicationController = require('../controllers/applicationController');
 
 const router = express.Router();
@@ -49,12 +51,14 @@ router.use('/mailboxes', mailboxRoutes);
 router.use('/document-feedback', documentFeedbackRoutes);
 router.use('/chat', chatRoutes);
 router.use('/call-logs', callLogRoutes);
+router.use('/call-scorecard', callScorecardRoutes);
 router.use('/rto-invoices', rtoInvoiceRoutes);
 router.use('/chatbot', chatbotRoutes);
 router.use('/competency-bookings', competencyBookingRoutes);
 router.use('/payment-batches', paymentBatchRoutes);
 router.use('/xero', xeroRoutes);
 router.use('/search', searchRoutes);
+router.use('/guardrails', guardrailRoutes);
 
 // Standalone intake form access (read-only)
 router.get('/intake-forms/:id', applicationController.intakeForms.getById);

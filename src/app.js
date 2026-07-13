@@ -11,6 +11,9 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
+// Behind Vercel/Render — needed so express-rate-limit / req.ip see the real client IP.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors());
 app.use('/api/webhooks/square', squareWebhookRoutes);

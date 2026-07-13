@@ -1,8 +1,11 @@
 const asyncHandler = require('../utils/asyncHandler');
 const authService = require('../services/authService');
+const guardrailService = require('../services/guardrailService');
 
 exports.register = asyncHandler(async (req, res) => {
   const result = await authService.register(req.body);
+  // Guard 4 — hourly volume alert (non-blocking).
+  guardrailService.recordSubmissionAlert().catch(() => {});
   res.status(201).json(result);
 });
 
