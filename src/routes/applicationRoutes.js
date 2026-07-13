@@ -26,6 +26,7 @@ router.route('/:id')
   .delete(controller.deleteApplication);
 
 router.patch('/:id/assign-agent', controller.assignAgent);
+router.patch('/:id/source', controller.updateSource);
 router.patch('/:id/assign-rto', controller.assignRTO);
 router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);
 router.post('/:id/rto-submission', controller.sendRTOSubmission);

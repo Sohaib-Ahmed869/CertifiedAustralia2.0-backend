@@ -946,6 +946,73 @@ async function getMarketing(query = {}) {
     color: '#64748b',
   });
 
+  // ── 6. Per-application details (ad-sourced + direct) with spend attribution ──
+  // CPA Share per app = that source's spend-per-lead; per-app ROAS = revenue / CPA Share.
+  const round2 = (n) => Math.round((n || 0) * 100) / 100;
+  const spendPerLead = {};
+  leadSourceKeys.forEach((k) => {
+    spendPerLead[k] = leadsMap[k] > 0 ? (spendBySource[k] || 0) / leadsMap[k] : 0;
+  });
+
+  const appDetailAgg = await Application.aggregate([
+    { $match: appFilter },
+    { $lookup: { from: 'users', localField: 'studentId', foreignField: '_id', as: 'student' } },
+    { $unwind: { path: '$student', preserveNullAndEmptyArrays: true } },
+    { $lookup: { from: 'users', localField: 'assignedAgentId', foreignField: '_id', as: 'agent' } },
+    { $unwind: { path: '$agent', preserveNullAndEmptyArrays: true } },
+    { $lookup: { from: 'qualifications', localField: 'qualificationId', foreignField: '_id', as: 'qual' } },
+    { $unwind: { path: '$qual', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'payments',
+        let: { appId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $and: [
+            { $eq: ['$applicationId', '$$appId'] },
+            { $eq: ['$status', 'completed'] },
+            { $in: ['$type', REVENUE_PAYMENT_TYPES] },
+          ] } } },
+          { $group: { _id: null, total: { $sum: '$amount' } } },
+        ],
+        as: 'pay',
+      },
+    },
+    {
+      $addFields: {
+        marketingSource: { $ifNull: ['$sourceAttribution.source', { $ifNull: ['$student.sourceAttribution.source', 'direct'] }] },
+        collected: { $ifNull: [{ $arrayElemAt: ['$pay.total', 0] }, 0] },
+        discountTotal: { $sum: { $ifNull: ['$discounts.amount', []] } },
+      },
+    },
+    { $match: { marketingSource: { $in: leadSourceKeys } } },
+    {
+      $project: {
+        applicationId: 1, status: 1, createdAt: 1, marketingSource: 1, collected: 1, discountTotal: 1,
+        price: { $ifNull: ['$qual.caPrice', 0] },
+        studentName: { $trim: { input: { $concat: [{ $ifNull: ['$student.firstName', ''] }, ' ', { $ifNull: ['$student.lastName', ''] }] } } },
+        agentName: { $trim: { input: { $concat: [{ $ifNull: ['$agent.firstName', ''] }, ' ', { $ifNull: ['$agent.lastName', ''] }] } } },
+      },
+    },
+  ]);
+
+  const applicationDetails = appDetailAgg.map((a) => {
+    const cpaShare = Math.round(spendPerLead[a.marketingSource] || 0);
+    const revenue = round2(a.collected);
+    return {
+      applicationId: a.applicationId || String(a._id),
+      studentName: a.studentName || 'Unknown',
+      source: a.marketingSource,
+      date: a.createdAt,
+      agent: a.agentName || '—',
+      paid: PAID_STATUSES.includes(a.status),
+      price: round2(a.price),
+      discount: round2(a.discountTotal),
+      revenue,
+      cpaShare,
+      roas: cpaShare > 0 ? round2(revenue / cpaShare) : 0,
+    };
+  }).sort((x, y) => y.revenue - x.revenue);
+
   return {
     stats: {
       totalSpend,
@@ -961,6 +1028,7 @@ async function getMarketing(query = {}) {
     },
     platformCards,
     cpaBreakdown,
+    applicationDetails,
   };
 }
 

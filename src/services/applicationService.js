@@ -123,6 +123,19 @@ const createApplication = async (data) => {
   return refreshApplication(application._id);
 };
 
+const updateSource = async (applicationId, source) => {
+  const normalized = (source || 'direct').toString().trim().toLowerCase();
+  const application = await Application.findByIdAndUpdate(
+    applicationId,
+    { sourceAttribution: { source: normalized, timestamp: new Date() } },
+    { new: true, runValidators: true }
+  )
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .lean();
+  if (!application) throw new AppError('Application not found', 404);
+  return application;
+};
+
 const assignAgent = async (applicationId, assignedAgentId) => {
   const update = { assignedAgentId };
   if (assignedAgentId) update.agentAssignedAt = new Date();
@@ -1715,6 +1728,7 @@ module.exports = {
   createApplication,
   assignAgent,
   assignRTO,
+  updateSource,
   sendToRTOPortal,
   sendRTOSubmission,
   updateStatus,
