@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       minlength: 8,
+      select: false, // never returned by default — auth flows opt in with .select('+password')
     },
     firstName: {
       type: String,

@@ -1,51 +1,57 @@
 const express = require('express');
 const controller = require('../controllers/catalogController');
 const upload = require('../middleware/upload');
+const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Industries & qualifications LISTS are intentionally public — the unauthenticated
+// registration page needs them to populate its dropdowns. All mutations, and all
+// reads of internal catalog data (checklists, reference-letter templates), require auth.
+const requireStaff = [protect, authorize('Admin', 'CEOReportingManager', 'Agent', 'Marketing')];
+
 router.route('/industries')
   .get(controller.industries.list)
-  .post(controller.createIndustry);
+  .post(requireStaff, controller.createIndustry);
 
 router.route('/industries/:id')
   .get(controller.industries.getById)
-  .patch(controller.updateIndustry)
-  .delete(controller.deleteIndustry);
+  .patch(requireStaff, controller.updateIndustry)
+  .delete(requireStaff, controller.deleteIndustry);
 
 router.route('/qualifications')
   .get(controller.qualifications.list)
-  .post(controller.createQualification);
+  .post(requireStaff, controller.createQualification);
 
 router.route('/qualifications/:id')
   .get(controller.qualifications.getById)
-  .patch(controller.updateQualification)
-  .delete(controller.deleteQualification);
+  .patch(requireStaff, controller.updateQualification)
+  .delete(requireStaff, controller.deleteQualification);
 
 // Custom checklist endpoints — declared before /:id to avoid param collision
-router.get('/checklists/by-qualification/:qualificationId', controller.getChecklistByQualification);
-router.put('/checklists/by-qualification/:qualificationId', controller.upsertChecklist);
+router.get('/checklists/by-qualification/:qualificationId', protect, controller.getChecklistByQualification);
+router.put('/checklists/by-qualification/:qualificationId', requireStaff, controller.upsertChecklist);
 
 router.route('/checklists')
-  .get(controller.checklists.list)
-  .post(controller.createChecklist);
+  .get(protect, controller.checklists.list)
+  .post(requireStaff, controller.createChecklist);
 
 router.route('/checklists/:id')
-  .get(controller.checklists.getById)
-  .patch(controller.updateChecklist)
-  .delete(controller.deleteChecklist);
+  .get(protect, controller.checklists.getById)
+  .patch(requireStaff, controller.updateChecklist)
+  .delete(requireStaff, controller.deleteChecklist);
 
 // Custom reference letter template endpoints — declared before /:id
-router.get('/reference-letter-templates/by-qualification/:qualificationId', controller.getTemplateByQualification);
-router.post('/reference-letter-templates/upload', upload.single('file'), controller.uploadTemplate);
+router.get('/reference-letter-templates/by-qualification/:qualificationId', protect, controller.getTemplateByQualification);
+router.post('/reference-letter-templates/upload', requireStaff, upload.single('file'), controller.uploadTemplate);
 
 router.route('/reference-letter-templates')
-  .get(controller.referenceLetterTemplates.list)
-  .post(controller.createReferenceLetterTemplate);
+  .get(protect, controller.referenceLetterTemplates.list)
+  .post(requireStaff, controller.createReferenceLetterTemplate);
 
 router.route('/reference-letter-templates/:id')
-  .get(controller.referenceLetterTemplates.getById)
-  .patch(controller.updateReferenceLetterTemplate)
-  .delete(controller.deleteReferenceLetterTemplate);
+  .get(protect, controller.referenceLetterTemplates.getById)
+  .patch(requireStaff, controller.updateReferenceLetterTemplate)
+  .delete(requireStaff, controller.deleteReferenceLetterTemplate);
 
 module.exports = router;

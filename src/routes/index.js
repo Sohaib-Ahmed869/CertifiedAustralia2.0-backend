@@ -28,6 +28,7 @@ const xeroRoutes = require('./xeroRoutes');
 const searchRoutes = require('./searchRoutes');
 const guardrailRoutes = require('./guardrailRoutes');
 const applicationController = require('../controllers/applicationController');
+const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -60,7 +61,7 @@ router.use('/xero', xeroRoutes);
 router.use('/search', searchRoutes);
 router.use('/guardrails', guardrailRoutes);
 
-// Standalone intake form access (read-only)
-router.get('/intake-forms/:id', applicationController.intakeForms.getById);
+// Standalone intake form access (read-only, authenticated — exposes applicant PII)
+router.get('/intake-forms/:id', protect, applicationController.intakeForms.getById);
 
 module.exports = router;

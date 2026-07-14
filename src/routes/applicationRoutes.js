@@ -3,13 +3,40 @@ const controller = require('../controllers/applicationController');
 const docController = require('../controllers/documentController');
 const upload = require('../middleware/upload');
 const { protect } = require('../middleware/auth');
+const AppError = require('../utils/AppError');
+const Application = require('../models/Application');
 
 const router = express.Router();
 
 router.use(protect);
 
+// Ownership guard: a Student may only act on their OWN application on any `:id` route
+// (get, update, delete, notes, documents, status, certificate, etc.).
+// NOTE: router.param callbacks take a 4th `value` arg — must NOT be wrapped in
+// asyncHandler (which only forwards req/res/next), so we handle the promise inline.
+router.param('id', (req, res, next, id) => {
+  if (req.user.role !== 'Student') return next();
+  Application.findById(id).select('studentId').lean()
+    .then((app) => {
+      if (!app) return next(new AppError('Application not found', 404));
+      if (String(app.studentId) !== String(req.user._id)) {
+        return next(new AppError('Not authorized to access this application', 403));
+      }
+      next();
+    })
+    .catch(next);
+});
+
+// Ownership guard: a Student may only request their own studentId (e.g. detail route).
+router.param('studentId', (req, res, next, studentId) => {
+  if (req.user.role === 'Student' && String(studentId) !== String(req.user._id)) {
+    return next(new AppError('Not authorized to access this student', 403));
+  }
+  next();
+});
+
 router.route('/')
-  .get(controller.applications.list)
+  .get(controller.listApplications)
   .post(controller.createApplication);
 
 // Stats, export and search routes MUST be before /:id to avoid Express param collision

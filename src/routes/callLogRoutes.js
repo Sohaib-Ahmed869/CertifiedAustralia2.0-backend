@@ -1,8 +1,13 @@
 const express = require('express');
 const asyncHandler = require('../utils/asyncHandler');
 const callLogService = require('../services/callLogService');
+const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Call logs are internal staff data — never exposed to students.
+router.use(protect);
+router.use(authorize('Admin', 'CEOReportingManager', 'Agent'));
 
 // List call logs with filters (agentId, applicationId, direction, outcome, dateFrom, dateTo)
 router.get('/', asyncHandler(async (req, res) => {

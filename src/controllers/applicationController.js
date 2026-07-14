@@ -24,8 +24,19 @@ module.exports = {
   screeningForms,
   documents,
   certificates,
+  // Student-scoped list — a Student only ever sees their own applications,
+  // regardless of any studentId supplied in the query string.
+  listApplications: asyncHandler(async (req, res) => {
+    const query = { ...req.query };
+    if (req.user.role === 'Student') query.studentId = String(req.user._id);
+    const result = await service.applications.list(query);
+    res.status(200).json(result);
+  }),
   createApplication: asyncHandler(async (req, res) => {
-    const result = await service.createApplication(req.body);
+    const body = { ...req.body };
+    // A student may only create applications for themselves.
+    if (req.user.role === 'Student') body.studentId = String(req.user._id);
+    const result = await service.createApplication(body);
     res.status(201).json({ item: result });
   }),
   updateApplication: applications.update,
