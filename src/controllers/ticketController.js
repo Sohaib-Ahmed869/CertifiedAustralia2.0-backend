@@ -6,6 +6,15 @@ const { uploadFileFromDisk, resolveFolderId } = require('../services/googleDrive
 
 const tickets = createCrudController(service.tickets);
 
+// Only the support side may see internal notes. Everyone else (the requester —
+// Student/Agent/RTO/Marketing) must never receive `isInternal` messages.
+const STAFF_ROLES = ['Support', 'Admin', 'CEOReportingManager'];
+const canSeeInternal = (user) => STAFF_ROLES.includes(user?.role);
+const stripInternal = (ticket, user) => {
+  if (!ticket || canSeeInternal(user)) return ticket;
+  return { ...ticket, messages: (ticket.messages || []).filter((m) => !m.isInternal) };
+};
+
 /**
  * Upload an array of multer files to Google Drive and return attachment metadata.
  * Failures are logged but do not reject — the request proceeds without attachments.
@@ -41,6 +50,18 @@ const uploadFilesToDrive = async (files) => {
 module.exports = {
   ...tickets,
 
+  // Override CRUD reads to strip internal notes for the requester side.
+  getById: asyncHandler(async (req, res) => {
+    const item = await service.tickets.getById(req.params.id);
+    res.status(200).json({ item: stripInternal(item, req.user) });
+  }),
+
+  list: asyncHandler(async (req, res) => {
+    const result = await service.tickets.list(req.query);
+    result.items = (result.items || []).map((t) => stripInternal(t, req.user));
+    res.status(200).json(result);
+  }),
+
   createTicket: asyncHandler(async (req, res) => {
     let attachments = [];
 
@@ -54,7 +75,7 @@ module.exports = {
       senderRole: req.user.role === 'Support' ? 'support' : 'requester',
       attachments,
     });
-    res.status(201).json({ item: result });
+    res.status(201).json({ item: stripInternal(result, req.user) });
   }),
 
   addMessage: asyncHandler(async (req, res) => {
@@ -72,7 +93,7 @@ module.exports = {
         : 'requester',
       attachments,
     });
-    res.status(201).json({ item: result });
+    res.status(201).json({ item: stripInternal(result, req.user) });
   }),
 
   resolveTicket: asyncHandler(async (req, res) => {
@@ -81,7 +102,7 @@ module.exports = {
       req.user._id,
       req.body.message
     );
-    res.status(200).json({ item: result });
+    res.status(200).json({ item: stripInternal(result, req.user) });
   }),
 
   getStats: asyncHandler(async (req, res) => {
