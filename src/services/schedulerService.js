@@ -722,6 +722,7 @@ let overdueJob = null;
 let appReminderJob = null;
 let xeroSyncJob = null;
 let rtoTimerJob = null;
+let campaignBounceJob = null;
 
 const startScheduler = () => {
   console.log('[Scheduler] Starting schedulers...');
@@ -818,6 +819,34 @@ const startScheduler = () => {
     }
   });
 
+  // Campaign bounce polling — every 5 minutes (IMAP DSN scan of sending mailboxes)
+  campaignBounceJob = cron.schedule('*/5 * * * *', async () => {
+    try {
+      const bounceService = require('./campaignBounceService');
+      await bounceService.pollAll();
+    } catch (err) {
+      console.error('[Scheduler] Campaign bounce poll error:', err.message);
+    }
+  });
+
+  // One-off boot tasks: recover interrupted sends, then a first bounce sweep.
+  (async () => {
+    try {
+      const sendService = require('./campaignSendService');
+      await sendService.recoverInterrupted();
+    } catch (err) {
+      console.error('[Scheduler] Campaign send recovery error:', err.message);
+    }
+    setTimeout(async () => {
+      try {
+        const bounceService = require('./campaignBounceService');
+        await bounceService.pollAll();
+      } catch (err) {
+        console.error('[Scheduler] Initial bounce poll error:', err.message);
+      }
+    }, 30 * 1000);
+  })();
+
   console.log('[Scheduler] All schedulers started:');
   console.log('  - RTO 21-day timer: daily at 1:00 AM');
   console.log('  - Auto-debit: daily at 6:00 AM');
@@ -826,6 +855,7 @@ const startScheduler = () => {
   console.log('  - Payment reminders: daily at 9:00 AM (3 days before due)');
   console.log('  - Follow-up call checks: every 2 hours (7AM–7PM)');
   console.log('  - Xero sync + reconciliation: daily at 10:00 PM');
+  console.log('  - Campaign bounce polling: every 5 minutes');
 };
 
 const stopScheduler = () => {
@@ -835,6 +865,7 @@ const stopScheduler = () => {
   if (overdueJob) overdueJob.stop();
   if (appReminderJob) appReminderJob.stop();
   if (xeroSyncJob) xeroSyncJob.stop();
+  if (campaignBounceJob) campaignBounceJob.stop();
   console.log('[Scheduler] All schedulers stopped');
 };
 

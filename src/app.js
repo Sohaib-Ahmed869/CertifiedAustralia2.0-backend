@@ -31,6 +31,20 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', service: 'certified-australia-backend' });
 });
 
+/* ── Email open-tracking pixel (public, unauthenticated) ── */
+app.get('/api/track/:token', async (req, res) => {
+  const { TRANSPARENT_GIF, trackOpen } = require('./services/campaignTrackingService');
+  // Never let tracking failures break the pixel response.
+  Promise.resolve(trackOpen(req.params.token)).catch(() => {});
+  res.set({
+    'Content-Type': 'image/gif',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  });
+  res.end(TRANSPARENT_GIF);
+});
+
 /* ── Proxy file endpoint (matches old project /proxy-file) ── */
 app.get('/api/proxy-file', async (req, res) => {
   const { url, inline, name } = req.query;

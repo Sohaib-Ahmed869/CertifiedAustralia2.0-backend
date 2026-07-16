@@ -264,4 +264,26 @@ const pushPermissionUpdate = (userId) => {
   io.to(`user:${String(userId)}`).emit('permissions:updated');
 };
 
-module.exports = { setupSocket, getIO, pushNotification, pushPermissionUpdate };
+/**
+ * Campaign send progress — emitted on each stats change during a send and on
+ * every applied open/bounce. Staff dashboards filter by campaignId.
+ */
+const emitCampaignProgress = (campaignId, stats, status) => {
+  if (!io) return;
+  io.emit('campaign:progress', { campaignId: String(campaignId), stats, status });
+};
+
+/** Campaign reached a terminal state (sent / partially_failed / failed / paused). */
+const emitCampaignCompleted = (campaignId, status, stats) => {
+  if (!io) return;
+  io.emit('campaign:completed', { campaignId: String(campaignId), status, stats });
+};
+
+module.exports = {
+  setupSocket,
+  getIO,
+  pushNotification,
+  pushPermissionUpdate,
+  emitCampaignProgress,
+  emitCampaignCompleted,
+};

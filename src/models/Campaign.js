@@ -51,6 +51,10 @@ const campaignSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+      queued: {
+        type: Number,
+        default: 0,
+      },
       sent: {
         type: Number,
         default: 0,
@@ -59,12 +63,29 @@ const campaignSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+      bounced: {
+        type: Number,
+        default: 0,
+      },
       opened: {
         type: Number,
         default: 0,
       },
     },
+    // Human-readable reason surfaced on pause/failure (e.g. quota exhausted, no mailbox).
+    lastError: {
+      type: String,
+    },
     sendStartedAt: {
+      type: Date,
+    },
+    pausedAt: {
+      type: Date,
+    },
+    resumedAt: {
+      type: Date,
+    },
+    failedAt: {
       type: Date,
     },
     completedAt: {
