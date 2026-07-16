@@ -15,6 +15,16 @@ const stripInternal = (ticket, user) => {
   return { ...ticket, messages: (ticket.messages || []).filter((m) => !m.isInternal) };
 };
 
+// A ticket is "awaiting response" when it's unresolved and the last
+// requester-visible message is from the requester (new ticket or a reply).
+const computeAwaiting = (ticket) => {
+  if (!ticket || ['resolved', 'closed'].includes(ticket.status)) return false;
+  const visible = (ticket.messages || []).filter((m) => !m.isInternal);
+  const last = visible[visible.length - 1];
+  return last ? last.senderRole === 'requester' : false;
+};
+const decorate = (ticket, user) => ({ ...stripInternal(ticket, user), awaitingResponse: computeAwaiting(ticket) });
+
 /**
  * Upload an array of multer files to Google Drive and return attachment metadata.
  * Failures are logged but do not reject — the request proceeds without attachments.
@@ -53,12 +63,12 @@ module.exports = {
   // Override CRUD reads to strip internal notes for the requester side.
   getById: asyncHandler(async (req, res) => {
     const item = await service.tickets.getById(req.params.id);
-    res.status(200).json({ item: stripInternal(item, req.user) });
+    res.status(200).json({ item: decorate(item, req.user) });
   }),
 
   list: asyncHandler(async (req, res) => {
     const result = await service.tickets.list(req.query);
-    result.items = (result.items || []).map((t) => stripInternal(t, req.user));
+    result.items = (result.items || []).map((t) => decorate(t, req.user));
     res.status(200).json(result);
   }),
 

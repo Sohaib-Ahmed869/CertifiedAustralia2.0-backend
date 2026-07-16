@@ -210,6 +210,25 @@ const getStats = async (userId) => {
             },
             { $count: 'count' },
           ],
+          // Tickets waiting on a staff reply: unresolved and the last
+          // requester-visible message is from the requester.
+          awaitingResponse: [
+            { $match: { status: { $nin: ['resolved', 'closed'] } } },
+            {
+              $addFields: {
+                _vis: {
+                  $filter: {
+                    input: { $ifNull: ['$messages', []] },
+                    as: 'm',
+                    cond: { $ne: ['$$m.isInternal', true] },
+                  },
+                },
+              },
+            },
+            { $addFields: { _last: { $arrayElemAt: ['$_vis', -1] } } },
+            { $match: { '_last.senderRole': 'requester' } },
+            { $count: 'count' },
+          ],
         },
       },
     ]),
@@ -240,6 +259,8 @@ const getStats = async (userId) => {
       resolvedToday: team.resolvedToday?.[0]?.count || 0,
       total: Object.values(teamStatusMap).reduce((sum, c) => sum + c, 0),
     },
+    // Team-wide count of tickets waiting on a staff reply (drives the nav badge).
+    awaitingResponse: team.awaitingResponse?.[0]?.count || 0,
   };
 };
 
