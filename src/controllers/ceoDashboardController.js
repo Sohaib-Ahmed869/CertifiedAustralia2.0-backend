@@ -47,26 +47,36 @@ module.exports = {
       return res.status(400).json({ message: 'weekKey and platforms are required' });
     }
 
-    // Convert ISO week key (e.g. '2026-W27') to a Monday date
-    const [year, weekNum] = weekKey.split('-W').map(Number);
-    const jan4 = new Date(year, 0, 4);
-    const dayOfWeek = jan4.getDay() || 7;
-    const monday = new Date(jan4);
-    monday.setDate(jan4.getDate() - dayOfWeek + 1 + (weekNum - 1) * 7);
-    monday.setHours(0, 0, 0, 0);
-
-    const items = await Promise.all(
-      platforms.map((p) =>
-        ceoDashboardService.marketingSpend.create({
-          platform: p.platform,
-          amount: p.amount,
-          weekOf: monday,
-          createdBy: req.user._id,
-        })
-      )
-    );
+    // Upsert each (week, platform) cell — one record per cell, notes preserved,
+    // amount 0 clears it. Prevents the duplicate rows the old create-only path made.
+    const items = [];
+    for (const p of platforms) {
+      if (!p.platform) continue;
+      const r = await ceoDashboardService.upsertMarketingSpend({
+        weekKey,
+        platform: p.platform,
+        amount: p.amount,
+        notes: p.notes,
+        userId: req.user._id,
+      });
+      items.push(r);
+    }
 
     res.status(201).json({ items });
+  }),
+
+  getMarketingSpendHistory: asyncHandler(async (req, res) => {
+    const result = await ceoDashboardService.getMarketingSpendHistory({ weeks: req.query.weeks });
+    res.status(200).json(result);
+  }),
+
+  deleteMarketingSpend: asyncHandler(async (req, res) => {
+    const { weekKey, platform } = req.body;
+    if (!weekKey || !platform) {
+      return res.status(400).json({ message: 'weekKey and platform are required' });
+    }
+    const result = await ceoDashboardService.deleteMarketingSpend({ weekKey, platform });
+    res.status(200).json(result);
   }),
 
   getWeeklyScorecard: asyncHandler(async (req, res) => {

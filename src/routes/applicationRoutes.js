@@ -2,7 +2,7 @@ const express = require('express');
 const controller = require('../controllers/applicationController');
 const docController = require('../controllers/documentController');
 const upload = require('../middleware/upload');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 const AppError = require('../utils/AppError');
 const Application = require('../models/Application');
 
@@ -42,6 +42,11 @@ router.route('/')
 // Stats, export and search routes MUST be before /:id to avoid Express param collision
 router.get('/stats', controller.getStats);
 router.get('/export', controller.exportCsv);
+
+// Admin forecast-aware list + scoped CSV export (staff only)
+const STAFF_ROLES = ['Admin', 'CEOReportingManager', 'Agent', 'Marketing'];
+router.get('/admin-list', authorize(...STAFF_ROLES), controller.adminList);
+router.get('/admin-export', authorize(...STAFF_ROLES), controller.adminExportCsv);
 router.get('/notes/search', controller.searchNotes);
 
 // Optimized student detail — full app + lightweight siblings

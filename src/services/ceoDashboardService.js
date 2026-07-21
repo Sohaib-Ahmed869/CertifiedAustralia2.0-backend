@@ -1045,6 +1045,91 @@ function getWeekStartFromLabel(weekLabel) {
   return monday;
 }
 
+/** Monday Date → ISO week key like '2026-W29'. */
+function mondayToWeekKey(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+// Editable ad-spend platforms (canonical keys — all present in the MarketingSpend enum).
+const SPEND_EDIT_PLATFORMS = SOURCE_PLATFORMS.map((p) => p.key);
+
+/**
+ * Weekly ad-spend history — one row per ISO week (gaps filled), with per-platform
+ * amounts + notes rolled up to canonical source keys. Powers the Ad Spend cockpit.
+ */
+async function getMarketingSpendHistory({ weeks = 12 } = {}) {
+  const n = Math.min(Math.max(Number(weeks) || 12, 1), 52);
+
+  // Monday of the current week
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const currentMonday = new Date(now);
+  currentMonday.setDate(now.getDate() - day + 1);
+  currentMonday.setHours(0, 0, 0, 0);
+  const earliest = new Date(currentMonday);
+  earliest.setDate(currentMonday.getDate() - (n - 1) * 7);
+
+  const docs = await MarketingSpend.find({ weekOf: { $gte: earliest } })
+    .sort({ weekOf: 1, updatedAt: 1 })
+    .lean();
+
+  const weekMap = {};
+  docs.forEach((doc) => {
+    const monday = new Date(doc.weekOf);
+    monday.setHours(0, 0, 0, 0);
+    const weekKey = mondayToWeekKey(monday);
+    if (!weekMap[weekKey]) weekMap[weekKey] = { weekKey, weekOf: monday, total: 0, platforms: {} };
+    const canonical = SPEND_KEY_TO_SOURCE[doc.platform] || doc.platform;
+    const bucket = weekMap[weekKey].platforms[canonical] || { amount: 0, notes: '' };
+    bucket.amount += doc.amount || 0;
+    if (doc.notes) bucket.notes = doc.notes; // docs sorted asc by updatedAt → keep latest
+    weekMap[weekKey].platforms[canonical] = bucket;
+    weekMap[weekKey].total += doc.amount || 0;
+  });
+
+  // Fill every week in the window so the trend chart is continuous.
+  const weeksArr = [];
+  for (let i = n - 1; i >= 0; i -= 1) {
+    const m = new Date(currentMonday);
+    m.setDate(currentMonday.getDate() - i * 7);
+    const wk = mondayToWeekKey(m);
+    weeksArr.push(weekMap[wk] || { weekKey: wk, weekOf: m, total: 0, platforms: {} });
+  }
+
+  return { weeks: weeksArr, platforms: SPEND_EDIT_PLATFORMS };
+}
+
+/**
+ * Upsert a single (week, platform) ad-spend cell with optional notes.
+ * amount <= 0 clears the cell. Guarantees one record per (week, platform).
+ */
+async function upsertMarketingSpend({ weekKey, platform, amount, notes, userId }) {
+  const monday = getWeekStartFromLabel(weekKey);
+  const amt = Number(amount) || 0;
+  if (amt <= 0) {
+    await MarketingSpend.deleteMany({ platform, weekOf: monday });
+    return { deleted: true, platform, weekKey };
+  }
+  const doc = await MarketingSpend.findOneAndUpdate(
+    { platform, weekOf: monday },
+    { $set: { amount: amt, notes: notes || '', updatedAt: new Date() }, $setOnInsert: { createdBy: userId } },
+    { new: true, upsert: true, runValidators: true },
+  );
+  return { item: doc };
+}
+
+/** Delete an ad-spend cell for a (week, platform). */
+async function deleteMarketingSpend({ weekKey, platform }) {
+  const monday = getWeekStartFromLabel(weekKey);
+  const res = await MarketingSpend.deleteMany({ platform, weekOf: monday });
+  return { deleted: res.deletedCount };
+}
+
 const Qualification = require('../models/Qualification');
 
 /**
@@ -1441,6 +1526,9 @@ module.exports = {
   getCallAttempts,
   getAgentPerformance,
   getMarketing,
+  getMarketingSpendHistory,
+  upsertMarketingSpend,
+  deleteMarketingSpend,
   getSupplierLiability,
   exportMarketingData,
   getWeeklyScorecard,

@@ -6,6 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 const createCrudController = require('./crudController');
 const service = require('../services/applicationService');
+const adminStudentListService = require('../services/adminStudentListService');
 const Application = require('../models/Application');
 const driveService = require('../services/googleDriveService');
 const callLogService = require('../services/callLogService');
@@ -409,6 +410,30 @@ module.exports = {
   getStats: asyncHandler(async (req, res) => {
     const stats = await service.getStats(req.query);
     res.status(200).json({ stats });
+  }),
+
+  /* ── Admin forecast-aware student/application list ── */
+  adminList: asyncHandler(async (req, res) => {
+    const result = await adminStudentListService.adminList(req.query);
+    res.status(200).json(result);
+  }),
+
+  /* ── Admin CSV export — respects all filters + active window/dateBasis ── */
+  adminExportCsv: asyncHandler(async (req, res) => {
+    const data = await adminStudentListService.adminExport(req.query);
+    const fields = [
+      'applicationId', 'studentName', 'studentEmail', 'phone',
+      'qualification', 'industry', 'status', 'source',
+      'assignedAgent', 'closedBy', 'callAttempts', 'createdAt',
+      'price', 'discount', 'paid', 'remaining',
+      ...(data[0] && 'paidInPeriod' in data[0] ? ['paidInPeriod'] : []),
+      'paymentStatus',
+    ];
+    const parser = new Parser({ fields });
+    const csv = parser.parse(data.length ? data : [{}]);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=student-applications-${new Date().toISOString().slice(0, 10)}.csv`);
+    res.status(200).send(csv);
   }),
 
   exportCsv: asyncHandler(async (req, res) => {

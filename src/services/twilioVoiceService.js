@@ -1,0 +1,183 @@
+/**
+ * twilioVoiceService — low-level Twilio Voice primitives (no DB, no sockets).
+ *
+ * Covers everything the call-burst / softphone feature needs from Twilio:
+ *   • REST client + config guards
+ *   • browser Voice SDK access tokens (VoiceGrant → TwiML App)
+ *   • TwiML builders for the agent leg and the student legs (conference bridge)
+ *   • placing an outbound call to a student and hanging one up
+ *   • X-Twilio-Signature webhook validation
+ *
+ * Env (SID/token/number already used by smsService):
+ *   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
+ *   TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET   — for browser access tokens
+ *   TWILIO_TWIML_APP_SID                        — the browser's outgoing app
+ *   API_PUBLIC_URL                              — public backend base for webhooks
+ */
+
+const twilio = require('twilio');
+
+/* ── Config guards ─────────────────────────────────────────── */
+
+// Enough to place/hang up PSTN calls.
+const isConfigured = () =>
+  !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
+
+// Additionally required for the in-browser softphone (access tokens).
+const isBrowserConfigured = () =>
+  isConfigured() &&
+  !!(process.env.TWILIO_API_KEY_SID && process.env.TWILIO_API_KEY_SECRET && process.env.TWILIO_TWIML_APP_SID);
+
+let _client = null;
+const getClient = () => {
+  if (!isConfigured()) throw new Error('Twilio is not configured (missing TWILIO_* env vars)');
+  if (!_client) {
+    // Region-homed accounts (e.g. au1) reject REST calls on the default us1 host.
+    const opts = {};
+    if (process.env.TWILIO_REGION) opts.region = process.env.TWILIO_REGION;
+    if (process.env.TWILIO_EDGE) opts.edge = process.env.TWILIO_EDGE;
+    _client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN, opts);
+  }
+  return _client;
+};
+
+// Public base URL Twilio uses to reach our webhooks (no trailing slash).
+const publicBase = () =>
+  (process.env.API_PUBLIC_URL || 'http://localhost:5000').replace(/\/+$/, '');
+
+const webhook = (path) => `${publicBase()}/api/webhooks/twilio${path}`;
+
+/* ── Browser access token ──────────────────────────────────── */
+
+/**
+ * Mint a Voice access token for the agent's browser Device.
+ * identity uniquely maps the WebRTC endpoint back to the user.
+ */
+function createAccessToken(identity) {
+  if (!isBrowserConfigured()) {
+    throw new Error('Twilio browser voice is not configured (missing API key / TwiML app)');
+  }
+  const AccessToken = twilio.jwt.AccessToken;
+  const VoiceGrant = AccessToken.VoiceGrant;
+
+  const token = new AccessToken(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_API_KEY_SID,
+    process.env.TWILIO_API_KEY_SECRET,
+    { identity, ttl: 3600 }
+  );
+  token.addGrant(
+    new VoiceGrant({
+      outgoingApplicationSid: process.env.TWILIO_TWIML_APP_SID,
+      incomingAllow: false,
+    })
+  );
+  // Region-bound (e.g. au1) API keys only validate at their own edge. The browser
+  // Device must connect to that edge or Twilio returns 20101 AccessTokenInvalid.
+  const edge = process.env.TWILIO_EDGE || null;
+  return { token: token.toJwt(), identity, expiresIn: 3600, edge };
+}
+
+/* ── TwiML builders ────────────────────────────────────────── */
+
+/**
+ * Agent leg — the browser softphone joins the conference and holds it open.
+ * endConferenceOnExit: when the agent hangs up, the whole call tears down.
+ */
+function agentConferenceTwiml(conferenceName) {
+  const res = new twilio.twiml.VoiceResponse();
+  const dial = res.dial();
+  dial.conference(
+    {
+      startConferenceOnEnter: true,
+      endConferenceOnExit: true,
+      // Silence Twilio's default hold music while waiting for a recipient.
+      waitUrl: '',
+      statusCallback: webhook('/conference'),
+      statusCallbackEvent: 'start end join leave',
+    },
+    conferenceName
+  );
+  return res.toString();
+}
+
+/**
+ * Student leg — CONNECT ON ANSWER. Whoever picks up first is dropped straight
+ * into the conference with the agent (no press-1, no AMD gating). Voicemails
+ * don't answer, so they never win. Losers are hung up by the winner-lock.
+ */
+function studentConferenceTwiml(conferenceName) {
+  const res = new twilio.twiml.VoiceResponse();
+  const dial = res.dial();
+  dial.conference(
+    {
+      startConferenceOnEnter: true,
+      endConferenceOnExit: false,
+      statusCallback: webhook('/conference'),
+      statusCallbackEvent: 'join leave',
+    },
+    conferenceName
+  );
+  return res.toString();
+}
+
+/* ── Outbound calls ────────────────────────────────────────── */
+
+/**
+ * Place one outbound call to a recipient's phone. On answer, Twilio fetches
+ * the student voice webhook which returns studentConferenceTwiml.
+ * `timeout` bounds the ring; unanswered legs resolve to no-answer.
+ */
+async function callStudent({ to, burstId, timeout = 30 }) {
+  const call = await getClient().calls.create({
+    to,
+    from: process.env.TWILIO_PHONE_NUMBER,
+    url: webhook(`/voice/student?burstId=${encodeURIComponent(burstId)}`),
+    method: 'POST',
+    timeout,
+    statusCallback: webhook(`/status?burstId=${encodeURIComponent(burstId)}`),
+    statusCallbackMethod: 'POST',
+    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+  });
+  return call.sid;
+}
+
+/** Hang up a call leg (used to drop the losing recipients). */
+async function endCall(callSid) {
+  if (!callSid) return;
+  try {
+    await getClient().calls(callSid).update({ status: 'completed' });
+  } catch (err) {
+    // Already ended / not found — nothing to drop.
+    if (err && err.status !== 404) console.warn(`[twilio] endCall ${callSid}: ${err.message}`);
+  }
+}
+
+/* ── Webhook signature validation ──────────────────────────── */
+
+/**
+ * Validate an incoming Twilio webhook via X-Twilio-Signature.
+ * The signed URL must be the exact public URL Twilio requested (query string
+ * included), so we rebuild it from API_PUBLIC_URL + originalUrl.
+ */
+function validateSignature(req) {
+  if (process.env.TWILIO_SKIP_SIGNATURE === '1') return true; // dev/tunnel escape hatch
+  const signature = req.headers['x-twilio-signature'];
+  if (!signature) return false;
+  const url = `${publicBase()}${req.originalUrl}`;
+  return twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, signature, url, req.body || {});
+}
+
+module.exports = {
+  isConfigured,
+  isBrowserConfigured,
+  getClient,
+  createAccessToken,
+  agentConferenceTwiml,
+  studentConferenceTwiml,
+  callStudent,
+  endCall,
+  validateSignature,
+  webhook,
+  publicBase,
+};

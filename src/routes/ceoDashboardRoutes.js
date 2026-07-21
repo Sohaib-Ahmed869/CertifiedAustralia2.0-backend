@@ -15,7 +15,9 @@ router.get('/call-attempts', controller.getCallAttempts);
 router.get('/agent-performance', controller.getAgentPerformance);
 router.get('/marketing', controller.getMarketing);
 router.get('/marketing/export', controller.exportMarketing);
+router.get('/marketing/spend-history', controller.getMarketingSpendHistory);
 router.post('/marketing/spend', controller.createMarketingSpend);
+router.delete('/marketing/spend', controller.deleteMarketingSpend);
 router.get('/supplier-liability', controller.getSupplierLiability);
 router.get('/weekly-scorecard', controller.getWeeklyScorecard);
 

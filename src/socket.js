@@ -279,6 +279,16 @@ const emitCampaignCompleted = (campaignId, status, stats) => {
   io.emit('campaign:completed', { campaignId: String(campaignId), status, stats });
 };
 
+/**
+ * Call burst updates — pushed to the initiating agent's personal room as the
+ * burst progresses (ringing → connected → ended). `type` distinguishes the
+ * lifecycle stage; `burst` is the sanitised burst payload.
+ */
+const emitBurstUpdate = (agentId, type, burst) => {
+  if (!io) return;
+  io.to(`user:${String(agentId)}`).emit('burst:update', { type, burst });
+};
+
 module.exports = {
   setupSocket,
   getIO,
@@ -286,4 +296,5 @@ module.exports = {
   pushPermissionUpdate,
   emitCampaignProgress,
   emitCampaignCompleted,
+  emitBurstUpdate,
 };
