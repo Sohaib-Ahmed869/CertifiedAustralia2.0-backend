@@ -10,6 +10,12 @@ const scorecardTargetSchema = new mongoose.Schema({
   callsPerAgent: { type: Number, default: 300 },
   conversionPerAgent: { type: Number, default: 75 },
   expenses: { type: Number, default: 35000 },
+  // Weekly/monthly review notes (EOS scorecard meeting notes)
+  notes: { type: String, default: '' },
+  // Per-metric manual overrides: { [metricKey]: { actual: Number|null, status: String|null } }
+  // metricKey ∈ revenue|leads|appsPaid|appsCompleted|certsReleased|forecastRevenue
+  // status ∈ on_track|close|off_track|not_scored
+  metricOverrides: { type: mongoose.Schema.Types.Mixed, default: {} },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 

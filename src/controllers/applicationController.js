@@ -62,6 +62,14 @@ module.exports = {
     const result = await service.updateSource(req.params.id, req.body.source);
     res.status(200).json({ item: result });
   }),
+  updateLeadStatus: asyncHandler(async (req, res) => {
+    const userName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email;
+    const result = await service.updateLeadStatus(req.params.id, req.body.color, {
+      userId: req.user._id,
+      userName,
+    });
+    res.status(200).json({ item: result });
+  }),
   sendToRTOPortal: asyncHandler(async (req, res) => {
     const result = await service.sendToRTOPortal(req.params.id, req.body.rtoUserId);
     res.status(200).json({ item: result });

@@ -1329,21 +1329,41 @@ async function getWeeklyScorecard(query = {}) {
     certsReleased: 10, callsPerAgent: 300, conversionPerAgent: 75, expenses: 35000,
   };
 
-  // Determine week boundaries
-  let weekStart, weekEnd;
-  if (query.weekKey) {
-    weekStart = getWeekStartFromLabel(query.weekKey);
-  } else {
-    const now = new Date();
-    weekStart = new Date(now);
-    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+  // Determine period boundaries — supports weekly (default) and monthly.
+  // Variables keep the `week*` names so the downstream aggregation is unchanged.
+  const period = query.period === 'month' ? 'month' : 'week';
+  let weekStart, weekEnd, prevStart, prevEnd;
+  if (period === 'month') {
+    let y;
+    let m;
+    if (query.monthKey && /^\d{4}-\d{2}$/.test(query.monthKey)) {
+      [y, m] = query.monthKey.split('-').map(Number);
+    } else {
+      const now = new Date();
+      y = now.getFullYear();
+      m = now.getMonth() + 1;
+    }
+    weekStart = new Date(y, m - 1, 1);
     weekStart.setHours(0, 0, 0, 0);
+    weekEnd = new Date(y, m, 1); // first day of next month
+    prevStart = new Date(y, m - 2, 1);
+    prevEnd = new Date(weekStart);
+  } else {
+    if (query.weekKey) {
+      weekStart = getWeekStartFromLabel(query.weekKey);
+    } else {
+      const now = new Date();
+      weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+      weekStart.setHours(0, 0, 0, 0);
+    }
+    weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+    prevStart = new Date(weekStart.getTime() - 7 * 86400000);
+    prevEnd = new Date(weekStart);
   }
-  weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
 
-  // Previous week for comparison
-  const prevStart = new Date(weekStart.getTime() - 7 * 86400000);
-  const prevEnd = new Date(weekStart);
+  // Weeks spanned by the period — used to scale weekly targets for a month view.
+  const weekEquiv = Math.max(1, Math.round((weekEnd.getTime() - weekStart.getTime()) / (7 * 86400000)));
 
   const wFilter = { createdAt: { $gte: weekStart, $lt: weekEnd } };
   const prevFilter = { createdAt: { $gte: prevStart, $lt: prevEnd } };
@@ -1421,7 +1441,7 @@ async function getWeeklyScorecard(query = {}) {
   // shared with the daily Call Scorecard), not the Application contact counters.
   const callScorecardService = require('./callScorecardService');
   const weekFromStr = callScorecardService.dateStrAEST(weekStart);
-  const weekToStr = callScorecardService.dateStrAEST(new Date(weekStart.getTime() + 6 * 86400000));
+  const weekToStr = callScorecardService.dateStrAEST(new Date(weekEnd.getTime() - 86400000));
   const weekCallEvents = await callScorecardService.queryEvents({ from: weekFromStr, to: weekToStr });
   const callEventsByAgent = {};
   weekCallEvents.forEach((e) => {
@@ -1487,35 +1507,301 @@ async function getWeeklyScorecard(query = {}) {
   const weekTargetDoc = await ScorecardTarget.findOne({ weekKey: weekLabel }).lean();
   const defaultTargetDoc = !weekTargetDoc ? await ScorecardTarget.findOne({ weekKey: 'default' }).lean() : null;
   const tDoc = weekTargetDoc || defaultTargetDoc || {};
+  // Weekly targets scaled to the period. Volume targets multiply by the number of
+  // weeks in the period (month → ~4–5×); conversion % is a rate, so it is left as-is.
   const targets = {
-    revenue: tDoc.revenue ?? DEFAULT_TARGETS.revenue,
-    leads: tDoc.leads ?? DEFAULT_TARGETS.leads,
-    appsPaid: tDoc.appsPaid ?? DEFAULT_TARGETS.appsPaid,
-    appsCompleted: tDoc.appsCompleted ?? DEFAULT_TARGETS.appsCompleted,
-    certsReleased: tDoc.certsReleased ?? DEFAULT_TARGETS.certsReleased,
-    callsPerAgent: tDoc.callsPerAgent ?? DEFAULT_TARGETS.callsPerAgent,
+    revenue: (tDoc.revenue ?? DEFAULT_TARGETS.revenue) * weekEquiv,
+    leads: (tDoc.leads ?? DEFAULT_TARGETS.leads) * weekEquiv,
+    appsPaid: (tDoc.appsPaid ?? DEFAULT_TARGETS.appsPaid) * weekEquiv,
+    appsCompleted: (tDoc.appsCompleted ?? DEFAULT_TARGETS.appsCompleted) * weekEquiv,
+    certsReleased: (tDoc.certsReleased ?? DEFAULT_TARGETS.certsReleased) * weekEquiv,
+    callsPerAgent: (tDoc.callsPerAgent ?? DEFAULT_TARGETS.callsPerAgent) * weekEquiv,
     conversionPerAgent: tDoc.conversionPerAgent ?? DEFAULT_TARGETS.conversionPerAgent,
-    expenses: tDoc.expenses ?? DEFAULT_TARGETS.expenses,
+    expenses: (tDoc.expenses ?? DEFAULT_TARGETS.expenses) * weekEquiv,
+  };
+
+  // Review notes + per-metric manual overrides, keyed by the period key the
+  // frontend uses (weekKey for week mode, monthKey for month mode).
+  const periodKey = period === 'month' ? (query.monthKey || weekLabel) : weekLabel;
+  const periodDoc = period === 'month'
+    ? await ScorecardTarget.findOne({ weekKey: periodKey }).lean()
+    : (weekTargetDoc || null);
+  const notes = periodDoc?.notes || '';
+  const metricOverrides = periodDoc?.metricOverrides || {};
+
+  // Apply a manual actual/status override onto an auto-computed metric object.
+  const withOverride = (key, metric) => {
+    const ov = metricOverrides[key] || {};
+    const out = { ...metric };
+    if (ov.actual !== undefined && ov.actual !== null && ov.actual !== '') {
+      out.actual = Number(ov.actual);
+      out.actualOverridden = true;
+    }
+    if (ov.status) out.statusOverride = ov.status;
+    return out;
   };
 
   return {
+    period,
+    periodKey,
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
     weekLabel,
+    notes,
+    metricOverrides,
 
     companyMetrics: {
-      revenue: { actual: revenue, target: targets.revenue, prev: prevRevenue },
-      leads: { actual: newLeads, target: targets.leads, prev: prevNewLeads },
+      revenue: withOverride('revenue', { actual: revenue, target: targets.revenue, prev: prevRevenue }),
+      leads: withOverride('leads', { actual: newLeads, target: targets.leads, prev: prevNewLeads }),
       leadsBySource,
       proceededBySource,
       forecastRevenue,
-      appsPaid: { actual: appsPaid, target: targets.appsPaid, prev: prevAppsPaid },
-      appsCompleted: { actual: appsCompleted, target: targets.appsCompleted, prev: prevAppsCompleted },
-      certsReleased: { actual: certsReleased, target: targets.certsReleased, prev: prevCerts },
+      appsPaid: withOverride('appsPaid', { actual: appsPaid, target: targets.appsPaid, prev: prevAppsPaid }),
+      appsCompleted: withOverride('appsCompleted', { actual: appsCompleted, target: targets.appsCompleted, prev: prevAppsCompleted }),
+      certsReleased: withOverride('certsReleased', { actual: certsReleased, target: targets.certsReleased, prev: prevCerts }),
     },
 
     agentMetrics: agentMetrics.sort((a, b) => b.revenue - a.revenue),
     targets,
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * Lead Status Tracking — how leads move through the color-coded lead
+ * statuses over time (powers the CEO "Lead Status Tracking" tab).
+ * ────────────────────────────────────────────────────────────────── */
+
+// Canonical lead-status (color) metadata — mirrors the frontend COLOR_OPTIONS.
+const LEAD_STATUS_META = [
+  { value: 'red', label: 'Hot Lead', color: '#ef4444' },
+  { value: 'orange', label: 'Warm Lead', color: '#f97316' },
+  { value: 'gray', label: 'Cold Lead', color: '#94a3b8' },
+  { value: 'yellow', label: 'Payment Proceeded', color: '#eab308' },
+  { value: 'green', label: 'Certified', color: '#22c55e' },
+  { value: 'lightblue', label: 'Impacted', color: '#38bdf8' },
+  { value: 'pink', label: 'Agent', color: '#ec4899' },
+  { value: 'turquoise', label: 'New Year', color: '#14b8a6' },
+  { value: '', label: 'Cleared', color: '#cbd5e1' },
+];
+const LEAD_LABEL = LEAD_STATUS_META.reduce((m, s) => { m[s.value] = s.label; return m; }, {});
+
+function bucketKey(date, granularity) {
+  const d = new Date(date);
+  if (granularity === 'monthly') {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+  if (granularity === 'weekly') {
+    return getISOWeekLabel(d);
+  }
+  // daily
+  return d.toISOString().slice(0, 10);
+}
+
+async function getLeadStatusTracking(query = {}) {
+  const granularity = ['daily', 'weekly', 'monthly'].includes(query.granularity)
+    ? query.granularity
+    : 'weekly';
+  const dateFrom = getDateFrom(query.period, query);
+  const dateTo = getDateTo(query);
+
+  // Pull every app's lead-status trail + current color/status.
+  const apps = await Application.find({ applicationId: { $ne: 'RECONCILIATION' } })
+    .select('color status leadStatusHistory')
+    .lean();
+
+  const inWindow = (d) => {
+    if (!d) return false;
+    const t = new Date(d).getTime();
+    if (dateFrom && t < dateFrom.getTime()) return false;
+    if (dateTo && t > dateTo.getTime()) return false;
+    return true;
+  };
+
+  const statusTotals = {};   // color → inbound transition count in window
+  const timelineMap = {};    // bucketKey → { [color]: count }
+  const flowMap = {};        // `${from}->${to}` → count
+  const distribution = {};   // current color → count (non-archived)
+  let totalChanges = 0;
+
+  for (const app of apps) {
+    // Current distribution — only active (non-archived) leads
+    if (app.status !== 'Archived') {
+      const c = app.color || '';
+      if (c) distribution[c] = (distribution[c] || 0) + 1;
+    }
+
+    const history = Array.isArray(app.leadStatusHistory) ? app.leadStatusHistory : [];
+    for (const h of history) {
+      if (!inWindow(h.changedAt)) continue;
+      const to = h.color || '';
+      const from = h.previousColor || '';
+      totalChanges += 1;
+
+      // Inbound totals (moves INTO a status)
+      if (to) statusTotals[to] = (statusTotals[to] || 0) + 1;
+
+      // Timeline bucket
+      const key = bucketKey(h.changedAt, granularity);
+      if (!timelineMap[key]) timelineMap[key] = {};
+      if (to) timelineMap[key][to] = (timelineMap[key][to] || 0) + 1;
+
+      // From → To flow (skip the very first seed where from is empty)
+      if (from || to) {
+        const flowKey = `${from}->${to}`;
+        flowMap[flowKey] = (flowMap[flowKey] || 0) + 1;
+      }
+    }
+  }
+
+  // Colors actually in use (for stacked chart series ordering)
+  const usedColors = new Set([
+    ...Object.keys(statusTotals),
+    ...Object.keys(distribution),
+  ]);
+  const meta = LEAD_STATUS_META.filter((s) => s.value && usedColors.has(s.value));
+
+  // Sorted timeline buckets ascending
+  const timeline = Object.keys(timelineMap)
+    .sort()
+    .map((key) => ({ bucket: key, ...timelineMap[key] }));
+
+  // Status inbound totals
+  const statuses = Object.entries(statusTotals)
+    .map(([value, count]) => ({ value, label: LEAD_LABEL[value] || value, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // From → To flows
+  const flows = Object.entries(flowMap)
+    .map(([k, count]) => {
+      const [from, to] = k.split('->');
+      return {
+        from,
+        to,
+        fromLabel: from ? (LEAD_LABEL[from] || from) : 'New',
+        toLabel: to ? (LEAD_LABEL[to] || to) : 'Cleared',
+        count,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  // Current distribution
+  const distributionArr = Object.entries(distribution)
+    .map(([value, count]) => ({ value, label: LEAD_LABEL[value] || value, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    granularity,
+    totalChanges,
+    statuses,
+    timeline,
+    flows,
+    totalFlows: flows.reduce((s, f) => s + f.count, 0),
+    distribution: distributionArr,
+    meta,
+    window: { from: dateFrom, to: dateTo },
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * Qualification Tracking — per-qualification volume/paid/certified and
+ * the best-fit agent per qualification (CEO "Qualification Tracking" tab).
+ * Attribution: 'assigned' (assignedAgentId) or 'closed' (closedBy||assigned).
+ * ────────────────────────────────────────────────────────────────── */
+async function getQualificationTracking(query = {}) {
+  const dateFrom = getDateFrom(query.period, query);
+  const dateTo = getDateTo(query);
+  const filter = dateFilter(dateFrom, dateTo);
+  const attribution = query.attribution === 'closed' ? 'closed' : 'assigned';
+
+  const apps = await Application.find({
+    ...filter,
+    applicationId: { $ne: 'RECONCILIATION' },
+  })
+    .select('qualificationId assignedAgentId closedBy status certificateId')
+    .populate('qualificationId', 'name code')
+    .populate('assignedAgentId', 'firstName lastName')
+    .populate('closedBy', 'firstName lastName')
+    .lean();
+
+  const nameOf = (u) => (u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : '');
+
+  const blankMetrics = () => ({ total: 0, paid: 0, completed: 0, certified: 0 });
+  const bump = (bag, app) => {
+    bag.total += 1;
+    if (PAID_STATUSES.includes(app.status)) bag.paid += 1;
+    if (COMPLETED_STATUSES.includes(app.status)) bag.completed += 1;
+    if (app.certificateId) bag.certified += 1;
+  };
+
+  const qualMap = {};   // qualName → metrics
+  const agentMap = {};  // agentName → { ...metrics, quals: { qualName: metrics } }
+  let totalApplications = 0;
+
+  for (const app of apps) {
+    const qual = app.qualificationId;
+    const qualName = qual?.name || app.qualificationId?.code || 'Unknown';
+
+    const agentUser = attribution === 'closed'
+      ? (app.closedBy || app.assignedAgentId)
+      : app.assignedAgentId;
+    const agentName = nameOf(agentUser) || 'Unassigned';
+
+    totalApplications += 1;
+
+    if (!qualMap[qualName]) qualMap[qualName] = { qualification: qualName, code: qual?.code || '', ...blankMetrics() };
+    bump(qualMap[qualName], app);
+
+    if (!agentMap[agentName]) agentMap[agentName] = { agent: agentName, ...blankMetrics(), quals: {} };
+    bump(agentMap[agentName], app);
+    if (!agentMap[agentName].quals[qualName]) {
+      agentMap[agentName].quals[qualName] = { qualification: qualName, ...blankMetrics() };
+    }
+    bump(agentMap[agentName].quals[qualName], app);
+  }
+
+  const qualifications = Object.values(qualMap).sort((a, b) => b.total - a.total);
+
+  const agents = Object.values(agentMap)
+    .map((a) => ({
+      agent: a.agent,
+      total: a.total,
+      paid: a.paid,
+      completed: a.completed,
+      certified: a.certified,
+      qualifications: Object.values(a.quals).sort((x, y) => y.total - x.total),
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  // Best-fit agent per qualification — computed server-side (max paid, tiebreak certified).
+  const bestFit = qualifications.map((q) => {
+    let best = null;
+    for (const a of agents) {
+      if (a.agent === 'Unassigned') continue;
+      const sub = a.qualifications.find((x) => x.qualification === q.qualification);
+      if (!sub || sub.total === 0) continue;
+      if (!best
+        || sub.paid > best.paid
+        || (sub.paid === best.paid && sub.certified > best.certified)) {
+        best = { agent: a.agent, total: sub.total, paid: sub.paid, certified: sub.certified };
+      }
+    }
+    return {
+      qualification: q.qualification,
+      code: q.code,
+      total: q.total,
+      bestAgent: best?.agent || null,
+      bestAgentPaid: best?.paid || 0,
+      bestAgentCertified: best?.certified || 0,
+    };
+  });
+
+  return {
+    totalApplications,
+    qualifications,
+    agents,
+    bestFit,
+    attribution,
+    window: { from: dateFrom, to: dateTo },
   };
 }
 
@@ -1532,4 +1818,6 @@ module.exports = {
   getSupplierLiability,
   exportMarketingData,
   getWeeklyScorecard,
+  getLeadStatusTracking,
+  getQualificationTracking,
 };

@@ -59,6 +59,7 @@ router.route('/:id')
 
 router.patch('/:id/assign-agent', controller.assignAgent);
 router.patch('/:id/source', controller.updateSource);
+router.patch('/:id/lead-status', controller.updateLeadStatus);
 router.patch('/:id/assign-rto', controller.assignRTO);
 router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);
 router.post('/:id/rto-submission', controller.sendRTOSubmission);

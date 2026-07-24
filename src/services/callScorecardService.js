@@ -307,6 +307,19 @@ async function getTeamScorecard({ from, to, date } = {}) {
   const targets = await readTargets();
   const events = await queryEvents({ from: f, to: t });
 
+  // Daily targets scale by the number of days in the range so a week/month view
+  // compares against the right cumulative goal (returned `targets` stays daily).
+  const parts = (s) => s.split('-').map(Number);
+  const [af, mf, df] = parts(f);
+  const [at, mt, dt2] = parts(t);
+  const days = Math.max(1, Math.round((Date.UTC(at, mt - 1, dt2) - Date.UTC(af, mf - 1, df)) / 86400000) + 1);
+  const scaledTargets = {
+    ...targets,
+    callsPerAgent: targets.callsPerAgent * days,
+    answeredPerAgent: targets.answeredPerAgent * days,
+    qualityPerAgent: targets.qualityPerAgent * days,
+  };
+
   const team = aggregate(events);
   const byAgent = {};
   events.forEach((e) => {
@@ -314,20 +327,21 @@ async function getTeamScorecard({ from, to, date } = {}) {
     (byAgent[key] = byAgent[key] || { name: e.agentName, events: [] }).events.push(e);
   });
   const agents = Object.entries(byAgent)
-    .map(([id, group]) => buildCard(`${f}..${t}`, id, group.name, aggregate(group.events), targets))
+    .map(([id, group]) => buildCard(`${f}..${t}`, id, group.name, aggregate(group.events), scaledTargets))
     .sort((a, b) => b.calls - a.calls);
 
   return {
     from: f,
     to: t,
+    days,
     targets,
     team: {
       ...team,
-      callsTarget: targets.callsPerAgent * targets.agentCount,
-      answeredTarget: targets.answeredPerAgent * targets.agentCount,
-      qualityTarget: targets.qualityPerAgent * targets.agentCount,
-      callsPct: pct(team.calls, targets.callsPerAgent * targets.agentCount),
-      qualityPct: pct(team.quality, targets.qualityPerAgent * targets.agentCount),
+      callsTarget: scaledTargets.callsPerAgent * scaledTargets.agentCount,
+      answeredTarget: scaledTargets.answeredPerAgent * scaledTargets.agentCount,
+      qualityTarget: scaledTargets.qualityPerAgent * scaledTargets.agentCount,
+      callsPct: pct(team.calls, scaledTargets.callsPerAgent * scaledTargets.agentCount),
+      qualityPct: pct(team.quality, scaledTargets.qualityPerAgent * scaledTargets.agentCount),
     },
     agents,
   };

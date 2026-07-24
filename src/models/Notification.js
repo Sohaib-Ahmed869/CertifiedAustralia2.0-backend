@@ -24,6 +24,8 @@ const notificationSchema = new mongoose.Schema(
         'task_status_updated',
         'chat_mention',
         'chat_message',
+        'direct_debit_authority',
+        'direct_debit_signed',
         'general',
       ],
       default: 'general',

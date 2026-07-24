@@ -136,6 +136,46 @@ const updateSource = async (applicationId, source) => {
   return application;
 };
 
+const LEAD_COLORS = ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''];
+
+const updateLeadStatus = async (applicationId, color, actor = {}) => {
+  const next = (color ?? '').toString().trim().toLowerCase();
+  if (!LEAD_COLORS.includes(next)) {
+    throw new AppError('Invalid lead status', 400);
+  }
+
+  const current = await Application.findById(applicationId).select('color').lean();
+  if (!current) throw new AppError('Application not found', 404);
+
+  const previousColor = current.color || '';
+  // No-op if unchanged — don't pollute the history trail
+  if (previousColor === next) {
+    const unchanged = await Application.findById(applicationId)
+      .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+      .lean();
+    return unchanged;
+  }
+
+  const historyEntry = {
+    color: next,
+    previousColor,
+    changedAt: new Date(),
+    changedBy: actor.userId || undefined,
+    changedByName: actor.userName || undefined,
+  };
+
+  const application = await Application.findByIdAndUpdate(
+    applicationId,
+    { $set: { color: next }, $push: { leadStatusHistory: historyEntry } },
+    { new: true, runValidators: true }
+  )
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .lean();
+
+  if (!application) throw new AppError('Application not found', 404);
+  return application;
+};
+
 const assignAgent = async (applicationId, assignedAgentId) => {
   const update = { assignedAgentId };
   if (assignedAgentId) update.agentAssignedAt = new Date();
@@ -1729,6 +1769,7 @@ module.exports = {
   assignAgent,
   assignRTO,
   updateSource,
+  updateLeadStatus,
   sendToRTOPortal,
   sendRTOSubmission,
   updateStatus,

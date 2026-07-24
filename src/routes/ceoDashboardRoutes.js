@@ -13,6 +13,8 @@ router.get('/overview', controller.getOverview);
 router.get('/leads', controller.getLeads);
 router.get('/call-attempts', controller.getCallAttempts);
 router.get('/agent-performance', controller.getAgentPerformance);
+router.get('/lead-status-tracking', controller.getLeadStatusTracking);
+router.get('/qualification-tracking', controller.getQualificationTracking);
 router.get('/marketing', controller.getMarketing);
 router.get('/marketing/export', controller.exportMarketing);
 router.get('/marketing/spend-history', controller.getMarketingSpendHistory);
@@ -32,11 +34,20 @@ router.get('/scorecard-targets/:weekKey', asyncHandler(async (req, res) => {
 }));
 
 router.put('/scorecard-targets/:weekKey', asyncHandler(async (req, res) => {
-  const { revenue, leads, appsPaid, appsCompleted, certsReleased, callsPerAgent, conversionPerAgent, expenses } = req.body;
+  // Merge only the fields provided so saving notes/overrides doesn't clobber
+  // targets (and vice-versa). Supports targets, review notes, and per-metric overrides.
+  const ALLOWED = [
+    'revenue', 'leads', 'appsPaid', 'appsCompleted', 'certsReleased',
+    'callsPerAgent', 'conversionPerAgent', 'expenses', 'notes', 'metricOverrides',
+  ];
+  const update = { updatedBy: req.user._id };
+  for (const k of ALLOWED) {
+    if (req.body[k] !== undefined) update[k] = req.body[k];
+  }
   const doc = await ScorecardTarget.findOneAndUpdate(
     { weekKey: req.params.weekKey },
-    { revenue, leads, appsPaid, appsCompleted, certsReleased, callsPerAgent, conversionPerAgent, expenses, updatedBy: req.user._id },
-    { new: true, upsert: true, runValidators: true }
+    { $set: update },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
   );
   res.json({ targets: doc });
 }));

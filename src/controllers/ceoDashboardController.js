@@ -30,6 +30,16 @@ module.exports = {
     res.status(200).json(result);
   }),
 
+  getLeadStatusTracking: asyncHandler(async (req, res) => {
+    const result = await ceoDashboardService.getLeadStatusTracking(req.query);
+    res.status(200).json(result);
+  }),
+
+  getQualificationTracking: asyncHandler(async (req, res) => {
+    const result = await ceoDashboardService.getQualificationTracking(req.query);
+    res.status(200).json(result);
+  }),
+
   exportMarketing: asyncHandler(async (req, res) => {
     const data = await ceoDashboardService.exportMarketingData(req.query);
     const { Parser } = require('json2csv');

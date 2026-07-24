@@ -360,6 +360,22 @@ const applicationSchema = new mongoose.Schema(
       enum: ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
       default: '',
     },
+    // Lead status (color) change trail — powers the CEO Lead Status Tracking tab
+    leadStatusHistory: [
+      {
+        color: {
+          type: String,
+          enum: ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
+        },
+        previousColor: {
+          type: String,
+          enum: ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
+        },
+        changedAt: { type: Date, default: Date.now },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        changedByName: { type: String },
+      },
+    ],
     // Reference letter template request tracking
     refLetterRequested: {
       type: Boolean,

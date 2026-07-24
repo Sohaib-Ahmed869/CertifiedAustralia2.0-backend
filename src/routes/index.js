@@ -29,6 +29,7 @@ const paymentBatchRoutes = require('./paymentBatchRoutes');
 const xeroRoutes = require('./xeroRoutes');
 const searchRoutes = require('./searchRoutes');
 const guardrailRoutes = require('./guardrailRoutes');
+const directDebitAuthRoutes = require('./directDebitAuthRoutes');
 const applicationController = require('../controllers/applicationController');
 const { protect } = require('../middleware/auth');
 
@@ -65,6 +66,7 @@ router.use('/payment-batches', paymentBatchRoutes);
 router.use('/xero', xeroRoutes);
 router.use('/search', searchRoutes);
 router.use('/guardrails', guardrailRoutes);
+router.use('/direct-debit-auth', directDebitAuthRoutes);
 
 // Standalone intake form access (read-only, authenticated — exposes applicant PII)
 router.get('/intake-forms/:id', protect, applicationController.intakeForms.getById);
