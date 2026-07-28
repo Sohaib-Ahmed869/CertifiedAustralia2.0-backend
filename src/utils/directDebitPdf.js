@@ -1,5 +1,7 @@
 const PDFDocument = require('pdfkit');
+const path = require('path');
 
+const LOGO_PATH = path.join(__dirname, '../assets/logo-dark.png');
 const BRAND_GREEN = '#0a9d42';
 const INK = '#1a1a2e';
 const MUTE = '#555555';
@@ -37,13 +39,23 @@ function generateDirectDebitPdf(record, ctx = {}) {
       const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
       const left = doc.page.margins.left;
 
-      // ── Header band ──
-      doc.rect(0, 0, doc.page.width, 96).fill(BRAND_GREEN);
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22)
-        .text('Certified Australia Group', left, 30);
-      doc.font('Helvetica').fontSize(13)
-        .text('Direct Debit Request & Authorisation', left, 60);
-      doc.moveDown(2);
+      // ── Header band with the official logo (on a white chip so it reads on green) ──
+      doc.rect(0, 0, doc.page.width, 112).fill(BRAND_GREEN);
+      let logoDrawn = false;
+      try {
+        doc.save();
+        doc.roundedRect(left, 20, 156, 58, 8).fill('#ffffff');
+        doc.image(LOGO_PATH, left + 15, 29, { fit: [126, 40] });
+        doc.restore();
+        logoDrawn = true;
+      } catch {
+        logoDrawn = false;
+      }
+      if (!logoDrawn) {
+        doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('Certified Australia Group', left, 32);
+      }
+      doc.fillColor('#ffffff').font('Helvetica').fontSize(12)
+        .text('Direct Debit Request & Authorisation', left, 86);
 
       let y = 120;
       doc.fillColor(MUTE).font('Helvetica').fontSize(9);
@@ -96,7 +108,14 @@ function generateDirectDebitPdf(record, ctx = {}) {
         const boxY = y + 1;
         doc.rect(left, boxY, 10, 10).strokeColor(BRAND_GREEN).lineWidth(1).stroke();
         if (checked) {
-          doc.fillColor(BRAND_GREEN).font('Helvetica-Bold').fontSize(9).text('X', left + 1.5, boxY + 0.5);
+          // Draw a green tick (vector) inside the box instead of an "X"
+          doc.save();
+          doc.strokeColor(BRAND_GREEN).lineWidth(1.5).lineCap('round').lineJoin('round');
+          doc.moveTo(left + 2, boxY + 5.2)
+            .lineTo(left + 4.2, boxY + 7.6)
+            .lineTo(left + 8, boxY + 2.6)
+            .stroke();
+          doc.restore();
         }
         doc.fillColor(INK).font('Helvetica').fontSize(9)
           .text(text, left + 18, y, { width: pageWidth - 18 });
@@ -123,8 +142,8 @@ function generateDirectDebitPdf(record, ctx = {}) {
         .text(`${form.signatureName || form.fullName || ''}`, left, y);
       doc.text(`Signed: ${form.signatureDate || fmtDate(record.submittedAt)}`, left, y, { width: 240, align: 'right' });
 
-      // ── Footer ──
-      const footerY = doc.page.height - 60;
+      // ── Footer ── (kept high enough that both lines fit on page one)
+      const footerY = doc.page.height - 84;
       doc.fillColor('#9ca3af').font('Helvetica').fontSize(7.5)
         .text(
           'Certified Australia Group Pty Ltd — This document is an electronic record of the customer\'s Direct Debit authorisation. Charges are processed via a PCI-DSS compliant payment gateway; no card or bank numbers are stored in this document.',

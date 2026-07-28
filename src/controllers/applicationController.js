@@ -976,6 +976,11 @@ module.exports = {
         subject: `RPL Enquiry - ${qualName}`,
         content: `<p>Hi ${studentName},</p><p>Thank you for your enquiry regarding the <strong>${qualName}</strong>.</p><p>We offer this qualification through Recognition of Prior Learning (RPL), which allows your existing skills and experience to be formally recognised without attending formal training. This qualification is nationally recognised, meaning it is valid across Australia.</p>${section('Documentation Required for RPL', communityDocs)}${section('Details', `<ul style="padding-left:24px;margin:0;"><li style="margin-bottom:8px;"><strong>Processing time:</strong> Approximately 4-6 weeks</li><li style="margin-bottom:8px;"><strong>Cost:</strong> ${netPrice}</li></ul>`)}<p>Please don't hesitate to contact us if you have any questions.</p>`,
       },
+      // Ships with the Certificate III in Plumbing checklist PDF (see TEMPLATE_ATTACHMENTS below).
+      plumbing: {
+        subject: `RPL Enquiry - ${qualName || 'Certificate III in Plumbing'}`,
+        content: `<p>Hi ${studentName},</p><p>Thank you for your enquiry regarding the <strong>${qualName || 'Certificate III in Plumbing'}</strong>.</p><p>We offer this qualification through Recognition of Prior Learning (RPL), which allows your existing skills and experience to be formally recognised without attending formal training. This qualification is nationally recognised, meaning it is valid across Australia.</p>${section('Plumbing Checklist', `<p>Please find the <strong>Certificate III in Plumbing Checklist</strong> attached to this email. It outlines the documents and evidence you'll need to prepare for your RPL portfolio — we recommend reviewing it carefully before submitting your application.</p>`)}${section('Documentation Required for RPL', rplDocs)}<p>Please don't hesitate to contact us if you have any questions.</p>`,
+      },
       electrical: {
         subject: `Electrical RPL Enquiry - ${qualName}`,
         content: `<p>Hi ${studentName},</p><p>Thank you for your inquiry - hope you are well!</p><p>We offer the Certificate III in Electrotechnology Electrician through the RPL (Recognition of Prior Learning) pathway; however, given the high-risk nature of this qualification, there is also a course component involved.</p><p>Based on your extensive experience in the electrical industry, you are eligible to apply for this pathway.</p><div style="background:#FFF9E6;padding:16px 20px;border-left:4px solid #FFB800;margin:20px 0;border-radius:4px;"><p style="margin:0;"><strong>Course Duration:</strong> The course will run for either 6 or 12 months, depending on your level of experience and final course requirements.</p></div><p>At the end of the process, you'll complete a Capstone Assessment. Once successfully completed, you'll be issued with the Certificate III in Electrotechnology Electrician.</p>${section('Documentation Required', electricalDocs)}${section('Cost', priceFmt)}<p>Please let us know if you'd like to enrol and we can begin the process.</p>`,
@@ -1016,7 +1021,22 @@ module.exports = {
       preheader: tpl.subject,
     });
 
-    const result = await sendEmail({ to: student.email, subject: tpl.subject, html });
+    // Templates that ship with a static PDF attachment (files live in BE `docs/`).
+    // Any templateType not listed here sends with no attachment.
+    const path = require('path');
+    const TEMPLATE_ATTACHMENTS = {
+      plumbing: [{
+        filename: 'Certificate III in Plumbing Checklist.pdf',
+        path: path.join(__dirname, '..', '..', 'docs', 'Certificate_III_in_Plumbing_Checklist.pdf'),
+      }],
+    };
+
+    const result = await sendEmail({
+      to: student.email,
+      subject: tpl.subject,
+      html,
+      attachments: TEMPLATE_ATTACHMENTS[templateType],
+    });
     if (!result.success) throw new AppError('Failed to send email', 500);
 
     res.status(200).json({ message: 'Predefined email sent successfully', templateType });

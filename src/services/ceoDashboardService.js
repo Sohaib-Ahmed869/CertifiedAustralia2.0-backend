@@ -3,6 +3,7 @@ const Payment = require('../models/Payment');
 const User = require('../models/User');
 const Certificate = require('../models/Certificate');
 const MarketingSpend = require('../models/MarketingSpend');
+const CallEvent = require('../models/CallEvent');
 const buildCrud = require('./commonCrud');
 
 const marketingSpendCrud = buildCrud(MarketingSpend, {
@@ -441,6 +442,29 @@ async function getOverview(query = {}) {
     })
   );
 
+  // Funnel trend (last 5 weeks): New Leads + Paid Apps + Scorecard calls, to
+  // visualise how top-of-funnel calling drives leads → paid conversions.
+  // CallEvent.date is an AEST 'YYYY-MM-DD' string, so we match on a date-string
+  // range; calls = outbound only (mirrors the Call Scorecard's "calls" metric).
+  const toDateStr = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const funnelWeeks = getLastNWeeks(5);
+  const funnelTrend = await Promise.all(
+    funnelWeeks.map(async (w) => {
+      const weekStart = getWeekStartFromLabel(w.week);
+      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const wFilter = { createdAt: { $gte: weekStart, $lt: weekEnd } };
+      const startStr = toDateStr(weekStart);
+      const endStr = toDateStr(new Date(weekEnd.getTime() - 24 * 60 * 60 * 1000)); // inclusive last day
+      const [leads, paid, calls] = await Promise.all([
+        Application.countDocuments(wFilter),
+        Application.countDocuments({ ...wFilter, status: { $in: PAID_STATUSES } }),
+        CallEvent.countDocuments({ date: { $gte: startStr, $lte: endStr }, direction: { $ne: 'incoming' } }),
+      ]);
+      return { week: w.week, label: w.label, leads, paid, calls };
+    })
+  );
+
   return {
     stats: {
       totalLeads,
@@ -453,6 +477,7 @@ async function getOverview(query = {}) {
       conversionRate,
     },
     weeklyLeadsVsPaid,
+    funnelTrend,
     pipelineFunnel,
     revenueTrend,
     leadSources,

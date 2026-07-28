@@ -298,7 +298,7 @@ const applyPaymentToPlan = async (paymentPlanId, data) => {
   };
 };
 
-const updatePaymentPlan = async (id, data) => {
+const updatePaymentPlan = async (id, data, actor = null) => {
   const paymentPlan = await PaymentPlan.findById(id);
 
   if (!paymentPlan) {
@@ -309,28 +309,149 @@ const updatePaymentPlan = async (id, data) => {
   const directDebitJustEnabled =
     data.directDebitEnabled === true && !paymentPlan.directDebitEnabled;
 
+  // ---- Installment reconciliation (merge-based; protects settled installments) ----
+  // Rebuilds the schedule from the incoming rows while:
+  //  - preserving already-paid / partially-paid installments verbatim (immutable),
+  //  - treating a "skipped" row as a waived installment (dropped from the total owed),
+  //  - recording a real manualMarkPaid payment when a pending row is set to "paid"
+  //    (Completed) so totalPaidAmount / revenue reports / Xero stay consistent.
+  let installmentsReconciled = false;
+  const completedTransitions = [];
+
   if (Array.isArray(data.installments)) {
-    const currentByIndex = new Map(paymentPlan.installments.map((installment) => [installment.index, installment]));
+    const currentByIndex = new Map(
+      paymentPlan.installments.map((installment) => [installment.index, installment])
+    );
 
-    for (const installment of data.installments) {
-      const current = currentByIndex.get(installment.index);
+    const merged = [];
 
-      if (current && current.status === 'paid') {
-        const sameAmount = Math.abs(Number(current.amount) - Number(installment.amount)) < 0.01;
-        // Compare dates by day only — ignore time/format differences
+    data.installments.forEach((incoming, idx) => {
+      const current = currentByIndex.get(incoming.index);
+      const wasSettled =
+        current && (current.status === 'paid' || current.status === 'partiallyPaid');
+
+      // Settled installments cannot be changed — preserve the stored record as-is.
+      if (wasSettled) {
+        const sameAmount = Math.abs(Number(current.amount) - Number(incoming.amount)) < 0.01;
         const currentDate = current.dueDate ? new Date(current.dueDate).toISOString().slice(0, 10) : '';
-        const newDate = installment.dueDate ? new Date(installment.dueDate).toISOString().slice(0, 10) : '';
-        const sameDueDate = currentDate === newDate;
+        const newDate = incoming.dueDate ? new Date(incoming.dueDate).toISOString().slice(0, 10) : '';
+        const incomingStatus = incoming.status || current.status;
 
-        if (!sameAmount || !sameDueDate) {
+        if (!sameAmount || currentDate !== newDate || incomingStatus !== current.status) {
           throw new AppError('Paid installments cannot be changed', 400);
         }
+
+        merged.push({
+          index: idx,
+          amount: current.amount,
+          dueDate: current.dueDate,
+          status: current.status,
+          paidAmount: current.paidAmount,
+          paymentDate: current.paymentDate,
+          paymentIds: current.paymentIds,
+        });
+        return;
       }
+
+      const amount = Math.round(Number(incoming.amount || 0) * 100) / 100;
+      const dueDate = incoming.dueDate ? new Date(incoming.dueDate) : current?.dueDate || new Date();
+      const status = incoming.status || 'pending';
+
+      if (status === 'paid') {
+        // "Completed" chosen on a pending/new row — stage it as pending here and record
+        // a proper payment against this exact installment below.
+        completedTransitions.push(idx);
+        merged.push({ index: idx, amount, dueDate, status: 'pending', paidAmount: 0, paymentIds: [] });
+      } else {
+        // 'pending' or 'skipped'
+        merged.push({ index: idx, amount, dueDate, status, paidAmount: 0, paymentIds: [] });
+      }
+    });
+
+    // Guard against over-scheduling (mirrors the legacy portal): the money still to be
+    // collected (pending rows, incl. the ones about to be completed) must not exceed the
+    // remaining balance. Prefer the caller's remaining (price − discount − paid, the same
+    // basis the UI shows); fall back to the plan's own figures.
+    const remainingBalance =
+      data.remainingBalance != null
+        ? Math.max(0, Number(data.remainingBalance))
+        : Math.max(0, Number(paymentPlan.totalAmount || 0) - Number(paymentPlan.totalPaidAmount || 0));
+    const scheduledTotal = merged
+      .filter((m) => m.status === 'pending')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
+    if (scheduledTotal > remainingBalance + 0.01) {
+      throw new AppError('Pending payment schedule exceeds remaining balance. Reduce pending amounts before saving.', 400);
     }
+
+    paymentPlan.installments = merged;
+    paymentPlan.markModified('installments');
+
+    // Record a manualMarkPaid payment for each "Completed" transition (targeted to the
+    // specific installment, not sequentially allocated).
+    for (const idx of completedTransitions) {
+      const installment = paymentPlan.installments.find((m) => m.index === idx);
+      if (!installment) continue;
+
+      const payment = await Payment.create({
+        applicationId: paymentPlan.applicationId,
+        studentId: paymentPlan.studentId,
+        paymentPlanId: paymentPlan._id,
+        amount: installment.amount,
+        type: 'manualMarkPaid',
+        paymentMethod: 'manual',
+        status: 'completed',
+        notes: data.notes || 'Installment marked paid via payment plan edit',
+        xeroSyncStatus: 'pending',
+        ...(actor?.id ? { createdBy: actor.id } : {}),
+      });
+
+      installment.status = 'paid';
+      installment.paidAmount = installment.amount;
+      installment.paymentDate = new Date();
+      installment.paymentIds = [payment._id];
+      paymentPlan.totalPaidAmount = Number(paymentPlan.totalPaidAmount || 0) + Number(installment.amount);
+    }
+    if (completedTransitions.length) paymentPlan.markModified('installments');
+
+    // Contract total = everything still owed or paid; skipped installments are waived off.
+    paymentPlan.totalAmount = paymentPlan.installments
+      .filter((m) => m.status !== 'skipped')
+      .reduce((sum, m) => sum + Number(m.amount), 0);
+
+    // Recompute plan status (mirrors the legacy portal): the plan is complete once no
+    // pending/partially-paid installments remain — skipped rows are waived, not owed.
+    const hasOutstanding = paymentPlan.installments.some(
+      (m) => m.status === 'pending' || m.status === 'partiallyPaid'
+    );
+    if (!hasOutstanding) {
+      paymentPlan.status = 'completed';
+    } else if (paymentPlan.status === 'completed') {
+      paymentPlan.status = 'active';
+    }
+
+    installmentsReconciled = true;
+    // Don't let the generic Object.assign below clobber the reconciled schedule/totals.
+    delete data.installments;
+    delete data.totalAmount;
+    delete data.totalPaidAmount;
+    delete data.remainingBalance;
   }
 
   Object.assign(paymentPlan, data);
   await paymentPlan.save();
+
+  // Keep the application in sync when installments were just marked paid.
+  if (installmentsReconciled && completedTransitions.length) {
+    try {
+      const appFlags = { partialPayment: true };
+      if (paymentPlan.status === 'completed') appFlags.paymentCompleted = true;
+      await Application.findByIdAndUpdate(paymentPlan.applicationId, appFlags);
+      await tryAutoStartTimer(paymentPlan.applicationId);
+    } catch (err) {
+      console.error('[PaymentService] updatePaymentPlan application sync error:', err.message);
+    }
+  }
 
   const freshUpdatedPlan = await refreshPlan(paymentPlan._id);
 

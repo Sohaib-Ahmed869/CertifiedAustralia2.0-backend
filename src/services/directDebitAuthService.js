@@ -100,7 +100,8 @@ async function enableAuthority(applicationId, actor = {}) {
         type: 'direct_debit_authority',
         title: 'Direct Debit Authorisation',
         message: `Please review and sign your Direct Debit authorisation for ${application.applicationId}.`,
-        link: `/direct-debit-form/${token}`,
+        // In-portal link → embedded student page (keeps header/sidebar). The email uses the public URL.
+        link: `/student/direct-debit/${token}`,
         relatedId: application._id,
       });
     }
@@ -134,6 +135,15 @@ async function getByToken(token) {
     .lean();
   if (!record) throw new AppError('Invalid or expired authorisation link', 404);
   if (!record.enabled) throw new AppError('This Direct Debit authorisation is no longer active', 410);
+
+  // Always reflect the CURRENT payment schedule. The arrangement stored at enable-time can
+  // be empty or stale if the payment plan was created or edited afterwards — recompute it
+  // live so the form updates per schedule (matching the legacy portal). Fall back to the
+  // stored snapshot only when there's no active plan to derive from.
+  const appId = record.applicationId?._id || record.applicationId;
+  const live = await buildArrangement(appId);
+  if (Object.keys(live).length) record.arrangement = live;
+
   return record;
 }
 
@@ -166,6 +176,15 @@ async function submit(token, { form, signature }) {
   };
   record.status = 'submitted';
   record.submittedAt = new Date();
+
+  // Refresh the arrangement from the current plan so the signed PDF reflects exactly what
+  // the student is authorising at signing time (keeps it in sync with schedule edits).
+  try {
+    const live = await buildArrangement(record.applicationId);
+    if (Object.keys(live).length) record.arrangement = live;
+  } catch (err) {
+    console.error('[DirectDebit] arrangement refresh on submit failed:', err.message);
+  }
 
   // Generate the PDF and upload to the application's Drive folder (non-fatal on Drive errors)
   try {

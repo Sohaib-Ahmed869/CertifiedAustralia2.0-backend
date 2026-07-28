@@ -271,10 +271,24 @@ function buildCard(date, agentId, agentName, agg, targets) {
   };
 }
 
-async function getIndividualScorecard({ date, agentId } = {}) {
-  const d = date || todayAEST();
+async function getIndividualScorecard({ date, from, to, agentId } = {}) {
+  const f = from || date || todayAEST();
+  const t = to || date || f;
   const targets = await readTargets();
-  const events = await queryEvents({ from: d, to: d, agentId });
+  const events = await queryEvents({ from: f, to: t, agentId });
+
+  // Daily targets scale by the number of days in the range so week/month views
+  // compare against the right cumulative goal (matches getTeamScorecard).
+  const parts = (s) => s.split('-').map(Number);
+  const [af, mf, df] = parts(f);
+  const [at, mt, dt2] = parts(t);
+  const days = Math.max(1, Math.round((Date.UTC(at, mt - 1, dt2) - Date.UTC(af, mf - 1, df)) / 86400000) + 1);
+  const scaledTargets = {
+    ...targets,
+    callsPerAgent: targets.callsPerAgent * days,
+    answeredPerAgent: targets.answeredPerAgent * days,
+    qualityPerAgent: targets.qualityPerAgent * days,
+  };
 
   const byAgent = {};
   events.forEach((e) => {
@@ -290,12 +304,16 @@ async function getIndividualScorecard({ date, agentId } = {}) {
     byAgent[String(agentId)] = { name, events: [] };
   }
 
+  const label = f === t ? f : `${f}..${t}`;
   const cards = Object.entries(byAgent)
-    .map(([id, group]) => buildCard(d, id, group.name, aggregate(group.events), targets))
+    .map(([id, group]) => buildCard(label, id, group.name, aggregate(group.events), scaledTargets))
     .sort((a, b) => b.calls - a.calls);
 
   return {
-    date: d,
+    date: f === t ? f : undefined,
+    from: f,
+    to: t,
+    days,
     targets,
     cards: agentId ? (cards[0] ? [cards[0]] : []) : cards,
   };

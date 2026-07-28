@@ -47,6 +47,8 @@ module.exports = {
   getIndividualScorecard: asyncHandler(async (req, res) => {
     const result = await service.getIndividualScorecard({
       date: req.query.date,
+      from: req.query.from,
+      to: req.query.to,
       agentId: resolveAgentId(req),
     });
     res.json(result);
