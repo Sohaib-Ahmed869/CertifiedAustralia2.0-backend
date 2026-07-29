@@ -38,7 +38,7 @@ const generateApplicationId = async () => {
 const register = async (data) => {
   const {
     firstName, lastName, email, phone, password,
-    termsAccepted, source,
+    termsAccepted, source, referredBy,
     industryId, qualificationId,
     yearsOfExperience, experienceLocation, state,
     hasFormalQualifications, formalQualifications,
@@ -55,6 +55,22 @@ const register = async (data) => {
   const existing = await User.findOne({ email: email.toLowerCase() });
   if (existing) throw new AppError('An account with this email already exists', 409);
 
+  // Refer-a-Friend: resolve the referring user if a valid id was passed via ?ref=
+  let referrerId;
+  if (referredBy) {
+    try {
+      const referrer = await User.findById(referredBy).select('_id').lean();
+      if (referrer) referrerId = referrer._id;
+    } catch { /* invalid id — ignore */ }
+  }
+  const attribution = (source || referrerId)
+    ? {
+        ...(source ? { source } : {}),
+        ...(referrerId ? { referredBy: referrerId } : {}),
+        timestamp: new Date(),
+      }
+    : undefined;
+
   // 1. Create student
   const student = await Student.create({
     firstName,
@@ -69,7 +85,7 @@ const register = async (data) => {
       termsOfServiceAccepted: true,
       acceptedAt: new Date(),
     },
-    sourceAttribution: source ? { source, timestamp: new Date() } : undefined,
+    sourceAttribution: attribution,
   });
 
   // 2. Create application (carry source attribution from student)
@@ -81,7 +97,7 @@ const register = async (data) => {
     qualificationId,
     status: 'New',
     leadStatus: 'new',
-    ...(source ? { sourceAttribution: { source, timestamp: new Date() } } : {}),
+    ...(attribution ? { sourceAttribution: attribution } : {}),
   });
 
   // 3. Create screening form

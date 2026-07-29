@@ -409,6 +409,8 @@ const applicationSchema = new mongoose.Schema(
       platform: String,
       campaign: String,
       timestamp: Date,
+      // Refer-a-Friend: the referring student/user (captured from ?ref= on signup)
+      referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     },
   }
 );

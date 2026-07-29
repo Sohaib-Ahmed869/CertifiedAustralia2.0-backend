@@ -21,6 +21,8 @@ const studentSchema = new mongoose.Schema(
       campaign: String,
       timestamp: Date,
       trackingUrl: String,
+      // Refer-a-Friend: the referring student/user (captured from ?ref= on signup)
+      referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     },
     // ISO compliance baseline: student consent tracking
     consents: {
