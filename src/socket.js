@@ -280,6 +280,15 @@ const emitCampaignCompleted = (campaignId, status, stats) => {
 };
 
 /**
+ * Email-sequence (drip) progress — emitted on each send/open/bounce and on
+ * lifecycle changes. Staff dashboards filter by sequenceId.
+ */
+const emitSequenceProgress = (sequenceId, stats, status) => {
+  if (!io) return;
+  io.emit('sequence:progress', { sequenceId: String(sequenceId), stats, status });
+};
+
+/**
  * Call burst updates — pushed to the initiating agent's personal room as the
  * burst progresses (ringing → connected → ended). `type` distinguishes the
  * lifecycle stage; `burst` is the sanitised burst payload.
@@ -296,5 +305,6 @@ module.exports = {
   pushPermissionUpdate,
   emitCampaignProgress,
   emitCampaignCompleted,
+  emitSequenceProgress,
   emitBurstUpdate,
 };

@@ -1070,6 +1070,20 @@ const addDiscount = async (applicationId, { amount, note, createdBy }) => {
 
   await application.save();
 
+  // Edge case: if this application already has a payment plan, fold the new discount into
+  // it by re-splitting the reduced balance evenly across the pending installments. Paid
+  // and partially-paid installments are left untouched. Wrapped so a redistribution hiccup
+  // never blocks recording the discount itself. Lazy require avoids the paymentService ↔
+  // applicationService circular dependency.
+  if (application.paymentPlanId) {
+    try {
+      const paymentService = require('./paymentService');
+      await paymentService.redistributePendingForDiscount(application.paymentPlanId, Number(amount));
+    } catch (err) {
+      console.error('[ApplicationService] addDiscount plan redistribution error:', err.message);
+    }
+  }
+
   const freshApp = await refreshApplication(application._id);
 
   // Send discount notification email to student (non-blocking)
@@ -1101,8 +1115,21 @@ const removeDiscount = async (applicationId, discountId) => {
   const discount = application.discounts.id(discountId);
   if (!discount) throw new AppError('Discount not found', 404);
 
+  const removedAmount = Number(discount.amount) || 0;
   discount.deleteOne();
   await application.save();
+
+  // Inverse of addDiscount: give the removed amount back to the plan's pending
+  // installments (evenly re-split). Non-blocking; skips when there is no plan.
+  if (application.paymentPlanId && removedAmount > 0) {
+    try {
+      const paymentService = require('./paymentService');
+      await paymentService.redistributePendingForDiscount(application.paymentPlanId, -removedAmount);
+    } catch (err) {
+      console.error('[ApplicationService] removeDiscount plan redistribution error:', err.message);
+    }
+  }
+
   return refreshApplication(application._id);
 };
 

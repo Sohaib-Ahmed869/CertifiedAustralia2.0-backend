@@ -3,7 +3,10 @@ const { simpleParser } = require('mailparser');
 const Mailbox = require('../models/Mailbox');
 const CampaignRecipient = require('../models/CampaignRecipient');
 const Campaign = require('../models/Campaign');
-const { emitCampaignProgress } = require('../socket');
+const SequenceRecipient = require('../models/SequenceRecipient');
+const Sequence = require('../models/Sequence');
+const SequenceEnrollment = require('../models/SequenceEnrollment');
+const { emitCampaignProgress, emitSequenceProgress } = require('../socket');
 
 // Sent rows younger than this are still "Verifying" (accepted for relay, no bounce yet).
 const VERIFY_GRACE_MS = 2 * 60 * 1000;
@@ -117,6 +120,84 @@ async function matchRecipient({ messageIds, email }) {
   return null;
 }
 
+/* ── Email-sequence bounce reconciliation (shares this IMAP pass) ── */
+
+async function matchSequenceRecipient({ messageIds, email }) {
+  if (messageIds && messageIds.length) {
+    const candidates = messageIds.flatMap((id) => [id, `<${id}>`]);
+    const byId = await SequenceRecipient.findOne({ messageId: { $in: candidates }, status: 'sent' });
+    if (byId) return byId;
+  }
+  if (email) {
+    const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+    return SequenceRecipient.findOne({ email, status: 'sent', sentAt: { $gte: since } }).sort({ sentAt: -1 });
+  }
+  return null;
+}
+
+/**
+ * Apply a bounce to a sequence step (idempotent, status-guarded). Retracts any
+ * DSN-echoed open, and reconciles the enrollment: a bounce on the step the
+ * enrollment engaged on is a false open (→ bounced); otherwise an active/completed
+ * enrollment moves to the terminal bounced bucket. `stats.bounced` only moves on a
+ * genuine enrollment transition (buckets stay exclusive).
+ */
+async function applySequenceBounce(recipient, failureReason, failureCode) {
+  const prev = await SequenceRecipient.findOneAndUpdate(
+    { _id: recipient._id, status: 'sent' },
+    {
+      $set: {
+        status: 'bounced',
+        bouncedAt: new Date(),
+        failureReason,
+        failureCode,
+        openedAt: null,
+        openCount: 0,
+      },
+    },
+    { new: false }
+  );
+  if (!prev) return false; // already handled
+
+  const inc = { [`stats.byStep.${prev.stepId}.bounced`]: 1 };
+  if (prev.openedAt) inc[`stats.byStep.${prev.stepId}.opened`] = -1; // retract DSN-echoed step open
+
+  const enr = await SequenceEnrollment.findById(prev.enrollmentId);
+  if (enr) {
+    const step = enr.steps.find((s) => s.stepId === prev.stepId);
+    if (step) step.status = 'bounced';
+
+    const openedOnThisStep = enr.openedStepId === prev.stepId && enr.status === 'opened';
+    let bouncedTransition = false;
+    if (openedOnThisStep) {
+      // The engaging open was on the bounced step → false open. Retract + bounce.
+      inc['stats.opened'] = -1;
+      enr.status = 'bounced';
+      enr.openedAt = null;
+      enr.openedAtOrder = null;
+      enr.openedStepId = null;
+      bouncedTransition = true;
+    } else if (enr.status === 'active') {
+      enr.status = 'bounced';
+      bouncedTransition = true;
+    } else if (enr.status === 'completed') {
+      inc['stats.completed'] = -1;
+      enr.status = 'bounced';
+      bouncedTransition = true;
+    }
+    // (enrollment opened on a DIFFERENT step stays engaged — no terminal change)
+    if (bouncedTransition) inc['stats.bounced'] = 1;
+
+    enr.markModified('steps');
+    await enr.save();
+  }
+
+  await Sequence.updateOne({ _id: prev.sequenceId }, { $inc: inc });
+  const s = await Sequence.findById(prev.sequenceId).select('stats status').lean();
+  if (s) emitSequenceProgress(prev.sequenceId, s.stats, s.status);
+  return true;
+}
+
 /* ═══════════════════════════════════════════════════════
    POLL
    ═══════════════════════════════════════════════════════ */
@@ -152,15 +233,30 @@ async function pollMailbox(mailbox) {
 
         const { messageIds, emails, failureReason, failureCode } = extractFailure(parsed, raw, mailbox.email);
         const targets = emails.length ? emails : [null];
-        // Try id-match once, then per-address fallback.
-        let matched = await matchRecipient({ messageIds, email: null });
+
+        // --- Campaign match first: id-match once, then per-address fallback. ---
+        let matchedAny = false;
+        const matched = await matchRecipient({ messageIds, email: null });
         if (matched) {
           if (await applyBounce(matched, failureReason, failureCode)) result.bounces += 1;
+          matchedAny = true;
+        } else {
+          for (const email of targets) {
+            const r = await matchRecipient({ messageIds: [], email });
+            if (r && await applyBounce(r, failureReason, failureCode)) { result.bounces += 1; matchedAny = true; }
+          }
+        }
+        if (matchedAny) continue;
+
+        // --- Sequence fallback: same DSN, matched against sequence recipients. ---
+        const seqMatched = await matchSequenceRecipient({ messageIds, email: null });
+        if (seqMatched) {
+          if (await applySequenceBounce(seqMatched, failureReason, failureCode)) result.bounces += 1;
           continue;
         }
         for (const email of targets) {
-          const r = await matchRecipient({ messageIds: [], email });
-          if (r && await applyBounce(r, failureReason, failureCode)) result.bounces += 1;
+          const r = await matchSequenceRecipient({ messageIds: [], email });
+          if (r && await applySequenceBounce(r, failureReason, failureCode)) result.bounces += 1;
         }
       }
     }
@@ -174,8 +270,13 @@ async function pollMailbox(mailbox) {
 
 /** Stamp sent rows past the grace window with no bounce → UI flips "Verifying" to "Sent". */
 async function stampVerified() {
+  const cutoff = new Date(Date.now() - VERIFY_GRACE_MS);
   await CampaignRecipient.updateMany(
-    { status: 'sent', bounceCheckedAt: null, sentAt: { $lte: new Date(Date.now() - VERIFY_GRACE_MS) } },
+    { status: 'sent', bounceCheckedAt: null, sentAt: { $lte: cutoff } },
+    { $set: { bounceCheckedAt: new Date() } }
+  );
+  await SequenceRecipient.updateMany(
+    { status: 'sent', bounceCheckedAt: null, sentAt: { $lte: cutoff } },
     { $set: { bounceCheckedAt: new Date() } }
   );
 }
@@ -204,5 +305,7 @@ module.exports = {
   pollAll,
   pollMailbox,
   applyBounce,
+  applySequenceBounce,
+  matchSequenceRecipient,
   stampVerified,
 };

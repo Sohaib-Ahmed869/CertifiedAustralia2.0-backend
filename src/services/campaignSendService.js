@@ -357,4 +357,10 @@ module.exports = {
   processCampaign,
   startCampaign,
   recoverInterrupted,
+  // Shared send primitives — reused by the sequence (drip) scheduler so both
+  // features draw from one mailbox pool / quota budget.
+  transportFor,
+  pickMailbox,
+  reserveQuota,
+  injectPreheader,
 };

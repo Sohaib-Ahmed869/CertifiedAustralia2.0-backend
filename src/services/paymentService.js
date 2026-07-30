@@ -853,6 +853,54 @@ const skipInstallment = async (planId, installmentIndex) => {
   return refreshPlan(plan._id);
 };
 
+// Fold a discount change into an existing plan by re-splitting the pending balance
+// evenly across the still-unpaid installments. Called when a discount is added to or
+// removed from an application that already has a payment plan.
+//   discountDelta > 0  → a discount was applied  (lower the pending total)
+//   discountDelta < 0  → a discount was removed   (raise the pending total)
+// Only fully-unpaid ('pending') installments are touched — paid, partially-paid and
+// skipped rows are immutable, matching updatePaymentPlan's settled-row rule. The
+// rounding remainder lands on the last pending row (same as how plans are first split)
+// and the contract total is recomputed. No-ops safely when there is nothing to rebalance.
+const redistributePendingForDiscount = async (planId, discountDelta) => {
+  const delta = Number(discountDelta) || 0;
+  if (!planId || !delta) return null;
+
+  const plan = await PaymentPlan.findById(planId);
+  if (!plan) return null;
+  // Never rewrite a cancelled plan; completed plans have no pending rows and no-op below.
+  if (plan.status === 'cancelled') return null;
+
+  const pending = plan.installments
+    .filter((inst) => inst.status === 'pending')
+    .sort((a, b) => a.index - b.index);
+  if (pending.length === 0) return null; // no unpaid installments to absorb the change
+
+  const currentPendingTotal = pending.reduce((sum, inst) => sum + Number(inst.amount || 0), 0);
+  // Applying a discount lowers the pending total; removing one raises it. Never below 0.
+  const newPendingTotal = Math.max(0, +(currentPendingTotal - delta).toFixed(2));
+
+  const perInstallment = Math.floor((newPendingTotal / pending.length) * 100) / 100;
+  const lastAdj = Math.round((newPendingTotal - perInstallment * (pending.length - 1)) * 100) / 100;
+  pending.forEach((inst, i) => {
+    inst.amount = i === pending.length - 1 ? lastAdj : perInstallment;
+  });
+
+  // Track the net discount actually reflected on the plan (clamped by what pending could
+  // absorb), on the pre-existing informational field.
+  const appliedDelta = +(currentPendingTotal - newPendingTotal).toFixed(2);
+  plan.discountApplied = Math.max(0, +(Number(plan.discountApplied || 0) + appliedDelta).toFixed(2));
+
+  // Contract total = everything still owed or paid; skipped rows are waived.
+  plan.totalAmount = plan.installments
+    .filter((inst) => inst.status !== 'skipped')
+    .reduce((sum, inst) => sum + Number(inst.amount || 0), 0);
+
+  plan.markModified('installments');
+  await plan.save();
+  return plan;
+};
+
 module.exports = {
   payments: paymentCrud,
   paymentPlans: paymentPlanCrud,
@@ -864,6 +912,7 @@ module.exports = {
   resumePlan,
   cancelPlan,
   skipInstallment,
+  redistributePendingForDiscount,
   getStats,
   exportCsv,
 };

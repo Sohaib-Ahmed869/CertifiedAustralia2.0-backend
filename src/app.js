@@ -32,16 +32,28 @@ app.get('/api/health', (req, res) => {
 });
 
 /* ── Email open-tracking pixel (public, unauthenticated) ── */
+const PIXEL_HEADERS = {
+  'Content-Type': 'image/gif',
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
+// Sequence (drip) open pixel — two path segments, so it never collides with the
+// single-segment campaign pixel below.
+app.get('/api/track/seq/:token', async (req, res) => {
+  const { TRANSPARENT_GIF } = require('./services/campaignTrackingService');
+  const { trackOpen } = require('./services/sequenceTrackingService');
+  Promise.resolve(trackOpen(req.params.token)).catch(() => {});
+  res.set(PIXEL_HEADERS);
+  res.end(TRANSPARENT_GIF);
+});
+
 app.get('/api/track/:token', async (req, res) => {
   const { TRANSPARENT_GIF, trackOpen } = require('./services/campaignTrackingService');
   // Never let tracking failures break the pixel response.
   Promise.resolve(trackOpen(req.params.token)).catch(() => {});
-  res.set({
-    'Content-Type': 'image/gif',
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-    Pragma: 'no-cache',
-    Expires: '0',
-  });
+  res.set(PIXEL_HEADERS);
   res.end(TRANSPARENT_GIF);
 });
 

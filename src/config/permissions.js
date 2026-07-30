@@ -28,6 +28,7 @@ const PERMISSION_KEYS = [
   'tab_tickets',
   'tab_email_templates',
   'tab_campaigns',
+  'tab_sequences',
   'tab_mailbox_config',
   'tab_users',
   'tab_reports',

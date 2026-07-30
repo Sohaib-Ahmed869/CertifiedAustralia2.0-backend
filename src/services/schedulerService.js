@@ -723,6 +723,7 @@ let appReminderJob = null;
 let xeroSyncJob = null;
 let rtoTimerJob = null;
 let campaignBounceJob = null;
+let sequenceTickJob = null;
 
 const startScheduler = () => {
   console.log('[Scheduler] Starting schedulers...');
@@ -829,7 +830,20 @@ const startScheduler = () => {
     }
   });
 
-  // One-off boot tasks: recover interrupted sends, then a first bounce sweep.
+  // Email-sequence (drip) tick — every 5 minutes, unless disabled.
+  if (process.env.SEQUENCE_SCHEDULER_ENABLED !== 'false') {
+    sequenceTickJob = cron.schedule('*/5 * * * *', async () => {
+      try {
+        const sequenceService = require('./sequenceService');
+        await sequenceService.runSequenceTick();
+      } catch (err) {
+        console.error('[Scheduler] Sequence tick error:', err.message);
+      }
+    });
+  }
+
+  // One-off boot tasks: recover interrupted sends, then a first bounce sweep,
+  // and a first sequence tick once the DB is warm.
   (async () => {
     try {
       const sendService = require('./campaignSendService');
@@ -845,6 +859,16 @@ const startScheduler = () => {
         console.error('[Scheduler] Initial bounce poll error:', err.message);
       }
     }, 30 * 1000);
+    if (process.env.SEQUENCE_SCHEDULER_ENABLED !== 'false') {
+      setTimeout(async () => {
+        try {
+          const sequenceService = require('./sequenceService');
+          await sequenceService.runSequenceTick();
+        } catch (err) {
+          console.error('[Scheduler] Initial sequence tick error:', err.message);
+        }
+      }, 20 * 1000);
+    }
   })();
 
   console.log('[Scheduler] All schedulers started:');
@@ -866,6 +890,7 @@ const stopScheduler = () => {
   if (appReminderJob) appReminderJob.stop();
   if (xeroSyncJob) xeroSyncJob.stop();
   if (campaignBounceJob) campaignBounceJob.stop();
+  if (sequenceTickJob) sequenceTickJob.stop();
   console.log('[Scheduler] All schedulers stopped');
 };
 
