@@ -1,0 +1,2418 @@
+{
+  "exportedAt": "2026-07-31T21:33:14.636Z",
+  "totalIndustries": 15,
+  "totalQualifications": 137,
+  "orphanedQualifications": 1,
+  "industries": [
+    {
+      "id": "Yk8PbexyjD3uXFIc4XWX",
+      "name": "Automotive",
+      "description": "Courses in automotive repair, mechanical technology, and vehicle body repair.",
+      "qualifications": [
+        {
+          "id": "AZXHSkhsek2wz254EC1Y",
+          "qualification": "AUR30320 Certificate III in Automotive Electrical Technology",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1500",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "aes"
+        },
+        {
+          "id": "ZzrV107T3ObsopCXu8lj",
+          "qualification": "AUR30620 Certificate III in Light Vehicle Mechanical Technology",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": "1200",
+          "rto": "info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "yXNvIspicnCSqqzGNqQf",
+          "qualification": "AUR31120 Certificate III in Heavy Commercial Vehicle Mechanical Technology",
+          "price": "4999",
+          "parsedPrice": null,
+          "rtoCost": "2050",
+          "rto": "info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "nKKMHCZP4KebqQpxID2H",
+          "qualification": "AUR32120 Certificate III in Automotive Body Repair Technology",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": "2500",
+          "rto": "Allskills",
+          "type": "aes"
+        },
+        {
+          "id": "2IvBD1HzKNgDuffHYFDY",
+          "qualification": "AUR32420 Certificate III in Automotive Refinishing Technology",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "CkpDNUR0OnfQMXxY5c8k",
+          "qualification": "AUR40116 Certificate IV in Automotive Management",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "A0HF1I8HRkaw6ueMXMI5",
+          "qualification": "AUR40226 Certificate IV in Automotive Mechanical Diagnosis",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": "1,500 / 2,500",
+          "rto": "info@oceaniaservices.com | Allskills",
+          "type": "educube"
+        },
+        {
+          "id": "dQZupZ9NTqUwbqi3i6A9",
+          "qualification": "AUR40620 Certificate IV in Automotive Electrical Technology",
+          "price": "4999",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "a5hqtz1D1vW3JMWGOo9g",
+          "qualification": "AUR40720 Certificate IV in Automotive Body Repair Technology",
+          "price": "4999",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "ozI5NIDxbrvZ768PKd15",
+          "qualification": "AUR40820 Certificate IV in Automotive Mechanical Overhauling",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        }
+      ]
+    },
+    {
+      "id": "wK41nRzDevZUwjvzoidS",
+      "name": "Beauty Therapy & Hairdressing",
+      "description": "Qualifications in beauty services, hairdressing, massage, and salon management.",
+      "qualifications": [
+        {
+          "id": "aF0DgUwczMV3WzMG7hFK",
+          "qualification": "HLT42021 Certificate IV in Massage Therapy",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "DhoewebtgiUt5fv2YQP7",
+          "qualification": "HLT52021 Diploma of Remedial Massage",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "coQUHkclz70F0PBLHilI",
+          "qualification": "SHB20121 Certificate II in Retail Cosmetics",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "default",
+          "attachedForms": [
+            {
+              "formId": "1FwyERTTuGadFXarQG4E",
+              "formName": "RPL Assessment — Certificate II in Retail Cosmetics",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T15:12:52.532Z"
+            },
+            {
+              "formId": "wDvXojMZSu0dwIlE1yuA",
+              "formName": "RPL Assessment — Certificate II in Retail Cosmetics",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:31:49.843Z"
+            }
+          ]
+        },
+        {
+          "id": "Xh3SOgI4MEDRnNp81c9O",
+          "qualification": "SHB20216 Certificate II in Salon Assistant",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "default"
+        },
+        {
+          "id": "dm2IcYsAADS2MDvxDrJH",
+          "qualification": "SHB30121 Certificate III in Beauty Services",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "default",
+          "attachedForms": [
+            {
+              "formId": "g9VqLC29744e4H014uXf",
+              "formName": "RPL Assessment — SHB30121 Certificate III in Beauty Services",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T15:13:20.862Z"
+            },
+            {
+              "formId": "Wgtr0HPePzUQPYQhAtZv",
+              "formName": "RPL Assessment — SHB30121 Certificate III in Beauty Services",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:32:58.317Z"
+            }
+          ]
+        },
+        {
+          "id": "KemxdGBx1qk1UyfBhBp3",
+          "qualification": "SHB30221 Certificate III in Makeup",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "kQqAor1O30dBuAqUNYcn",
+              "formName": "SHB30221 Certificate III in Makeup - RPL Assessment",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T15:13:45.954Z"
+            },
+            {
+              "formId": "gXDWi34JSMEBT6enuvXK",
+              "formName": "SHB30221 Certificate III in Makeup - RPL Assessment",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:33:48.101Z"
+            }
+          ]
+        },
+        {
+          "id": "fzLyci6RaZRjrlZdfXat",
+          "qualification": "SHB30321 Certificate III in Nail Technology",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "jKGfHLRy4plrR4s7FT3G",
+              "formName": "SHB30321 Certificate III in Nail Technology - RPL Assessment",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T15:14:19.063Z"
+            },
+            {
+              "formId": "pXZ5Ht1KYRAxoi6mhmgo",
+              "formName": "SHB30321 Certificate III in Nail Technology - RPL Assessment",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:34:21.740Z"
+            }
+          ]
+        },
+        {
+          "id": "xGVmbAT4HWBjhSxZOkGS",
+          "qualification": "SHB30416 Certificate III in Hairdressing",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200 / 1000 / 1000",
+          "rto": "admin@colourcosmetica.com | info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "KqdqeIxm45pgSTJWC6TF",
+          "qualification": "SHB30516 Certificate III in Barbering",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "QFGZNvU1k6bCAKILs1kP",
+              "formName": "RPL Assessment — SHB30516 Certificate III in Barbering",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T00:39:55.859Z"
+            },
+            {
+              "formId": "e7hLfFjK95EuUR6UUbEM",
+              "formName": "RPL Assessment — SHB30516 Certificate III in Barbering",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T15:11:32.759Z"
+            },
+            {
+              "formId": "pwMGMUQZhZExGx14lhx8",
+              "formName": "RPL Assessment — SHB30516 Certificate III in Barbering",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:30:38.832Z"
+            }
+          ]
+        },
+        {
+          "id": "Pw1Zxm5iM9mnSJkjmzpC",
+          "qualification": "SHB40121 Certificate IV in Beauty Therapy",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "GAFyPtlEQ6DQI8bXsjQq",
+              "formName": "Student RPL Evidence and Unit Checklists — SHB40121 Certificate IV in Beauty Therapy",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 0,
+              "attachedAt": "2025-08-24T15:15:38.801Z"
+            },
+            {
+              "formId": "AKKZK65qjNxuHx9WwADu",
+              "formName": "Student RPL Evidence and Unit Checklists — SHB40121 Certificate IV in Beauty Therapy",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:41:03.973Z"
+            }
+          ]
+        },
+        {
+          "id": "awgxJ1EEPNqgyHTdkdDQ",
+          "qualification": "SHB40216 Certificate IV in Hairdressing",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200 / 1700",
+          "rto": "admin@colourcosmetica.com | info@oceaniaservices.com",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "AyprQYkGZu1Q8XNDbXVr",
+              "formName": "RPL Assessment — SHB40216 Certificate IV in Hairdressing",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 0,
+              "attachedAt": "2025-08-24T15:16:10.256Z"
+            },
+            {
+              "formId": "0MikAMycArkj1FrMrZ03",
+              "formName": "Record of Competency Conversation / Candidate Interview",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:34:56.784Z"
+            },
+            {
+              "formId": "k1evTEbo6SiKbsklARu2",
+              "formName": "RPL Assessment — SHB40216 Certificate IV in Hairdressing",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:44:15.704Z"
+            }
+          ]
+        },
+        {
+          "id": "FHISaE0kEC8oA8QJbuf4",
+          "qualification": "SHB50121 Diploma of Beauty Therapy",
+          "price": "3999",
+          "parsedPrice": "4500",
+          "rtoCost": "1200 / 1250 / 1300",
+          "rto": "admin@colourcosmetica.com | info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "1J5ReQGM1sXy0yrXAVLt",
+              "formName": "RPL Assessment — SHB50121 Diploma of Beauty Therapy",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 0,
+              "attachedAt": "2025-08-24T15:16:39.236Z"
+            },
+            {
+              "formId": "LUyFQJ8yQyzGm3wo2hIs",
+              "formName": "RPL Assessment — SHB50121 Diploma of Beauty Therapy",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:45:44.837Z"
+            }
+          ]
+        },
+        {
+          "id": "yqlPR19sNZ3reTqsw2VQ",
+          "qualification": "SHB50216 Diploma of Salon Management",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "2Zt53G1IyXG96Vb2aIsu",
+              "formName": "SHB50216 Diploma of Salon Management - RPL Assessment",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T15:12:06.897Z"
+            },
+            {
+              "formId": "sKlMvZGbEp0DUyLfMUsC",
+              "formName": "SHB50216 Diploma of Salon Management - RPL Assessment",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:31:19.109Z"
+            }
+          ]
+        },
+        {
+          "id": "7t029DYxFeAlwH5pYRkn",
+          "qualification": "SHB60118 Advanced Diploma of Intense Pulsed Light and Laser for Hair Reduction",
+          "price": "4499",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        }
+      ]
+    },
+    {
+      "id": "1X67HbpeNLoTlGGlooER",
+      "name": "Building & Construction",
+      "description": "Skills training for construction, tiling, plumbing, and building project management.",
+      "qualifications": [
+        {
+          "id": "ckqQDHWp2TzLV9uJdhdR",
+          "qualification": "AHC30722 Certificate III in Horticulture",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "zyN32jXgoaKYnAOVH5LJ",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:23:17.825Z"
+            }
+          ]
+        },
+        {
+          "id": "t6vbnjuglTPRaJ7fkv72",
+          "qualification": "AHC30921 Certificate III in Landscape Construction",
+          "price": "4799",
+          "parsedPrice": "4800",
+          "rtoCost": "1550",
+          "rto": "info@oceaniaservices.com",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "hvlwVPWR8sdxqoaM41HM",
+              "formName": "AHC30921 Certificate III in Landscape Construction - RPL Self-Assessment Information Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:25:24.993Z"
+            },
+            {
+              "formId": "KynkQFPKhOCSMEaOVbxa",
+              "formName": "AHC30921 - Certificate III in Landscape Construction - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:26:40.015Z"
+            }
+          ]
+        },
+        {
+          "id": "BQlNGgr5z9yZr9naTWXl",
+          "qualification": "AHC40422 Certificate IV in Horticulture",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "awPxXX4d9gcjw54VNEt8",
+          "qualification": "AUR31220 Certificate III in Mobile Plant Technology",
+          "price": "5499",
+          "parsedPrice": "5500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "d0FkRy5S6NmlZQHvM3Ir",
+          "qualification": "BSB50820 Diploma of Project Management",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "550",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "aes"
+        },
+        {
+          "id": "JZVXAuHG1O8v0EDV5YoG",
+          "qualification": "CPC10126 Certificate I in Construction",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "MArlnD4hkRIWts2Y4oJp",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:34:39.156Z"
+            }
+          ]
+        },
+        {
+          "id": "uVbf3R3r3LYYXrZk4Vw5",
+          "qualification": "CPC30120 Certificate III in Shopfitting",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "attachedAt": "2025-08-24T15:19:49.998Z",
+              "filledBy": "user",
+              "formId": "7AuGTC5nw29RWcNl1tqR",
+              "displayOrder": 0,
+              "isRequired": true,
+              "formName": "CPC30120- Certificate III in Shopfitting"
+            },
+            {
+              "formName": "Competency Conversation CPC30120- Certificate III in Shopfitting",
+              "filledBy": "user",
+              "displayOrder": 2,
+              "formId": "mHsOGr9NlzVsz3nqFBhJ",
+              "isRequired": true,
+              "attachedAt": "2025-08-24T15:20:57.274Z"
+            },
+            {
+              "formId": "PUmnyGYBrEcZzhXxwCaj",
+              "filledBy": "user",
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T18:01:43.951Z",
+              "isRequired": true,
+              "formName": "Candidate RPL Guide CPC30120 Certificate III in Shopfitting_V5.0_July 2022 "
+            },
+            {
+              "isRequired": true,
+              "attachedAt": "2025-08-24T18:05:43.106Z",
+              "filledBy": "user",
+              "formName": "CPC30120- Certificate III in Shopfitting step 3",
+              "displayOrder": 2,
+              "formId": "Idkil5MzGvohUMIN2wqO"
+            },
+            {
+              "formId": "4BoJIwvL66QjGAvahkeB",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:36:47.704Z"
+            }
+          ]
+        },
+        {
+          "id": "cJxciFzMbbGZNJpXFzZ9",
+          "qualification": "CPC30220 Certificate III in Carpentry",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "675 / 750 / 800",
+          "rto": "enrolment@frontier.edu.au | info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "qtsqVIDZMmkcsBR37o28",
+              "formName": "RPL Pre-enrollment Information and Enrollment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:04:05.954Z"
+            },
+            {
+              "formId": "jO8CLYfArfdU0EG2l9vl",
+              "formName": "Record of Competency Conversation / Candidate Interview",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T20:05:20.778Z"
+            },
+            {
+              "formId": "kcCb68z7JQ85U72k5KTT",
+              "formName": "Third Party Report CPC30220 - Certificate III in Carpentry",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-08-24T20:06:43.422Z"
+            },
+            {
+              "formId": "ahahXLZLWcCAmqJqooEB",
+              "formName": "RPL Intake – CPC30220 Certificate III in Carpentry",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:27:55.100Z"
+            },
+            {
+              "formId": "HjpdHAUIIdjNTyfXgGhU",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T10:29:28.411Z"
+            },
+            {
+              "formId": "GKOw72VhT8I8j4J1A4QB",
+              "formName": "Step 1 – RPL Application Form\nCPC30220 - Certificate III in Carpentry",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T10:29:56.370Z"
+            },
+            {
+              "formId": "52ZMliUZ5aNSEonTCXJv",
+              "formName": "Step 2: RPL Self-Assessment information Kit - CPC30220 Certificate III in Carpentry",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 4,
+              "attachedAt": "2025-09-16T10:31:42.953Z"
+            },
+            {
+              "formId": "ZbWPmqvXEulPSqnS3y2r",
+              "formName": "CPC30220 - Certificate III in Carpentry - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:32:49.067Z"
+            }
+          ]
+        },
+        {
+          "id": "V94pFrk1x7gADvrr065L",
+          "qualification": "CPC30320 Certificate III in Concreting",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "675",
+          "rto": "enrolment@frontier.edu.au",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "Jgdu0fzwtsBHQkLobtFW",
+              "formName": "Candidate RPL Guide CPC30320 - Certificate III in Concreting",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T19:43:11.504Z"
+            },
+            {
+              "formId": "h8wxNqWcWgJryRNIBJwI",
+              "formName": " CPC30320 - Certificate III in Concreting Third Party Report",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T19:45:08.005Z"
+            },
+            {
+              "formId": "8tglHYAc4e67y1ptcwcr",
+              "formName": "RPL Intake – CPC30320 Certificate III in Concreting",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:37:35.611Z"
+            },
+            {
+              "formId": "41uzy5raWJ7H4zWC3ZG3",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T10:38:39.700Z"
+            }
+          ]
+        },
+        {
+          "id": "xYlYWTxRlaJ3S54bdZcI",
+          "qualification": "CPC30426 Certificate III in Demolition",
+          "price": "5299",
+          "parsedPrice": "5300",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "eDOfoN15XoWFiCCFRbXU",
+          "qualification": "CPC30620 Certificate III in Painting and Decorating",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "675 / 800",
+          "rto": "enrolment@frontier.edu.au | info@oceaniaservices.com",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "ZajPndKcqIHoTpzALDhq",
+              "formName": "RPL Intake – CPC30620 Certificate III in Painting and Decorating",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:43:27.413Z"
+            },
+            {
+              "formId": "w2S5ueAs3o1EIUmRCsYt",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T10:44:47.039Z"
+            },
+            {
+              "formId": "BCIAoe1924IA9BisNJ4c",
+              "formName": "CPC30620 Certificate III in Painting and Decorating - Step 1 RPL Application Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T10:45:24.848Z"
+            },
+            {
+              "formId": "um4bClRudeZnaoCsJkSx",
+              "formName": "Step 2 - RPL Self-Assessment Information Kit -CPC30620 - Certificate III in Painting and Decorating",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 4,
+              "attachedAt": "2025-09-16T10:46:44.061Z"
+            },
+            {
+              "formId": "eBeX55TTnWtz3uQFXr5D",
+              "formName": "CPC30620 Certificate III in Painting and Decorating - Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:47:57.606Z"
+            }
+          ]
+        },
+        {
+          "id": "GNHx1RHrm3Phl99zQ1ZN",
+          "qualification": "CPC30820 Certificate III in Roof Tiling",
+          "price": "6499",
+          "parsedPrice": "6500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "vETqhqlSZIwJNNXUcSnL",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:53:03.440Z"
+            },
+            {
+              "formId": "57fOObpE4IJl7g54gHYh",
+              "formName": "CPC30820 Certificate III in Roof Tiling - Step 1 RPL Application Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T10:55:15.025Z"
+            },
+            {
+              "formId": "bHkpp0wav1khtCrE0VrJ",
+              "formName": "CPC30820 Certificate III in Roof Tiling - Step 1 RPL Application Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T10:55:15.802Z"
+            },
+            {
+              "formId": "egw7UOz3iqcv2ayHdor8",
+              "formName": "CPC30820 - Certificate III in Roof Tiling - Step 2 - RPL Self-Assessment Information Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T10:56:03.651Z"
+            }
+          ]
+        },
+        {
+          "id": "pnGBu6YRGcldvrwdXjZO",
+          "qualification": "CPC30920 Certificate III in Scaffolding",
+          "price": "3699",
+          "parsedPrice": "3700",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "DjCeSY8oG8IUOz4ZAp3e",
+          "qualification": "CPC31020 Certificate III in Solid Plastering",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "AWK5l1Lu5ZckV1AyM2vz",
+              "formName": "CPC31020 Certificate III in Solid Plastering",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:58:45.064Z"
+            },
+            {
+              "formId": "UopLKQbU6ijkw6UQoFkV",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T10:59:47.319Z"
+            },
+            {
+              "formId": "UUsaqOGLmwlQbKCaFLiD",
+              "formName": "CPC31020 - Certificate III in Solid Plastering - Step 1 RPL Application Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T11:00:33.168Z"
+            },
+            {
+              "formId": "T1iOHJThZog1G7tWRz64",
+              "formName": "CPC31020 Certificate III in Solid Plastering - RPL Self-Assessment Information Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 4,
+              "attachedAt": "2025-09-16T11:00:58.388Z"
+            },
+            {
+              "formId": "o4NMB5sw8eRpf8XcmTZ7",
+              "formName": "CPC31020 - Certificate III in Solid Plastering - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:01:43.491Z"
+            }
+          ]
+        },
+        {
+          "id": "tp6YbCyheJKv5ErRWgqH",
+          "qualification": "CPC31220 Certificate III in Wall and Ceiling Lining",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": "1400",
+          "rto": "info@oceaniaservices.com",
+          "type": "educube"
+        },
+        {
+          "id": "poWLPCn8EtmJwzzfehej",
+          "qualification": "CPC31320 Certificate III in Wall and Floor Tiling",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": "800",
+          "rto": "info@oceaniaservices.com",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "qNO52Kdmi4mur5XwoOik",
+              "formName": "Cove Institute of Business & Trade Enrolment Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:54:25.243Z"
+            },
+            {
+              "formId": "uc4Xg8vUPsdr8MdZFW9A",
+              "formName": "Course Entry Interview Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:55:13.050Z"
+            },
+            {
+              "formId": "OP2HFZImn2wtcfHSNCdg",
+              "formName": "LLN Assessment_Cove Institute of Business & Trading",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T11:56:44.041Z"
+            }
+          ]
+        },
+        {
+          "id": "IV5khogEAYR6wdMYqbOi",
+          "qualification": "CPC31420 Certificate III in Construction Waterproofing",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "675",
+          "rto": "enrolment@frontier.edu.au",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "bOXNKOra689EvFLdPFhC",
+              "formName": "Candidate RPL Guide CPC31420 Certificate III in Waterproofing",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:12:45.673Z"
+            },
+            {
+              "formId": "YbzjK02MfzCuK5Lq4sqm",
+              "formName": "Third Party Report  CPC31420 - Certificate III in Construction Waterproofing",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T20:13:31.992Z"
+            },
+            {
+              "formId": "6n0M6REUWsKQ2517OFMQ",
+              "formName": "Third Party Report CPC31420 - Certificate III in Construction Waterproofing",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:58:54.759Z"
+            },
+            {
+              "formId": "WPErIy4HY03Zmc6ycDDM",
+              "formName": "Candidate RPL Guide CPC31420 Certificate III in Waterproofing",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:59:34.566Z"
+            },
+            {
+              "formId": "GiKFLBST7ThTYMYYjCIw",
+              "formName": "CPC31420 Certificate III in Construction Waterproofing",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:02:38.529Z"
+            },
+            {
+              "formId": "16NVGxMIoeiKSud933Lu",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T11:07:25.081Z"
+            }
+          ]
+        },
+        {
+          "id": "OPqF25Hz5ZqLH64Kon7d",
+          "qualification": "CPC31920 Certificate III in Joinery",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "IRV0zjnNlBwM6bpC6auc",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:08:24.837Z"
+            }
+          ]
+        },
+        {
+          "id": "Y6MdPRzyMeZycnjNvcKR",
+          "qualification": "CPC32320 Certificate III in Stonemasonry (Monumental/Installation)",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1800",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "uP5e6v8M6Zu91VTZ9Eab",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:09:57.340Z"
+            }
+          ]
+        },
+        {
+          "id": "EaXXCwCAZwG5XWF7ZE3O",
+          "qualification": "CPC32420 Certificate III in Plumbing",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "info@oceaniaservices.com",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "YB3AEYasCZSJFNIKj68q",
+              "formName": "CPC32420 Certificate III in Plumbing",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:10:46.883Z"
+            },
+            {
+              "formId": "G84sMHJGf1NV5edXjOsq",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T11:11:37.211Z"
+            },
+            {
+              "formId": "UD557CpB473EL8tAGPpc",
+              "formName": "CPC32420 Certificate III in Plumbing - Step 1 RPL Application Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T11:11:59.740Z"
+            },
+            {
+              "formId": "5Se2nmYhOmMMAxsNIaG7",
+              "formName": "CPC32420 - Certificate III in Plumbing - Step 2 - RPL Self-Assessment Information Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 4,
+              "attachedAt": "2025-09-16T11:15:32.257Z"
+            },
+            {
+              "formId": "UVEa4pBWP2BG5HlzmUVU",
+              "formName": "CPC32420 - Certificate III in Plumbing - Step 3 - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:16:07.826Z"
+            }
+          ]
+        },
+        {
+          "id": "NqPh8mmRywZ0cmYUMLBj",
+          "qualification": "CPC32620 Certificate III in Roof Plumbing",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": "1,400",
+          "rto": "info@oceaniaservices.com",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "3Fw4uSddFolY16foK1bW",
+              "formName": "CPC30820 - Certificate III in Roof Tiling - Step 3 - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T10:57:41.325Z"
+            },
+            {
+              "formId": "tNldTHNBZXeX3DMAs6Te",
+              "formName": "CPC32620 Certificate III in Roof Plumbing",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:16:53.745Z"
+            },
+            {
+              "formId": "q86WHvP0Y82vaFa2oFWX",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T11:17:38.293Z"
+            },
+            {
+              "formId": "zNSas6OIep6niGJQrXOm",
+              "formName": "CPC32620 Certificate III in Roof Plumbing - Step 1 RPL Application Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T11:18:07.958Z"
+            },
+            {
+              "formId": "GR8Z1UVUL1lULBaDXhvR",
+              "formName": "CPC32620 - Certificate III in Roof Plumbing - Step 2 - RPL Self-Assessment Information Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 4,
+              "attachedAt": "2025-09-16T11:18:29.127Z"
+            },
+            {
+              "formId": "Ez5ty87tUQ5tVUf624et",
+              "formName": "CPC32620 - Certificate III in Roof Plumbing - Step 3 - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:19:14.590Z"
+            }
+          ]
+        },
+        {
+          "id": "FqykJwQcAisg8uxot9gt",
+          "qualification": "CPC33020 Certificate III in Bricklaying/Blocklaying",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "675",
+          "rto": "enrolment@frontier.edu.au",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "WdcnfGKvZkjZtczLJtrW",
+              "formName": "RPL Pre-enrollment Information and Enrollment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T10:10:59.653Z"
+            },
+            {
+              "formId": "ezBWFqvFj4qjDpERh1JK",
+              "formName": "CPC33020 Certificate III in Bricklaying and Blocklaying - Third Party Report",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T10:11:20.568Z"
+            },
+            {
+              "formId": "TjWk0UTpDxQhMfc2A3YZ",
+              "formName": "RPL Pre-enrollment Information and Enrollment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T16:34:55.236Z"
+            },
+            {
+              "formId": "uACx2sqdZQGJoKVmg6zO",
+              "formName": "CPC33020 Certificate III in Bricklaying and Blocklaying - Third Party Report",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T17:09:33.317Z"
+            },
+            {
+              "formId": "VZAfshFpBz94nwiqkZWQ",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T07:43:53.058Z"
+            },
+            {
+              "formId": "B2PILnzZA5oSNsBFMJQa",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:21:04.015Z"
+            }
+          ]
+        },
+        {
+          "id": "YkiCtdDreaUAYvSWMTvI",
+          "qualification": "CPC40120 Certificate IV in Building and Construction (Building)",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "675 / 750 / 800",
+          "rto": "enrolment@frontier.edu.au | info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "XMvVEfi11DkpT2xxro6L",
+              "formName": "Candidate RPL Guide Step 1&2 Certificate IV in Building and Construction (Builder)",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T20:00:41.317Z"
+            },
+            {
+              "formId": "GcPbzd4PXJl2JwR26m8i",
+              "formName": "RPL Pre-enrollment Information and Enrollment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:02:13.590Z"
+            },
+            {
+              "formId": "K8mm9qJ3v9wUu1YDhREY",
+              "formName": "CPC40120 Certificate IV in Building and Construction",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:22:08.888Z"
+            },
+            {
+              "formId": "NjhCgVhI2t7x9tMnTrC8",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T11:23:13.961Z"
+            },
+            {
+              "formId": "KPFCOWvpumYg33VvrzCh",
+              "formName": "CPC40120 Certificate IV in Building and Construction - Step 1 RPL Application Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T11:24:07.636Z"
+            },
+            {
+              "formId": "qyn9ofYkyLfNcvnKjmD4",
+              "formName": "Step 2: RPL Self-Assessment information Kit - Certificate IV in building and construction",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 14,
+              "attachedAt": "2025-09-16T11:24:45.956Z"
+            },
+            {
+              "formId": "6A3NssuHHs6LpgVF3bZH",
+              "formName": "Step 2: RPL Self-Assessment information Kit - Certificate IV in building and construction",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 4,
+              "attachedAt": "2025-09-16T11:24:49.873Z"
+            },
+            {
+              "formId": "PBu41aLh0yk7vAsYGJii",
+              "formName": "CPC40120 - Certificate IV in Building and Construction - Step 5 - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:28:51.506Z"
+            }
+          ]
+        },
+        {
+          "id": "lQIkSoOoYBG9BjfyQTvF",
+          "qualification": "CPC40920 Certificate IV in Plumbing and Services",
+          "price": "4499",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "6289oRhwtuMnQ9PXvLsy",
+              "formName": "CPC40920 Certificate IV in Plumbing and Services",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T12:13:22.326Z"
+            },
+            {
+              "formId": "aysDppUjQso6If6iVryW",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T12:13:50.206Z"
+            },
+            {
+              "formId": "z14a5YL8pg0wG8fk5oGC",
+              "formName": "Step 1 – RPL Application Form CPC40920 - Certificate IV in Plumbing and Services (Operations)",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T12:15:31.617Z"
+            },
+            {
+              "formId": "URkIULWYnYkrCEhjbhlt",
+              "formName": "CPC40920 - Certificate IV in Plumbing and Services (Operations) - Step 2 - RPL Self-Assessment Information Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 4,
+              "attachedAt": "2025-09-16T12:16:07.883Z"
+            },
+            {
+              "formId": "oqGDAWBoNvpFLE6DsL2S",
+              "formName": "CPC40920 - Certificate IV in Plumbing and Services (Operations) - Step 3 - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T12:16:39.860Z"
+            }
+          ]
+        },
+        {
+          "id": "PKn1SGGxWsL5ZkvubAPw",
+          "qualification": "CPC41020 Certificate IV in Demolition",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "1KrQARgYFYag6VdiOM92",
+              "formName": "RPL Pre-enrollment Information and Enrollment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T20:15:04.791Z"
+            }
+          ]
+        },
+        {
+          "id": "qbchvJZCuj5GORRZtPg9",
+          "qualification": "CPC50220 Diploma of Building and Construction (Building)",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "31vptGeOxNvcLRKFfAwE",
+              "formName": "CPC50220 Diploma of Building and Construction (Building)",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:33:45.605Z"
+            },
+            {
+              "formId": "NcaAYMGXDoknxArjFHG6",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T11:34:57.151Z"
+            },
+            {
+              "formId": "E21bBNaxYF9jaEym757R",
+              "formName": "CPC50220 – Diploma of Building and Construction (Building) - Step 1 RPL Application Form",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T11:35:32.939Z"
+            },
+            {
+              "formId": "tpnAsaWflF4WRDLyAmg4",
+              "formName": "CPC50220 - Diploma of Building and Construction (Building) - RPL Third Party Evidence Kit",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:36:10.846Z"
+            }
+          ]
+        },
+        {
+          "id": "zc7nKMgsJvBmLznoWSPa",
+          "qualification": "CPC60121 Advanced Diploma of Building Surveying",
+          "price": "20999",
+          "parsedPrice": "21000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "9cAYcrhecOO5bxBGjv1A",
+          "qualification": "CPC60220 Advanced Diploma of Building and Construction (Management)",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "awFlfsCFYqY8Ny0Tygts",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:37:42.103Z"
+            }
+          ]
+        },
+        {
+          "id": "1kffavZqfLZ3DyC8quqm",
+          "qualification": "CPP30119 Certificate III in Urban Pest Management",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "dgwZg6GkoAVBCoKGhjQ1",
+              "formName": "Sohaib",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T00:20:28.403Z"
+            },
+            {
+              "formId": "NptM1t2xHSTcGfoYMU6V",
+              "formName": "cocomo",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 0,
+              "attachedAt": "2025-08-24T21:02:07.465Z"
+            },
+            {
+              "formId": "CpZrylSQqhxxYqq2UhgF",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:38:25.450Z"
+            }
+          ]
+        },
+        {
+          "id": "AYMIur2c0qLmEIVeI8y5",
+          "qualification": "CPP40421 Certificate IV in Cleaning",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "IDdTsPEk8VC4jS6HSe0b",
+          "qualification": "CPP80221 Graduate Diploma of Building Design",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "tJsZU9Fnoo3am3ky6BHq",
+          "qualification": "MEM30219 Certificate III in Engineering (Mechanical Trade)",
+          "price": "4299",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "dDCJA9mr1a7uGhdv6L3K",
+          "qualification": "MEM31925 Certificate III in Engineering - Fabrication Trade",
+          "price": "4299",
+          "parsedPrice": "4300",
+          "rtoCost": "1,600",
+          "rto": "info@oceaniaservices.com",
+          "type": "default",
+          "attachedForms": [
+            {
+              "formId": "YDxtPVfdcAqNxXy2aZXx",
+              "formName": "RPL Pre-enrollment Information and Enrollment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 0,
+              "attachedAt": "2025-08-24T15:07:49.577Z"
+            },
+            {
+              "formId": "ulFqz16LSz6SW9UMmF6k",
+              "formName": "Third Party Report",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T15:08:36.818Z"
+            },
+            {
+              "formId": "NY60fQ4WfIGIBLEmq0uD",
+              "formName": "Candidate RPL Guide",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T17:38:21.411Z"
+            },
+            {
+              "formId": "vxYSvP1Ba1dvqTIbcuqq",
+              "formName": "Third Party Report",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T17:39:13.543Z"
+            },
+            {
+              "formId": "zoQ4zPPtJJbImD9mDWBx",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:39:20.857Z"
+            }
+          ]
+        },
+        {
+          "id": "7ujhWJANVXektOzjIMDa",
+          "qualification": "MEM40119 Certificate IV in Engineering",
+          "price": "5499",
+          "parsedPrice": "5500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube",
+          "attachedForms": []
+        },
+        {
+          "id": "UHgQaI0yv7u6NJ0aRcsg",
+          "qualification": "MSF30322 Certificate III in Cabinet Making and Timber Technology",
+          "price": "4999",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "default",
+          "attachedForms": [
+            {
+              "formId": "isAYfC4m8PGwKcFetcSX",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:41:35.904Z"
+            },
+            {
+              "formId": "ruJU6aaBmTKT1rMXwF97",
+              "formName": "Step 1 – RPL Application Form MSF30322 - Certificate III in Cabinet Making and Timber Technology",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-09-16T11:42:07.877Z"
+            },
+            {
+              "formId": "cgY8w7WR6TEcFwPbwoyi",
+              "formName": "MSF30322 Certificate III in Cabinet Making and Timber Technology - RPL Self-Assessment Information Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-09-16T11:43:10.440Z"
+            },
+            {
+              "formId": "VnoPqUFyKDEL5m4tR969",
+              "formName": "MSF30322 Certificate III in Cabinet Making and Timber Technology - RPL Self-Assessment Information Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 4,
+              "attachedAt": "2025-09-16T11:43:48.176Z"
+            }
+          ]
+        },
+        {
+          "id": "ZmUD4aV04BLCvNk69gav",
+          "qualification": "MSF30422 Certificate III in Glass and Glazing",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "675",
+          "rto": "enrolment@frontier.edu.au",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "ytCwT7CUXxFTbIoyROWG",
+              "formName": " MSF30422 Certificate III in Glass and Glazing step  1 ,2",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T18:08:42.563Z"
+            },
+            {
+              "formId": "g6rZFPT9ZzZr0QeMDFYV",
+              "formName": " MSF30422 Certificate III in Glass and Glazing step 3",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T18:09:16.129Z"
+            },
+            {
+              "formId": "xk5SLazrb9zWYSBtyRhV",
+              "formName": "RPL Enrolment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-09-16T11:40:25.412Z"
+            }
+          ]
+        },
+        {
+          "id": "cpdR7dcQEUZTTJDU4h8h",
+          "qualification": "RII30820 Certificate III in Civil Construction Plant Operations",
+          "price": "4499",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "dsBCcrqR5JMvUJwVAsEG",
+          "qualification": "RII30920 Certificate III in Civil Construction",
+          "price": "4499",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "QKpehUtx5uGu273VgvXQ",
+          "qualification": "RII30920 Certificate III in Civil Construction ",
+          "price": "4499",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "W7eHhecL1ttaSfSFCG0N",
+          "qualification": "UEE32220 Certificate III in Air Conditioning and Refrigeration",
+          "price": "12499",
+          "parsedPrice": "12500",
+          "rtoCost": "6,000",
+          "rto": "admin@allskillscollege.com.au",
+          "type": "educube"
+        }
+      ]
+    },
+    {
+      "id": "2m7XWRBIXaoHEUnE6Hiy",
+      "name": "Business",
+      "description": "Programs in management, entrepreneurship, health and safety, human resources, and auditing.",
+      "qualifications": [
+        {
+          "id": "xS6IAmH3jCg2sTv2pKc3",
+          "qualification": "BSB30120 Certificate III in Business",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "500",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "educube"
+        },
+        {
+          "id": "Cr4BpQYgJ5npTUpNRss6",
+          "qualification": "BSB40120 Certificate IV in Business",
+          "price": "3499",
+          "parsedPrice": "3500",
+          "rtoCost": "500",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "educube"
+        },
+        {
+          "id": "ypZJ4LuE27AQGyH5DCQl",
+          "qualification": "BSB40320 Certificate IV in Entrepreneurship and New Business",
+          "price": "1000",
+          "parsedPrice": "",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "llOcrM502cPYDBHXk2RN",
+          "qualification": "BSB40520 Certificate IV in Leadership and Management",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "sMhWLxoESy4wljNnMeAj",
+          "qualification": "BSB40820 Certificate IV in Marketing and Communication",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "600",
+          "rto": "info@oceaniaservices.com",
+          "type": "default"
+        },
+        {
+          "id": "5zTtOKh0KQdxBJmsTTFT",
+          "qualification": "BSB41419 Certificate IV in Work Health and Safety",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "600",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "educube"
+        },
+        {
+          "id": "cgUFSetO8nc4HrcYp7rC",
+          "qualification": "BSB50120 Diploma of Business",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "600",
+          "rto": "info@oceaniaservices.com",
+          "type": "educube"
+        },
+        {
+          "id": "RIrUwZ890IDwQgVKJu9X",
+          "qualification": "BSB50320 Diploma of Human Resource Management",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "82P9rIXQfQ1QVYjRnvCM",
+          "qualification": "BSB50420 Diploma of Leadership and Management",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "550",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "aes",
+          "attachedForms": [
+            {
+              "formId": "bY3mXU4nfvHnmrohtgaA",
+              "formName": "Candidate RPL Guide BSB50420 - Diploma of Leadership and Management",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T19:47:51.357Z"
+            },
+            {
+              "formId": "0mACFe4JctE0WyhefV94",
+              "formName": "Third Party Report BSB50420 - Diploma of Leadership and Management",
+              "filledBy": "third_party",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T19:48:48.061Z"
+            },
+            {
+              "formId": "Phu3UDM49YbBpBpBX8OW",
+              "formName": "Competency Conversation  BSB50420 - Diploma of Leadership and Management",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T19:51:01.129Z"
+            }
+          ]
+        },
+        {
+          "id": "lyF9xMsCwrqf1trsTttv",
+          "qualification": "BSB50620 Diploma of Marketing and Communication",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "OlzvEZSNYzfhCRz22U5J",
+          "qualification": "BSB50920 Diploma of Quality Auditing",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "UF0AzORbz8gU8mGtDeEG",
+          "qualification": "BSB51319 Diploma of Work Health and Safety",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "PJfsAC6xWUcm3aOpZt2Q",
+          "qualification": "BSB60120 Advanced Diploma of Business",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "600",
+          "rto": "info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "tn3qlql1NHJAPTdglZmt",
+          "qualification": "BSB60420 Advanced Diploma of Leadership and Management",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "600",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "educube",
+          "attachedForms": [
+            {
+              "formId": "USl7iku6t3Fi7vGqOi0V",
+              "formName": "Candidate RPL Guide BSB60420 Advanced Diploma of Leadership and Management step 3",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 2,
+              "attachedAt": "2025-08-24T18:19:32.457Z"
+            },
+            {
+              "formId": "5BHxUEWABAbmRJozcuv8",
+              "formName": "Candidate RPL Guide BSB60420 Advanced Diploma of Leadership and Management step 4 5 6",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 3,
+              "attachedAt": "2025-08-24T18:20:31.257Z"
+            }
+          ]
+        },
+        {
+          "id": "q4BKvGiycJKPLUOWXwxC",
+          "qualification": "BSB60520 Advanced Diploma of Marketing and Communication",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "Ophe3M6FkbFUvleRmgE7",
+          "qualification": "BSB60619 Advanced Diploma of Work Health and Safety",
+          "price": "3999",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "MDMX83iCcRm1zvYR6btF",
+          "qualification": "BSB80120 Graduate Diploma of Management (Learning)",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "800",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "aes"
+        },
+        {
+          "id": "JkHeKbKrixAMdb78ZVVx",
+          "qualification": "BSB80220 Graduate Diploma of Portfolio Management",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "mFWhLj6KVfaEwRIBkYmK",
+          "qualification": "BSB80320 Graduate Diploma of Strategic Leadership",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1500 / 1000",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "educube"
+        },
+        {
+          "id": "NWJYhPxoGP4BlPO8Vj6P",
+          "qualification": "TLI30321 Certificate III in Supply Chain Operations",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        }
+      ]
+    },
+    {
+      "id": "6kkxdatyrNK1em9cT5h2",
+      "name": "Community Services",
+      "description": "Courses focused on early childhood education, support, mental health, and social work.",
+      "qualifications": [
+        {
+          "id": "4jhPOXSrv75Zt4cuRPgl",
+          "qualification": "CHC30121 Certificate III in Early Childhood Education and Care",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "750 / 600",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "educube"
+        },
+        {
+          "id": "3S7SiKrZQZP4val07EkB",
+          "qualification": "CHC30221 Certificate III in School Based Education Support",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "qIiB3muBxLbguL1he9ei",
+          "qualification": "CHC33021 Certificate III in Individual Support",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "350",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "La4OmITGSQK41BtX58jJ",
+          "qualification": "CHC40221 Certificate IV in School Based Education Support",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "VWJ2k1LIaO90GCsdtLPR",
+          "qualification": "CHC42021 Certificate IV in Community Services",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "350",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "default"
+        },
+        {
+          "id": "gRtVjI7nv7yuNl8LGC8H",
+          "qualification": "CHC43015 Certificate IV in Ageing Support",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "350",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "lC3Ibl6E9eY4xzSss65u",
+          "qualification": "CHC43121 Certificate IV in Disability Support",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "350",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "SOT5qn8j27mqPIikQdoz",
+          "qualification": "CHC43315 Certificate IV in Mental Health",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "1000 / 1400",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "JKySlLZGGyFn8UpusJUH",
+          "qualification": "CHC50121 Diploma of Early Childhood Education and Care",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "751 / 600",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "q4Z2aqsQaPkk3wpiV3hY",
+          "qualification": "CHC50421 Diploma of Youth Work",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "up9a09Dytq72iWEeVw0V",
+          "qualification": "CHC51015 Diploma of Counselling",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "Y5fDFqfX1Ll9G2jCNWBk",
+          "qualification": "CHC52021 Diploma of Community Services",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "350",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "default"
+        },
+        {
+          "id": "N9QXbaljgZCigAGPmb0h",
+          "qualification": "CHC53315 Diploma of Mental Health",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "1500",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "aes"
+        },
+        {
+          "id": "fpMllxcXd9HhH4bDWM01",
+          "qualification": "CHC62015 Advanced Diploma of Community Sector Management",
+          "price": "3999",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "fZjVWl0cIvtTGEMt2cFZ",
+          "qualification": "CPP40521 Certificate IV in Strata Community Management",
+          "price": "3999",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        }
+      ]
+    },
+    {
+      "id": "sSFVfTqXnzmGwupMTgnz",
+      "name": "Electrical",
+      "description": "Qualifications in electrical technology, with a focus on electrotechnology for electricians.",
+      "qualifications": [
+        {
+          "id": "83l8Wsf6ZNik3VFrvthr",
+          "qualification": "UEE30820 Certificate III in Electrotechnology Electrician",
+          "price": "18998",
+          "parsedPrice": "15500",
+          "rtoCost": "10,000",
+          "rto": "admin@allskillscollege.com.au",
+          "type": "educube"
+        }
+      ]
+    },
+    {
+      "id": "MNRc2Q0dmELjqMnOIKrY",
+      "name": "Finance & Accounting",
+      "description": "Training in accounting, bookkeeping, mortgage broking, and financial services.",
+      "qualifications": [
+        {
+          "id": "jeKeHVFXBFRe059Ji6ny",
+          "qualification": "FNS30122 Certificate III in Financial Services",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "SYfeaA7542eRINr2skF1",
+          "qualification": "FNS40222 Certificate IV in Accounting and Bookkeeping",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "600",
+          "rto": "info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "1XIkhXcIzsruMExQehZM",
+          "qualification": "FNS40821 Certificate IV in Finance and Mortgage Broking",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1250 / 1200",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "educube"
+        },
+        {
+          "id": "Xw2WJssAFFpTNp2n6GkA",
+          "qualification": "FNS50222 Diploma of Accounting",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "ngFr2QNGXTw7ZaFxXyhF",
+          "qualification": "FNS50322 Diploma of Finance and Mortgage Broking Management",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1750 / 1400",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "YzC6bocrAHad3aPR9k4A",
+          "qualification": "FNS51822 Diploma of Financial Services",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        }
+      ]
+    },
+    {
+      "id": "xIR4rNWtj1k1bdpGJgpG",
+      "name": "Fitness & Allied Health",
+      "description": "Programs in fitness, allied health assistance, health services, and leisure and health.",
+      "qualifications": [
+        {
+          "id": "FedkEm8lgAxZAYNIQNmg",
+          "qualification": "CHC43415 Certificate IV in Leisure and Health",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "Qb6bm45xOovc4Mi7hIo1",
+          "qualification": "HLT33115 Certificate III in Health Services Assistance",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "fL9xooXEOdzBjvKZd4BE",
+          "qualification": "SIS30321 Certificate III in Fitness",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1300",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "aes"
+        },
+        {
+          "id": "WC5MF86FEpWSJsDN1e4D",
+          "qualification": "SIS30521 Certificate III in Sport Coaching",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "9tggZCFJuSUzkjm5MLYX",
+          "qualification": "SIS40221 Certificate IV in Fitness",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1300",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "aes"
+        }
+      ]
+    },
+    {
+      "id": "3ACEjjr0egnXLiDp4NDg",
+      "certifications": [],
+      "name": "Hospitality",
+      "description": "",
+      "qualifications": [
+        {
+          "id": "LdXvztsQJmNj3dbx4Ppt",
+          "qualification": "AMP30815 Certificate III in Meat Processing (Retail Butcher)",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "9XD7Ab4gLrQUej8Swt1j",
+          "qualification": "FBP30521 Certificate III in Baking",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1450",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "educube"
+        },
+        {
+          "id": "MAXXAVqhF7oIKJU7Wzai",
+          "qualification": "SIT20421 Certificate III in Asian Cookery",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "3irVDDCABeC5kI5UZIut",
+          "qualification": "SIT30622 Certificate III in Hospitality",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "8iJsi01UJxSGcXA1QDRb",
+          "qualification": "SIT30821 Certificate III in Commercial Cookery",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "550 / 600",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "E3kKMMPIejyuFGWnzyop",
+          "qualification": "SIT31021 Certificate III in Patisserie",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1750",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "educube"
+        },
+        {
+          "id": "Ro9eu0aL9FUlTNzzSF2y",
+          "qualification": "SIT40422 Certificate IV in Hospitality",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "MwNjOr9cfxQKyFikhDk3",
+          "qualification": "SIT40521 Certificate IV in Kitchen Management",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "550 / 600",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "default",
+          "attachedForms": [
+            {
+              "formId": "pTUnNX2Vma9MjSLUeYtE",
+              "formName": "RPL Pre-enrollment Information and Enrollment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 0,
+              "attachedAt": "2025-08-24T15:09:16.217Z"
+            },
+            {
+              "formId": "PtFCcg1XotPGowlKjGEw",
+              "formName": "RPL Pre-enrollment Information and Enrollment Kit",
+              "filledBy": "user",
+              "isRequired": true,
+              "displayOrder": 1,
+              "attachedAt": "2025-08-24T17:48:18.212Z"
+            }
+          ]
+        },
+        {
+          "id": "RBmoTdrcqp95gF5E1vl0",
+          "qualification": "SIT40721 Certificate IV in Patisserie",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "1750",
+          "rto": "info@lumieresolutions.com.au",
+          "type": "educube"
+        },
+        {
+          "id": "Ey6j9qHjGzvBq9juQ5JV",
+          "qualification": "SIT40821 Certificate IV in Asian Cookery",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "R6PVIQWAN4ClK0WFWman",
+          "qualification": "SIT50322 Diploma of Event Management",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "hwA8yqvKKx3XV6sjdsBB",
+          "qualification": "SIT50422 Diploma of Hospitality Management",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "550 / 600",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "aes"
+        },
+        {
+          "id": "W1AdSK2T99zrz0HRcbkm",
+          "qualification": "SIT60322 Advanced Diploma of Hospitality Management",
+          "price": "3999",
+          "parsedPrice": "4000",
+          "rtoCost": "750 / 600",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "default"
+        }
+      ]
+    },
+    {
+      "id": "U5I39et7tk9qITTNkS1u",
+      "name": "Information & Communications Technology",
+      "description": "Courses in IT, telecommunications, and related technology fields.",
+      "qualifications": [
+        {
+          "id": "BrjaIbYyNqbRtleX6bKX",
+          "qualification": "ICT30519 Certificate III in Telecommunications Technology",
+          "price": "4499",
+          "parsedPrice": null,
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        },
+        {
+          "id": "WmV6v04jfGGO3ovSbJKI",
+          "qualification": "ICT50220 Diploma of Information Technology",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "675",
+          "rto": "enrolment@frontier.edu.au",
+          "type": "educube"
+        },
+        {
+          "id": "ht5yDW70ido08kXCSlqR",
+          "qualification": "ICT60220 Advanced Diploma of Information Technology",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "default"
+        }
+      ]
+    },
+    {
+      "id": "EYdj4BjFxRGVpxplbZWA",
+      "certifications": [],
+      "name": "Media and Marketing",
+      "description": "Media and Marketing\n",
+      "qualifications": [
+        {
+          "id": "1TblqcUlUjQrmXYNEJEW",
+          "qualification": "CUA41220 Certificate IV in Screen and Media",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "default"
+        },
+        {
+          "id": "AgSLdWYrpOZsGznrTMFT",
+          "qualification": "CUA51020 Diploma of Screen and Media",
+          "price": "4499",
+          "parsedPrice": "4500",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
+          "type": "default"
+        }
+      ]
+    },
+    {
+      "id": "ctXHIreDNw1ABjDeXHk0",
+      "name": "Real Estate",
+      "description": "Certifications for property management, agency management, and strata community management.",
+      "qualifications": [
+        {
+          "id": "uoKwQjGNvpNwEv6ggRhi",
+          "qualification": "CPP40521 Certificate IV in Strata Community Management",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "7nFGvHw77NSi7amVAm9q",
+          "qualification": "CPP41419 Certificate IV in Real Estate Practice",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": "1,000 / 1,100",
+          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "type": "default"
+        },
+        {
+          "id": "jsaUnzGzx3Q5bc7bSE8Q",
+          "qualification": "CPP51122 Diploma of Property (Agency Management)",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": "1,400",
+          "rto": "info@oceaniaservices.com",
+          "type": "aes"
+        }
+      ]
+    },
+    {
+      "id": "znQvDYdlKqgjQ2SD0zmV",
+      "name": "Security Management",
+      "description": "Training for security risk analysis, risk management, and related fields.",
+      "qualifications": [
+        {
+          "id": "Xueta7JNTsxVyeEVq96b",
+          "qualification": "CPP41519 Certificate IV in Security Risk Analysis",
+          "price": "3499",
+          "parsedPrice": "3500",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        },
+        {
+          "id": "xo7IVaAerf4y7rn11qn5",
+          "qualification": "CPP50619 Diploma of Security Risk Management",
+          "price": "1000",
+          "parsedPrice": "",
+          "rtoCost": null,
+          "rto": null,
+          "type": "aes"
+        }
+      ]
+    },
+    {
+      "id": "dWO7UypUCI5mDSawFmRh",
+      "name": "Training & Education",
+      "description": "Certifications for trainers and educators in vocational education and training.",
+      "qualifications": [
+        {
+          "id": "7P7wIvlg5Xhwr4eNqwby",
+          "qualification": "TAE40122 Certificate IV in Training and Assessment",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        },
+        {
+          "id": "v1ysA4DkiTE219eb3yyQ",
+          "qualification": "TAE50122 Diploma of Vocational Education and Training",
+          "price": "4999",
+          "parsedPrice": "5000",
+          "rtoCost": null,
+          "rto": null,
+          "type": "educube"
+        }
+      ]
+    },
+    {
+      "id": "K9OODytwnj9ahQ31c3m2",
+      "name": "Travel and Tourism",
+      "description": "Courses in travel, tourism, and management within the hospitality and travel industries.",
+      "qualifications": []
+    }
+  ],
+  "orphaned": [
+    {
+      "id": "gN03d2f1ybuYoDesd6k3",
+      "qualification": "MEM30219 Certificate III in Engineering - Mechanical Trade",
+      "price": "3500",
+      "parsedPrice": null,
+      "rtoCost": null,
+      "rto": null,
+      "type": "default",
+      "industryID": "1X67HbpeNLoTlGGlooER",
+      "industryId": null
+    }
+  ]
+}
