@@ -2,29 +2,45 @@ const crypto = require('crypto');
 const AppError = require('../utils/AppError');
 const Payment = require('../models/Payment');
 
-const verifySquareWebhookSignature = ({ rawBody, signature, webhookUrl }) => {
+const timingSafeCompare = (expected, provided) => {
+  const expectedBuffer = Buffer.from(expected);
+  const providedBuffer = Buffer.from(provided);
+
+  return (
+    expectedBuffer.length === providedBuffer.length &&
+    crypto.timingSafeEqual(expectedBuffer, providedBuffer)
+  );
+};
+
+const verifySquareWebhookSignature = ({
+  rawBody,
+  signature,
+  legacySignature,
+  webhookUrl,
+}) => {
   const secret = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
 
   if (!secret) {
     throw new AppError('SQUARE_WEBHOOK_SIGNATURE_KEY is not configured', 500);
   }
 
-  if (!signature) {
+  if (!signature && !legacySignature) {
     throw new AppError('Missing Square webhook signature', 401);
   }
 
+  const signedPayload = webhookUrl + rawBody;
+
+  // Current Square subscriptions sign with HMAC-SHA256 (x-square-hmacsha256-signature).
+  // Legacy subscriptions still send HMAC-SHA1 (x-square-signature).
+  const algorithm = signature ? 'sha256' : 'sha1';
+  const provided = signature || legacySignature;
+
   const expectedSignature = crypto
-    .createHmac('sha1', secret)
-    .update(webhookUrl + rawBody)
+    .createHmac(algorithm, secret)
+    .update(signedPayload)
     .digest('base64');
 
-  const expectedBuffer = Buffer.from(expectedSignature);
-  const providedBuffer = Buffer.from(signature);
-
-  if (
-    expectedBuffer.length !== providedBuffer.length ||
-    !crypto.timingSafeEqual(expectedBuffer, providedBuffer)
-  ) {
+  if (!timingSafeCompare(expectedSignature, provided)) {
     throw new AppError('Invalid Square webhook signature', 401);
   }
 

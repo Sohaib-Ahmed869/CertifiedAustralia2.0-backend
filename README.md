@@ -43,14 +43,15 @@ node scripts/backfill-app-source.js  # Backfill marketing source attribution on 
 | `SQUARE_ENV` | Square environment (sandbox/production) |
 | `SQUARE_ACCESS_TOKEN` | Square API token |
 | `SQUARE_LOCATION_ID` | Square location ID |
-| `SQUARE_WEBHOOK_SIGNATURE_KEY` | Webhook HMAC key |
+| `SQUARE_WEBHOOK_SIGNATURE_KEY` | Webhook signature key (from the Square subscription) |
+| `SQUARE_WEBHOOK_URL` | Exact notification URL registered in Square, used for signature verification |
 | `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` | Path to Google service account JSON |
 | `GOOGLE_DRIVE_FOLDER_ID` | Root Drive folder for uploads |
 | `XERO_CLIENT_ID` | Xero OAuth2 client ID |
 | `XERO_CLIENT_SECRET` | Xero OAuth2 client secret |
 | `XERO_REDIRECT_URI` | Xero OAuth2 callback URL |
 | `OPENAI_API_KEY` | OpenAI API key (chatbot + embeddings) |
-| `APP_BASE_URL` | Application base URL |
+| `APP_BASE_URL` | Frontend base URL (used to build links in emails) |
 | `SMTP_HOST` | SMTP server host |
 | `SMTP_PORT` | SMTP server port |
 | `SMTP_USER` | SMTP username |
