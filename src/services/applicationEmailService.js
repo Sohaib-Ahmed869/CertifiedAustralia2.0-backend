@@ -10,11 +10,16 @@
  * All functions return { success: true | false }.
  */
 
+const path = require('path');
+
 const {
   buildEmail,
   sendEmail,
   heading2,
+  heading3,
   paragraph,
+  bulletList,
+  numberedList,
   greeting,
   signOff,
   buttonGroup,
@@ -42,6 +47,18 @@ const ADMIN_EMAIL =
   process.env.ADMIN_NOTIFICATION_EMAIL || 'info@certifiedaustralia.com.au';
 
 const CEO_EMAIL = process.env.CEO_EMAIL || 'ceo@certifiedaustralia.com.au';
+
+const { SIGNUP_DISCOUNT_AMOUNT } = require('../config/pricing');
+
+// ASQA Fact Sheet for Students attached to the welcome email — required for RPL compliance.
+const ASQA_FACT_SHEET = {
+  filename: 'Fact Sheet for Students - Recognition of Prior Learning.pdf',
+  path: path.join(
+    __dirname,
+    '../../docs/Fact Sheet for Students - Recognition of Prior Learning.pdf'
+  ),
+  contentType: 'application/pdf',
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -113,47 +130,256 @@ const statusTable = (rows) =>
 
 /**
  * Sent when a student self-registers.
+ *
+ * Content is compliance-critical: the pricing/discount breakdown, evidence
+ * requirements, gap training notice, scope-of-role disclaimer and the attached
+ * ASQA Fact Sheet must all be present. Do not trim sections.
+ *
  * @param {{ firstName: string, email: string }} student
- * @param {{ applicationId: string }} application
+ * @param {{ applicationId: string, qualificationId?: any, qualificationName?: string, price?: number }} application
  */
 const sendWelcomeEmail = async (student, application) => {
   try {
-    const dashboardUrl = `${BASE_URL}/student/dashboard`;
+    const paymentUrl = `${BASE_URL}/student/payments`;
+
+    // Resolve qualification name + price for the details table. The caller may have
+    // hydrated them already; otherwise look them up from the qualification.
+    let qualificationName = application.qualificationName;
+    let price = application.price;
+
+    if ((!qualificationName || price == null) && application.qualificationId) {
+      const Qualification = require('../models/Qualification');
+      const qual = await Qualification.findById(application.qualificationId)
+        .select('name caPrice')
+        .lean();
+      if (qual) {
+        qualificationName = qualificationName || qual.name;
+        price = price != null ? price : qual.caPrice;
+      }
+    }
+
+    const money = (amount) => `$${Number(amount).toLocaleString()}`;
+    const hasPricing = price != null && !Number.isNaN(Number(price));
+
+    // Use the discount actually recorded on the application (authService writes the
+    // signup discount at registration). Fall back to the standard amount only if the
+    // caller passed an application without its discounts array.
+    const discountTotal = Array.isArray(application.discounts)
+      ? application.discounts.reduce((sum, d) => sum + (d.amount || 0), 0)
+      : SIGNUP_DISCOUNT_AMOUNT;
+    const hasDiscount = discountTotal > 0;
+    const discountedPrice = hasPricing
+      ? Math.max(0, Number(price) - discountTotal)
+      : null;
 
     const body =
       greeting(student.firstName) +
-      heading2('Welcome to the Certified Australia RPL Portal!') +
+      heading2('Welcome to Certified Australia!') +
       paragraph(
-        'Congratulations on taking the first step towards getting your skills officially recognised. ' +
-        'Our Recognised Prior Learning (RPL) process assesses the knowledge and experience you have ' +
-        'already gained through work and life — and converts it into a nationally recognised qualification.'
+        "We're thrilled to see you taking this important step in your career journey &#127881; " +
+        'Your registration has been successfully completed.'
       ) +
-      paragraph(
-        `Your application reference is <strong>${application.applicationId}</strong>. ` +
-        'Keep this handy for any correspondence with our team.'
-      ) +
-      infoCard('Getting Started — Your Next Steps', [
-        'Log in to your student portal to view your application dashboard.',
-        'Complete your Student Intake Form (SIF) so we can understand your background.',
-        'Upload supporting documents (certificates, references, employment evidence).',
-        'Finalise your payment to progress your application to assessment.',
-        'Our team will guide you every step of the way.',
+      detailsTable('Your Application Details', [
+        { label: 'Application ID', value: application.applicationId },
+        { label: 'Qualification', value: qualificationName || '&mdash;' },
+        ...(hasPricing && hasDiscount
+          ? [
+              {
+                label: 'Usual Price',
+                value: `<span style="text-decoration:line-through;color:#888;">${money(price)}</span>`,
+              },
+              {
+                label: 'Discount',
+                value: `<span style="color:#0a9d42;font-weight:700;">- ${money(discountTotal)} &#127881;</span>`,
+              },
+              {
+                label: 'New Cost',
+                value: `<span style="color:#0a9d42;font-weight:700;font-size:16px;">${money(discountedPrice)}</span>`,
+              },
+            ]
+          : []),
+        ...(hasPricing && !hasDiscount
+          ? [{ label: 'Price', value: money(price) }]
+          : []),
       ]) +
       paragraph(
-        'If you have any questions at any time, use the <strong>Support</strong> section inside the portal or reply to this email.'
+        'Thank you for taking the next step toward formal recognition of your skills and experience.'
       ) +
-      buttonGroup({ text: 'Go to Dashboard', url: dashboardUrl }) +
+      buttonGroup({ text: 'Make Payment & Continue', url: paymentUrl }) +
+      paragraph(
+        'Thank you for choosing us to support your journey. Our team is here to assist you every step of the way, ' +
+        'ensuring a seamless experience and providing the resources you need to achieve your goals &#128640;'
+      ) +
+      heading2('Why Choose RPL with Certified Australia?') +
+      bulletList([
+        '<strong>Save Time and Money &#128176;</strong> &ndash; Achieve recognition for your existing skills without unnecessary training',
+        '<strong>Career Advancement &#128200;</strong> &ndash; Strengthen your professional profile and meet industry standards',
+        '<strong>Personalised Support &#129309;</strong> &ndash; Our dedicated team will assist you through every step of the process',
+      ]) +
+      divider() +
+
+      // --- Certified Now. Pay Later. -----------------------------------------
+      heading2('Certified Now. Pay Later. &#128179;') +
+      paragraph(
+        'We understand that investing in your future should be structured and manageable.'
+      ) +
+      paragraph(
+        'Through our <strong>Certified Now. Pay Later.</strong> option, we offer flexible payment plans to help you ' +
+        'commence immediately while spreading your investment over time.'
+      ) +
+      infoCard('You can:', [
+        'Lock in your intake position',
+        'Begin your RPL process',
+        'Start submitting your evidence',
+        'Pay through an approved structured plan',
+      ]) +
+      paragraph(
+        'If you would like to explore a payment arrangement, simply select the option below and our team will assist you.'
+      ) +
+      buttonGroup({ text: 'Certified Now. Pay Later.', url: paymentUrl }) +
+      divider() +
+
+      // --- What happens next -------------------------------------------------
+      heading2('What Happens Next &#128204;') +
+      numberedList([
+        'You will receive access to your student portal',
+        'Upload required documentation',
+        'Complete the RPL kit',
+        'Assessment conducted by the partnered RTO',
+        'Outcome issued by the RTO',
+      ]) +
+      divider() +
+
+      // --- Documents and evidence -------------------------------------------
+      heading2('Documents and Evidence You Will Need &#128196;') +
+      paragraph(
+        'Recognition of Prior Learning is a formal assessment process. It is not automatic and requires sufficient ' +
+        'evidence demonstrating competency against each unit of competency.'
+      ) +
+      paragraph('You will be required to provide the following:') +
+
+      heading3('1. Identification &amp; Compliance Requirements &#129506;') +
+      bulletList([
+        '100 Points of ID (Passport, Driver Licence, Medicare)',
+        'USI Number',
+        'Visa documentation (if applicable)',
+        'Contact and residential details',
+      ]) +
+      paragraph(
+        'These documents are required for enrolment validation and regulatory compliance purposes.'
+      ) +
+
+      heading3('2. Completion of the RPL Kit &#128221;') +
+      paragraph('You must complete the full RPL assessment kit, including:') +
+      bulletList([
+        'Self-assessment questionnaire',
+        'Knowledge questions',
+        'Evidence mapping responses',
+        'Competency conversation (if required by the assessor)',
+      ]) +
+      paragraph('This forms part of your formal assessment record.') +
+
+      heading3('3. RPL Evidence Requirements &#128736;&#65039;') +
+      paragraph('Your evidence must demonstrate competency through multiple sources.') +
+      paragraph('<strong>A. Direct Evidence</strong>') +
+      bulletList([
+        'Workplace photos',
+        'Workplace videos',
+        'Job documentation',
+        'Completed project examples',
+      ]) +
+      paragraph('<strong>B. Indirect Evidence</strong>') +
+      bulletList([
+        'Resume',
+        'Work history',
+        'Position descriptions',
+        'Licences held',
+      ]) +
+      paragraph('<strong>C. Third Party Evidence</strong>') +
+      bulletList([
+        'Employer testimonials',
+        'Supervisor verification letters',
+        'Client reference statements',
+      ]) +
+      paragraph('<strong>D. Supporting Evidence</strong>') +
+      bulletList([
+        'Proof of employment (payslips, contracts, ABN records if applicable)',
+        'Apprenticeship or prior training transcripts',
+        'Safety certifications',
+        'Logbooks',
+      ]) +
+
+      heading3('4. Gap Training (If Required) &#128269;') +
+      paragraph(
+        'If, following assessment, the partnered RTO identifies competency gaps, you may be required to:'
+      ) +
+      bulletList([
+        'Complete structured gap training',
+        'Undertake practical demonstration',
+        'Complete further knowledge assessment',
+      ]) +
+      paragraph(
+        'A qualification can only be issued once the RTO is satisfied that all unit requirements have been met &#9989;'
+      ) +
+      divider() +
+
+      // --- Scope of our role -------------------------------------------------
+      heading2('Important Information About Our Role &#9878;&#65039;') +
+      paragraph(
+        'Certified Australia operates as a digital education platform that facilitates the connection between students ' +
+        'and partnered Registered Training Organisations (RTOs) for the purpose of skills recognition, certification and training.'
+      ) +
+      warningCard(
+        '',
+        '<strong>Certified Australia is not a Registered Training Organisation (RTO) and does not issue qualifications.</strong>'
+      ) +
+      paragraph(
+        'All assessments are conducted by qualified assessors engaged by the partnered RTO. The final determination of ' +
+        'competency and the issuance of any qualification rests solely with the RTO in accordance with:'
+      ) +
+      bulletList([
+        'The relevant Training Package requirements',
+        'The Standards for RTOs',
+        'ASQA regulatory framework',
+      ]) +
+      paragraph(
+        'We provide administrative support, digital tools and structured guidance throughout the process to ensure your ' +
+        'application is complete and compliant.'
+      ) +
+
+      heading3('ASQA Fact Sheet &ndash; Recognition of Prior Learning &#128218;') +
+      paragraph(
+        'As part of our commitment to transparency and compliance, we have attached the ASQA Fact Sheet for Students &ndash; ' +
+        'Recognition of Prior Learning (Version 1.0 April 2025).'
+      ) +
+      paragraph('This document explains:') +
+      bulletList([
+        'What quality RPL assessment looks like',
+        'The importance of evidence mapping',
+        'Student rights and responsibilities',
+        'Risks of inadequate or misleading RPL practices',
+      ]) +
+      paragraph(
+        'We encourage you to review this carefully so you understand how your experience will be formally assessed.'
+      ) +
+      paragraph(
+        'We are committed to ensuring your assessment is conducted properly, ethically and in accordance with national standards.'
+      ) +
+      paragraph(
+        'If you have any questions about the process, please contact our support team.'
+      ) +
       signOff();
 
     const html = buildEmail(
       body,
-      'Your RPL journey starts here — log in to get started.'
+      'Your registration is complete — here is everything you need to get certified.'
     );
 
     return await sendEmail({
       to: student.email,
-      subject: `Congratulations ${student.firstName}! You're Just a Few Steps Away from Getting Certified`,
+      subject: `🎉 Congratulations ${student.firstName}! You're Just a Few Steps Away from Getting Certified`,
       html,
+      attachments: [ASQA_FACT_SHEET],
     });
   } catch (err) {
     console.error('[applicationEmailService] sendWelcomeEmail error:', err.message);

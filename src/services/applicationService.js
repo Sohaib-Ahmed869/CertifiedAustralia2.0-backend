@@ -8,6 +8,7 @@ const Document = require('../models/Document');
 const Certificate = require('../models/Certificate');
 const Payment = require('../models/Payment');
 const appEmails = require('./applicationEmailService');
+const { SIGNUP_DISCOUNT_AMOUNT } = require('../config/pricing');
 
 /**
  * Check if the student has completed their 3 obligations and advance status.
@@ -1063,9 +1064,20 @@ const addDiscount = async (applicationId, { amount, note, createdBy }) => {
     createdAt: new Date(),
   });
 
-  // Apply automatic $500 signup discount flag if applicable
-  if (Number(amount) === 500 && !application.signupDiscountApplied) {
-    application.signupDiscountApplied = true;
+  // Track the automatic signup discount. Registration sets this flag, so a later $500
+  // is an additional admin discount rather than the signup one — allowed, but logged so
+  // an accidental double-up is visible.
+  if (Number(amount) === SIGNUP_DISCOUNT_AMOUNT) {
+    if (application.signupDiscountApplied) {
+      console.warn(
+        '[ApplicationService] %s already has the $%d signup discount; adding another $%d discount as an additional discount.',
+        application.applicationId,
+        SIGNUP_DISCOUNT_AMOUNT,
+        SIGNUP_DISCOUNT_AMOUNT
+      );
+    } else {
+      application.signupDiscountApplied = true;
+    }
   }
 
   await application.save();

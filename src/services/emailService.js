@@ -75,8 +75,22 @@ const T = {
 const heading2 = (text) =>
   `<h2 style="margin:0 0 12px 0;font-family:${T.fontStack};font-size:20px;font-weight:700;color:${T.textPrimary};letter-spacing:-0.3px;line-height:1.3;">${text}</h2>`;
 
+const heading3 = (text) =>
+  `<h3 style="margin:22px 0 10px 0;font-family:${T.fontStack};font-size:16px;font-weight:700;color:${T.textPrimary};line-height:1.4;">${text}</h3>`;
+
 const paragraph = (text, style = '') =>
   `<p style="margin:0 0 16px 0;font-family:${T.fontStack};font-size:15px;line-height:1.7;color:${T.textSecondary};${style}">${text}</p>`;
+
+const _list = (tag, items) =>
+  `<${tag} style="margin:0 0 16px 0;padding:0 0 0 22px;">` +
+    items.map((item) =>
+      `<li style="font-family:${T.fontStack};font-size:15px;line-height:1.7;color:${T.textSecondary};margin-bottom:6px;">${item}</li>`
+    ).join('') +
+  `</${tag}>`;
+
+const bulletList = (items) => _list('ul', items);
+
+const numberedList = (items) => _list('ol', items);
 
 const greeting = (name) =>
   `<p style="margin:0 0 20px 0;font-family:${T.fontStack};font-size:16px;line-height:1.6;color:${T.textPrimary};font-weight:500;">Hi <strong style="color:${T.primary};">${name}</strong>,</p>`;
@@ -360,7 +374,10 @@ module.exports = {
   T,
   buildEmail,
   heading2,
+  heading3,
   paragraph,
+  bulletList,
+  numberedList,
   greeting,
   signOff,
   primaryButton,

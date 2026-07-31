@@ -137,6 +137,12 @@ const applicationSchema = new mongoose.Schema(
         },
       },
     ],
+    // True once the automatic signup discount has been recorded in `discounts`.
+    // Set at registration; guards against a second signup discount being added later.
+    signupDiscountApplied: {
+      type: Boolean,
+      default: false,
+    },
     // Financial references
     paymentIds: [
       {

@@ -99,9 +99,17 @@ const getApplicationContext = async (studentId, applicationId) => {
     .filter((p) => ['upfront', 'plan', 'manualMarkPaid'].includes(p.type))
     .reduce((sum, p) => sum + (p.amount || 0), 0);
 
-  const discountAmount = payments
+  // Discounts live on the application (signup discount written at registration plus any
+  // added by an admin). Legacy records may also carry a Payment row of type 'discount',
+  // so both are counted.
+  const applicationDiscount = (app.discounts || [])
+    .reduce((sum, d) => sum + (d.amount || 0), 0);
+
+  const paymentDiscount = payments
     .filter((p) => p.type === 'discount')
     .reduce((sum, p) => sum + Math.abs(p.amount || 0), 0);
+
+  const discountAmount = applicationDiscount + paymentDiscount;
 
   const price = app.qualificationId?.caPrice || 0;
   const remaining = Math.max(0, price - discountAmount - totalPaid);

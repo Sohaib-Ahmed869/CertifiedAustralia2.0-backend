@@ -13,7 +13,7 @@ const {
   sendAdminNewRegistrationEmail,
 } = require('./applicationEmailService');
 
-const SIGNUP_DISCOUNT_AMOUNT = 500;
+const { SIGNUP_DISCOUNT_AMOUNT } = require('../config/pricing');
 
 const signToken = (id, mfaVerified = false) =>
   jwt.sign({ id, mfaVerified }, process.env.JWT_SECRET, {
@@ -121,6 +121,7 @@ const register = async (data) => {
     note: 'Signup discount',
     createdAt: new Date(),
   }];
+  application.signupDiscountApplied = true;
   await application.save();
 
   student.applicationIds = [application._id];
