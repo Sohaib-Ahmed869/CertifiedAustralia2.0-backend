@@ -1673,13 +1673,68 @@ const exportCsv = async (filters) => {
    STUDENT DETAIL — OPTIMIZED SINGLE-APP LOAD
    ═══════════════════════════════════════════════════════ */
 
+// Build a { status → Date } map for the Timeline tab. Aggregates dates from
+// the application's own milestone fields plus related documents (payments,
+// uploaded documents, intake form, certificate), then overlays statusHistory
+// as the authoritative source of exact transition times when it exists. The
+// derived dates are what let legacy applications (created before statusHistory
+// tracking) still show meaningful stage dates.
+const buildStageDates = (app, payments = [], documents = []) => {
+  const dates = {};
+  const set = (key, val) => { if (val && !dates[key]) dates[key] = val; };
+
+  // Student phase
+  set('New', app.createdAt);
+
+  // Payment — earliest completed payment (fallback: earliest payment of any status)
+  const completed = payments.filter((p) => p.status === 'completed');
+  const pool = completed.length ? completed : payments;
+  if (pool.length) {
+    const earliest = pool.reduce((a, b) =>
+      new Date(a.completedAt || a.createdAt) <= new Date(b.completedAt || b.createdAt) ? a : b);
+    set('WaitingForPayment', earliest.completedAt || earliest.createdAt);
+  }
+
+  // Intake form — submitted (fallback: created)
+  const intake = app.intakeFormId && typeof app.intakeFormId === 'object' ? app.intakeFormId : null;
+  set('StudentIntakeForm', intake?.submittedAt || intake?.createdAt);
+
+  // Documents — first upload marks "Upload Docs", last upload approximates "Docs Uploaded"
+  if (documents.length) {
+    const times = documents.map((d) => new Date(d.createdAt).getTime()).filter((t) => !Number.isNaN(t));
+    if (times.length) {
+      set('UploadDocuments', new Date(Math.min(...times)));
+      set('DocumentsUploaded', new Date(Math.max(...times)));
+    }
+  }
+
+  set('StudentCompleted', app.studentCompletionDate);
+
+  // RTO phase
+  set('SentToRTO', app.sentToRTOPortalAt || app.sentToRTOEmailAt);
+  set('RTOInvoiceUploaded', app.timerStoppedAt); // timer stops when the RTO invoice is uploaded
+
+  // Completion phase — from the linked certificate
+  const cert = app.certificateId && typeof app.certificateId === 'object' ? app.certificateId : null;
+  set('CertificateGenerated', cert?.createdAt);
+  set('CertificateIssued', cert?.issuedAt || cert?.updatedAt);
+
+  // statusHistory wins: exact transition times (first occurrence of each status)
+  const historyDates = {};
+  (app.statusHistory || []).forEach((h) => {
+    if (h?.status && h?.changedAt && !historyDates[h.status]) historyDates[h.status] = h.changedAt;
+  });
+
+  return { ...dates, ...historyDates };
+};
+
 const getStudentDetail = async (studentId, applicationId) => {
   // 1. Full details for the selected application
   const selectedApp = await Application.findOne({
     _id: applicationId,
     studentId,
   })
-    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId intakeFormId')
     .lean();
 
   if (!selectedApp) throw new AppError('Application not found', 404);
@@ -1689,6 +1744,9 @@ const getStudentDetail = async (studentId, applicationId) => {
     Payment.find({ applicationId }).sort('-createdAt').lean(),
     Document.find({ applicationId }).sort('-createdAt').lean(),
   ]);
+
+  // Derive per-stage dates for the Timeline tab (aggregated across related docs)
+  selectedApp.stageDates = buildStageDates(selectedApp, payments, documents);
 
   // 3. Lightweight snapshots of sibling applications
   const siblings = await Application.find({

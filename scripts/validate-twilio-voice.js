@@ -45,9 +45,10 @@ const info = (m) => console.log(`    ${m}`);
   if (!/^SK/.test(TWILIO_API_KEY_SID || '')) bad('API_KEY_SID should start with "SK"');
   if (!/^AP/.test(TWILIO_TWIML_APP_SID || '')) bad('TWIML_APP_SID should start with "AP"');
 
+  // REST client: region only. region+edge together (e.g. au1+sydney) build a host
+  // this account rejects with 20003 — the edge belongs on the browser Device, not REST.
   const regionOpts = {};
   if (TWILIO_REGION) regionOpts.region = TWILIO_REGION;
-  if (TWILIO_EDGE) regionOpts.edge = TWILIO_EDGE;
 
   /* 1 + 2. API key authenticates AND belongs to the account.
    * We auth AS the API key (username=SK…, password=secret) but scope the

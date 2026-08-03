@@ -32,10 +32,14 @@ let _client = null;
 const getClient = () => {
   if (!isConfigured()) throw new Error('Twilio is not configured (missing TWILIO_* env vars)');
   if (!_client) {
-    // Region-homed accounts (e.g. au1) reject REST calls on the default us1 host.
+    // Region-homed accounts (e.g. au1) reject REST calls on the default us1 host,
+    // so target the region. Do NOT set an edge for REST: region+edge together build
+    // a host like api.sydney.au1.twilio.com that this account rejects (20003).
+    // WARNING: the Twilio SDK also auto-reads TWILIO_REGION/TWILIO_EDGE from the
+    // environment, so TWILIO_EDGE must NOT be present in .env or it re-poisons this
+    // client. The media edge lives in TWILIO_DEVICE_EDGE (read in createAccessToken).
     const opts = {};
     if (process.env.TWILIO_REGION) opts.region = process.env.TWILIO_REGION;
-    if (process.env.TWILIO_EDGE) opts.edge = process.env.TWILIO_EDGE;
     _client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN, opts);
   }
   return _client;
@@ -74,7 +78,11 @@ function createAccessToken(identity) {
   );
   // Region-bound (e.g. au1) API keys only validate at their own edge. The browser
   // Device must connect to that edge or Twilio returns 20101 AccessTokenInvalid.
-  const edge = process.env.TWILIO_EDGE || null;
+  // NB: this is read from TWILIO_DEVICE_EDGE, *not* TWILIO_EDGE — the Twilio Node
+  // SDK auto-reads TWILIO_EDGE from process.env and combines it with TWILIO_REGION
+  // for REST, producing an invalid host (api.sydney.au1.twilio.com → 20003) that
+  // breaks outbound dialing. Keep the media edge in a var the SDK does not claim.
+  const edge = process.env.TWILIO_DEVICE_EDGE || null;
   return { token: token.toJwt(), identity, expiresIn: 3600, edge };
 }
 

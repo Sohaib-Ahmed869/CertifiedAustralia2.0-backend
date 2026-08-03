@@ -39,6 +39,17 @@ const buildCrud = (Model, options = {}) => {
         delete filter.excludeStatus;
       }
 
+      // Handle excludeRole — exclude specific role(s) from results (e.g. staff-only lists)
+      if (filter.excludeRole) {
+        const excluded = filter.excludeRole.includes(',')
+          ? filter.excludeRole.split(',').map((s) => s.trim())
+          : [filter.excludeRole];
+        filter.role = filter.role
+          ? { ...filter.role, $nin: excluded }
+          : { $nin: excluded };
+        delete filter.excludeRole;
+      }
+
       // Handle callAttempts filter (contactAttempts on Application model)
       if (filter.callAttempts !== undefined) {
         const val = filter.callAttempts;

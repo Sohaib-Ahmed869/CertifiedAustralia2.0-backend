@@ -21,7 +21,8 @@ const PERMISSION_KEYS = [
   'tab_ceo_liability',
   'tab_ceo_guardrails',
   'tab_students',
-  'tab_applications',
+  // Applications page hidden — commented out per request, restore to re-enable.
+  // 'tab_applications',
   'tab_archived',
   'tab_qualifications',
   'tab_tasks',
@@ -120,7 +121,7 @@ const ROLE_DEFAULTS = {
     tab_dashboard: true,
     tab_ceo_dashboard: false,
     tab_students: false,
-    tab_applications: true,
+    // tab_applications: true, // Applications page hidden — commented out per request, restore to re-enable.
     tab_archived: false,
     tab_qualifications: false,
     tab_tasks: true,
@@ -188,7 +189,7 @@ const ROLE_DEFAULTS = {
     tab_dashboard: true,
     tab_ceo_dashboard: false,
     tab_students: false,
-    tab_applications: true,
+    // tab_applications: true, // Applications page hidden — commented out per request, restore to re-enable.
     tab_archived: false,
     tab_qualifications: false,
     tab_tasks: false,
@@ -253,7 +254,7 @@ const ROLE_DEFAULTS = {
     tab_dashboard: true,
     tab_ceo_dashboard: false,
     tab_students: false,
-    tab_applications: false,
+    // tab_applications: false, // Applications page hidden — commented out per request, restore to re-enable.
     tab_archived: false,
     tab_qualifications: false,
     tab_tasks: false,
@@ -322,7 +323,7 @@ const ROLE_DEFAULTS = {
     tab_ceo_overview: true,
     tab_ceo_leads: true,
     tab_ceo_marketing: true,
-    tab_applications: false,
+    // tab_applications: false, // Applications page hidden — commented out per request, restore to re-enable.
     tab_students: false,
     tab_users: false,
     tab_inbox: true,

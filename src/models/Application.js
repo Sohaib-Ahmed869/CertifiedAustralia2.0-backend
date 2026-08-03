@@ -366,6 +366,14 @@ const applicationSchema = new mongoose.Schema(
       enum: ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
       default: '',
     },
+    // Application status (journey stage) change trail — powers the Timeline tab dates.
+    // Auto-maintained by schema hooks below on every status transition.
+    statusHistory: [
+      {
+        status: { type: String },
+        changedAt: { type: Date, default: Date.now },
+      },
+    ],
     // Lead status (color) change trail — powers the CEO Lead Status Tracking tab
     leadStatusHistory: [
       {
@@ -426,5 +434,44 @@ applicationSchema.index({ status: 1 });
 applicationSchema.index({ assignedAgentId: 1 });
 applicationSchema.index({ assignedRTOId: 1 });
 applicationSchema.index({ studentId: 1, status: 1 });
+
+// ── Status history tracking ──────────────────────────────────────────
+// Record every journey-stage transition (used by the Timeline tab to show
+// per-stage dates). Covers both write patterns: document .save() and
+// findOneAndUpdate (which findByIdAndUpdate delegates to).
+
+// New docs: seed history with the initial status.
+applicationSchema.pre('save', function seedStatusHistory(next) {
+  if (this.isNew) {
+    if (!this.statusHistory || this.statusHistory.length === 0) {
+      this.statusHistory = [{ status: this.status, changedAt: this.createdAt || new Date() }];
+    }
+  } else if (this.isModified('status')) {
+    this.statusHistory = this.statusHistory || [];
+    this.statusHistory.push({ status: this.status, changedAt: new Date() });
+  }
+  next();
+});
+
+// findOneAndUpdate/findByIdAndUpdate: append when the update changes status.
+applicationSchema.pre('findOneAndUpdate', async function trackStatusHistory(next) {
+  try {
+    const update = this.getUpdate() || {};
+    const nextStatus = update.status || (update.$set && update.$set.status);
+    if (!nextStatus) return next();
+
+    const current = await this.model.findOne(this.getQuery()).select('status').lean();
+    // Only record a real transition (skip no-op updates that re-set the same status).
+    if (current && current.status === nextStatus) return next();
+
+    const entry = { status: nextStatus, changedAt: new Date() };
+    if (update.$push) update.$push.statusHistory = entry;
+    else update.$push = { statusHistory: entry };
+    this.setUpdate(update);
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = mongoose.model('Application', applicationSchema);
