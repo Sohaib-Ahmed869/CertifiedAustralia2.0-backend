@@ -1,12 +1,21 @@
 const express = require('express');
 const controller = require('../controllers/ceoDashboardController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
+const { getEffectivePermissions } = require('../config/permissions');
+const AppError = require('../utils/AppError');
 
 const router = express.Router();
 
-// All routes require authentication + Admin, CEOReportingManager, or Marketing role
+// Access is additive: the existing roles (Admin / CEOReportingManager / Marketing)
+// keep access, AND any user explicitly granted the `tab_ceo_dashboard` RBAC
+// permission can reach these endpoints, regardless of role.
 router.use(protect);
-router.use(authorize('Admin', 'CEOReportingManager', 'Marketing'));
+router.use((req, res, next) => {
+  const role = req.user?.role;
+  if (role === 'Admin' || role === 'CEOReportingManager' || role === 'Marketing') return next();
+  if (getEffectivePermissions(req.user).tab_ceo_dashboard) return next();
+  return next(new AppError('Not authorized to access the Executive Dashboard', 403));
+});
 
 // ── Dashboard aggregation routes ──
 router.get('/overview', controller.getOverview);
