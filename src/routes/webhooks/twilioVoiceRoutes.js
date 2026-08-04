@@ -13,4 +13,10 @@ router.post('/voice/student', controller.voiceStudent);
 router.post('/status', controller.status);
 router.post('/conference', controller.conference);
 
+// Inbound calls (dynamic per-number routing → assigned user's client → voicemail).
+// Point each org number's Voice webhook (Console) at /voice/inbound.
+router.post('/voice/inbound', controller.voiceInbound);
+router.post('/voice/inbound/action', controller.voiceInboundAction);
+router.post('/voice/inbound/voicemail', controller.voiceInboundVoicemail);
+
 module.exports = router;

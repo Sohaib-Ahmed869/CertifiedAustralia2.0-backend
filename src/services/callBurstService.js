@@ -20,7 +20,8 @@ const Application = require('../models/Application');
 const AppError = require('../utils/AppError');
 const twilioVoice = require('./twilioVoiceService');
 const callScorecardService = require('./callScorecardService');
-const { emitBurstUpdate } = require('../socket');
+const callRecordService = require('./callRecordService');
+const { emitBurstUpdate, emitCallRecordsUpdated } = require('../socket');
 
 const RING_TIMEOUT = 30; // seconds
 
@@ -87,6 +88,7 @@ async function startBurst({ agent, applicationIds, mode = 'burst' }) {
       name,
       qualification: app.qualificationId?.name || null,
       phone,
+      isTest: !!app.isTest,
       status: 'queued',
       isWinner: false,
     });
@@ -102,6 +104,8 @@ async function startBurst({ agent, applicationIds, mode = 'burst' }) {
   const burst = await CallBurst.create({
     agentId: agent._id,
     agentName,
+    // Per-user caller ID: this agent's allotted number, else the global default.
+    callerId: agent.assignedPhoneNumber || process.env.TWILIO_PHONE_NUMBER || null,
     conferenceName,
     participants,
     status: 'initiating',
@@ -144,11 +148,14 @@ async function blastRecipients(burst) {
       const sid = await twilioVoice.callStudent({
         to: p.phone,
         burstId: String(burst._id),
+        from: burst.callerId,
         timeout: RING_TIMEOUT,
       });
       p.callSid = sid;
       p.status = 'ringing';
       console.log(`[callBurst] dialing ${p.phone} (${p.displayApplicationId || '—'}) sid=${sid}`);
+      // Persist an outbound CDR row for Call Tracking, keyed by the leg's SID.
+      await writeLegRecord(burst, p, sid);
     } catch (err) {
       p.status = 'failed';
       console.warn(`[callBurst] dial ${p.phone} FAILED: ${err.message}`);
@@ -157,6 +164,33 @@ async function blastRecipients(burst) {
   burst.status = 'ringing';
   await burst.save();
   emit(burst, 'ringing');
+  try { emitCallRecordsUpdated(); } catch { /* socket optional */ }
+}
+
+/** Create/refresh the outbound CallRecord for one dialed recipient leg. */
+async function writeLegRecord(burst, p, sid) {
+  try {
+    await callRecordService.upsertLeg(sid, {
+      direction: 'outbound',
+      orgNumber: burst.callerId || null,
+      fromNumber: burst.callerId || null,
+      toNumber: p.phone,
+      agentId: burst.agentId,
+      agentName: burst.agentName,
+      studentId: p.studentId || null,
+      applicationId: p.applicationId || null,
+      displayApplicationId: p.displayApplicationId || null,
+      contactName: p.name || p.phone,
+      burstId: burst._id,
+      conferenceName: burst.conferenceName,
+      status: 'ringing',
+      connected: false,
+      startedAt: new Date(),
+      isTest: !!p.isTest,
+    });
+  } catch (err) {
+    console.warn(`[callBurst] CDR write failed for ${p.phone}: ${err.message}`);
+  }
 }
 
 /* ── Conference events (join / leave / end) ────────────────── */
@@ -218,6 +252,15 @@ async function claimWinner(burstId, callSid) {
       winner.isWinner = true;
       winner.status = 'in-progress';
       winner.answeredAt = new Date();
+      // The winning leg is the only one that reaches a real conversation.
+      try {
+        await callRecordService.upsertLeg(callSid, {
+          status: 'in-progress',
+          connected: true,
+          answeredAt: winner.answeredAt,
+        });
+        emitCallRecordsUpdated();
+      } catch { /* CDR best-effort */ }
     }
     await claimed.save();
     console.log(`[callBurst] ${claimed._id} WINNER ${winner?.name || callSid} — dropping ${claimed.participants.filter((p) => p.callSid && p.callSid !== callSid).length} other leg(s)`);
@@ -269,6 +312,20 @@ async function onStatusEvent(body) {
   p.status = mapped;
   await burst.save();
   emit(burst, 'progress');
+
+  // Mirror the leg's terminal state onto its CDR row (duration on completion).
+  try {
+    const patch = { status: mapped };
+    if (mapped === 'completed') {
+      patch.endedAt = new Date();
+      const dur = parseInt(body.CallDuration, 10);
+      if (!isNaN(dur)) patch.durationSec = dur;
+      // A non-winner that "completed" was hung up mid-ring → not a real convo.
+      if (!p.isWinner) { patch.status = 'canceled'; patch.connected = false; }
+    }
+    await callRecordService.upsertLeg(callSid, patch);
+    emitCallRecordsUpdated();
+  } catch { /* CDR best-effort */ }
 
   // If every recipient leg has finished and nobody connected, wrap it up.
   const anyLive = burst.participants.some((x) => ['ringing', 'queued', 'in-progress'].includes(x.status));

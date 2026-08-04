@@ -298,6 +298,30 @@ const emitBurstUpdate = (agentId, type, burst) => {
   io.to(`user:${String(agentId)}`).emit('burst:update', { type, burst });
 };
 
+/**
+ * Inbound call ringing — pushed to the assigned user's personal room so the
+ * global incoming-call modal can show rich caller context (name, application)
+ * that the raw Twilio Client "incoming" event doesn't carry. `payload` is the
+ * sanitised CallRecord-ish shape { callSid, from, contactName, displayApplicationId, ... }.
+ */
+const emitIncomingCall = (userId, payload) => {
+  if (!io) return;
+  io.to(`user:${String(userId)}`).emit('call:incoming', payload);
+};
+
+/** Inbound call resolved (answered elsewhere / missed / voicemail) — tells the
+ *  assignee's other tabs to dismiss the ringing modal. */
+const emitIncomingResolved = (userId, payload) => {
+  if (!io) return;
+  io.to(`user:${String(userId)}`).emit('call:incoming-resolved', payload);
+};
+
+/** Broadcast that the CDR changed so any open Call Tracking page refetches. */
+const emitCallRecordsUpdated = () => {
+  if (!io) return;
+  io.emit('call:records-updated');
+};
+
 module.exports = {
   setupSocket,
   getIO,
@@ -307,4 +331,7 @@ module.exports = {
   emitCampaignCompleted,
   emitSequenceProgress,
   emitBurstUpdate,
+  emitIncomingCall,
+  emitIncomingResolved,
+  emitCallRecordsUpdated,
 };

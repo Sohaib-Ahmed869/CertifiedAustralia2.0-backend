@@ -2,6 +2,8 @@ const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 const callBurstService = require('../services/callBurstService');
 const twilioVoice = require('../services/twilioVoiceService');
+const inboundCallService = require('../services/inboundCallService');
+const callRecordService = require('../services/callRecordService');
 
 /* ── Authenticated API (agent-facing) ──────────────────────── */
 
@@ -56,6 +58,38 @@ const getBurst = asyncHandler(async (req, res) => {
   res.json({ burst });
 });
 
+/* ── Call Tracking (CDR) — real inbound + outbound call log ─── */
+
+const listRecords = asyncHandler(async (req, res) => {
+  const data = await callRecordService.list(req.query);
+  res.json(data);
+});
+
+const recordStats = asyncHandler(async (req, res) => {
+  const data = await callRecordService.stats(req.query);
+  res.json({ stats: data });
+});
+
+// Stream an inbound voicemail recording. Twilio recording media needs Basic
+// auth, so we proxy it (the browser can't send the account credentials).
+const streamVoicemail = asyncHandler(async (req, res) => {
+  const CallRecord = require('../models/CallRecord');
+  const rec = await CallRecord.findById(req.params.id).select('voicemailUrl').lean();
+  if (!rec || !rec.voicemailUrl) throw new AppError('Voicemail not found', 404);
+
+  const auth = Buffer.from(
+    `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
+  ).toString('base64');
+  const upstream = await fetch(rec.voicemailUrl, { headers: { Authorization: `Basic ${auth}` } });
+  if (!upstream.ok) throw new AppError('Could not fetch the recording', 502);
+
+  const buf = Buffer.from(await upstream.arrayBuffer());
+  res.set('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg');
+  res.set('Content-Length', String(buf.length));
+  res.set('Accept-Ranges', 'bytes');
+  res.send(buf);
+});
+
 const hangup = asyncHandler(async (req, res) => {
   const burst = await callBurstService.hangup(req.params.id, req.user);
   res.json({ burst });
@@ -103,6 +137,29 @@ const conference = asyncHandler(async (req, res) => {
   res.status(204).end();
 });
 
+/* ── Inbound call webhooks ─────────────────────────────────── */
+
+// A PSTN call landed on one of our numbers → ring the assigned user's client.
+const voiceInbound = asyncHandler(async (req, res) => {
+  if (!guard(req, res)) return;
+  const twiml = await inboundCallService.handleIncoming(req.body);
+  res.type('text/xml').send(twiml);
+});
+
+// The <Dial> to the client ended → answered (hang up) or missed (→ voicemail).
+const voiceInboundAction = asyncHandler(async (req, res) => {
+  if (!guard(req, res)) return;
+  const twiml = await inboundCallService.handleDialAction(req.body);
+  res.type('text/xml').send(twiml);
+});
+
+// Caller left a voicemail → store the recording + notify the assignee.
+const voiceInboundVoicemail = asyncHandler(async (req, res) => {
+  if (!guard(req, res)) return;
+  const twiml = await inboundCallService.handleVoicemail(req.body);
+  res.type('text/xml').send(twiml);
+});
+
 module.exports = {
   getToken,
   getStatus,
@@ -111,8 +168,14 @@ module.exports = {
   startSingle,
   getBurst,
   hangup,
+  listRecords,
+  recordStats,
+  streamVoicemail,
   voiceAgent,
   voiceStudent,
   status,
   conference,
+  voiceInbound,
+  voiceInboundAction,
+  voiceInboundVoicemail,
 };

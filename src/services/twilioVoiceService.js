@@ -73,7 +73,10 @@ function createAccessToken(identity) {
   token.addGrant(
     new VoiceGrant({
       outgoingApplicationSid: process.env.TWILIO_TWIML_APP_SID,
-      incomingAllow: false,
+      // Allow the browser Device to RECEIVE calls too. Inbound PSTN calls landing
+      // on a user's allotted number are bridged to their client via <Dial><Client>
+      // targeting this same `agent:<userId>` identity (see dialClientTwiml).
+      incomingAllow: true,
     })
   );
   // Region-bound (e.g. au1) API keys only validate at their own edge. The browser
@@ -129,17 +132,71 @@ function studentConferenceTwiml(conferenceName) {
   return res.toString();
 }
 
+/* ── Inbound TwiML builders ────────────────────────────────── */
+
+/**
+ * Bridge an inbound PSTN call to the assigned user's browser softphone.
+ * `answerOnBridge` keeps the caller hearing ringback (not a premature "answer")
+ * until the agent actually picks up. Caller context is passed as <Client>
+ * parameters so the browser's incoming-call modal can show who's calling; if
+ * the agent doesn't answer within `timeout`, Twilio requests the `action` URL
+ * which routes the caller to voicemail.
+ */
+function dialClientTwiml({ userId, callerNumber, contactName, displayApplicationId, timeout = 25 }) {
+  const res = new twilio.twiml.VoiceResponse();
+  const dial = res.dial({
+    answerOnBridge: true,
+    timeout,
+    action: webhook('/voice/inbound/action'),
+    method: 'POST',
+  });
+  const client = dial.client();
+  client.identity(`agent:${userId}`);
+  client.parameter({ name: 'direction', value: 'inbound' });
+  client.parameter({ name: 'from', value: callerNumber || '' });
+  client.parameter({ name: 'contactName', value: contactName || '' });
+  client.parameter({ name: 'appId', value: displayApplicationId || '' });
+  return res.toString();
+}
+
+/**
+ * Voicemail capture — played when an inbound call goes unanswered (or lands on
+ * a number nobody is assigned to). Records up to 2 minutes, then POSTs the
+ * recording to the voicemail webhook.
+ */
+function voicemailTwiml({ greeting } = {}) {
+  const res = new twilio.twiml.VoiceResponse();
+  res.say(
+    { voice: 'alice' },
+    greeting ||
+      'Sorry, we are unable to take your call right now. Please leave a message after the tone, and we will get back to you.'
+  );
+  res.record({
+    maxLength: 120,
+    playBeep: true,
+    timeout: 5,
+    finishOnKey: '#',
+    action: webhook('/voice/inbound/voicemail'),
+    method: 'POST',
+  });
+  // Reached only if the caller left no recording (immediate hangup / silence).
+  res.say({ voice: 'alice' }, 'We did not receive a message. Goodbye.');
+  res.hangup();
+  return res.toString();
+}
+
 /* ── Outbound calls ────────────────────────────────────────── */
 
 /**
  * Place one outbound call to a recipient's phone. On answer, Twilio fetches
  * the student voice webhook which returns studentConferenceTwiml.
- * `timeout` bounds the ring; unanswered legs resolve to no-answer.
+ * `from` is the initiating agent's allotted caller ID (falls back to the global
+ * TWILIO_PHONE_NUMBER). `timeout` bounds the ring; unanswered legs → no-answer.
  */
-async function callStudent({ to, burstId, timeout = 30 }) {
+async function callStudent({ to, burstId, from, timeout = 30 }) {
   const call = await getClient().calls.create({
     to,
-    from: process.env.TWILIO_PHONE_NUMBER,
+    from: from || process.env.TWILIO_PHONE_NUMBER,
     url: webhook(`/voice/student?burstId=${encodeURIComponent(burstId)}`),
     method: 'POST',
     timeout,
@@ -183,6 +240,8 @@ module.exports = {
   createAccessToken,
   agentConferenceTwiml,
   studentConferenceTwiml,
+  dialClientTwiml,
+  voicemailTwiml,
   callStudent,
   endCall,
   validateSignature,

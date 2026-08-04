@@ -22,6 +22,7 @@ const participantSchema = new mongoose.Schema(
     name: { type: String, default: null },
     qualification: { type: String, default: null },
     phone: { type: String, required: true },
+    isTest: { type: Boolean, default: false }, // denormalised → CallRecord CDR
     callSid: { type: String, default: null, index: true },
     // ringing → in-progress (answered) → completed | no-answer | busy | failed | canceled
     status: { type: String, default: 'queued' },
@@ -37,6 +38,9 @@ const callBurstSchema = new mongoose.Schema(
   {
     agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     agentName: { type: String, default: null },
+    // The initiating agent's allotted caller ID (falls back to the global
+    // TWILIO_PHONE_NUMBER at dial time when blank). Also the outbound orgNumber.
+    callerId: { type: String, default: null },
 
     conferenceName: { type: String, required: true, unique: true },
     conferenceSid: { type: String, default: null },

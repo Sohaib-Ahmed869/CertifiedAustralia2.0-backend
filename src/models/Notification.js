@@ -26,6 +26,7 @@ const notificationSchema = new mongoose.Schema(
         'chat_message',
         'direct_debit_authority',
         'direct_debit_signed',
+        'missed_call',
         'general',
       ],
       default: 'general',

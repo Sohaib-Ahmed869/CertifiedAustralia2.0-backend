@@ -63,6 +63,16 @@ const userSchema = new mongoose.Schema(
     verifiedPhone: {
       type: String,
     },
+    // Twilio number (E.164, e.g. +61468271890) allotted to this user from the
+    // org's pool. Used as the outbound caller ID for their call-burst / 1-on-1
+    // calls AND as the inbound routing key — a PSTN call landing on this number
+    // rings this user's browser softphone. Free-text, optional; blank = falls
+    // back to the global TWILIO_PHONE_NUMBER for outbound and no inbound routing.
+    assignedPhoneNumber: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     portalAccess: {
       type: [String],
       enum: ['admin', 'student', 'rto', 'support'],
@@ -143,5 +153,8 @@ userSchema.methods.comparePassword = async function (password) {
 
 userSchema.index({ role: 1 });
 userSchema.index({ isSalesAgent: 1 });
+// Sparse: only users with a number allotted are indexed; used to route inbound
+// calls (find the user whose assignedPhoneNumber === the dialed To number).
+userSchema.index({ assignedPhoneNumber: 1 }, { sparse: true });
 
 module.exports = mongoose.model('User', userSchema);

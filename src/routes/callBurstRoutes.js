@@ -6,6 +6,14 @@ const controller = require('../controllers/callBurstController');
 const router = express.Router();
 
 router.use(protect);
+
+// Call Tracking (real inbound + outbound CDR) — staff oversight, gated
+// separately from the agent-facing call-burst tools.
+router.get('/records', requirePermission('tab_call_tracking'), controller.listRecords);
+router.get('/records/stats', requirePermission('tab_call_tracking'), controller.recordStats);
+router.get('/records/:id/voicemail', requirePermission('tab_call_tracking'), controller.streamVoicemail);
+
+// Everything below is the agent-facing softphone / call-burst surface.
 router.use(requirePermission('tab_call_burst'));
 
 // Browser softphone bootstrap + config probe
