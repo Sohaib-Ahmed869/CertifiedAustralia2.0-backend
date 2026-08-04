@@ -12,7 +12,7 @@ const getDefaults = () => {
 };
 
 const getUserPermissions = async (userId) => {
-  const user = await User.findById(userId).select('role permissions permissionsUpdatedAt permissionsUpdatedBy');
+  const user = await User.findById(userId).select('role isSalesAgent permissions permissionsUpdatedAt permissionsUpdatedBy');
   if (!user) throw new AppError('User not found', 404);
 
   const effective = getEffectivePermissions(user);

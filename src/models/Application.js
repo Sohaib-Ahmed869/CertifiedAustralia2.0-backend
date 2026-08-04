@@ -172,6 +172,14 @@ const applicationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Test/demo application — excluded from all admin metrics, dashboards,
+    // reporting, and financial aggregations. Still visible/manageable in the
+    // students list. Kept in sync onto this application's Payments (Payment.isTest).
+    isTest: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     // Forms
     intakeFormId: {
       type: mongoose.Schema.Types.ObjectId,

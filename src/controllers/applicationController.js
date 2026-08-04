@@ -58,6 +58,10 @@ module.exports = {
     const result = await service.assignRTO(req.params.id, req.body.assignedRTOId);
     res.status(200).json({ item: result });
   }),
+  setTestFlag: asyncHandler(async (req, res) => {
+    const result = await service.setTestFlag(req.params.id, req.body.isTest);
+    res.status(200).json({ item: result });
+  }),
   updateSource: asyncHandler(async (req, res) => {
     const result = await service.updateSource(req.params.id, req.body.source);
     res.status(200).json({ item: result });

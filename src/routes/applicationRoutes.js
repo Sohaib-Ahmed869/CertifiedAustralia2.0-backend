@@ -58,6 +58,7 @@ router.route('/:id')
   .delete(controller.deleteApplication);
 
 router.patch('/:id/assign-agent', controller.assignAgent);
+router.patch('/:id/test', authorize(...STAFF_ROLES), controller.setTestFlag);
 router.patch('/:id/source', controller.updateSource);
 router.patch('/:id/lead-status', controller.updateLeadStatus);
 router.patch('/:id/assign-rto', controller.assignRTO);

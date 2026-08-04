@@ -264,6 +264,39 @@ const assignRTO = async (applicationId, assignedRTOId) => {
 };
 
 /**
+ * Mark/unmark an application as a test application. Test applications (and their
+ * payments) are excluded from all admin metrics, dashboards, reporting and
+ * financial aggregations, but remain visible/manageable in the students list.
+ * The flag is denormalized onto this application's Payments so revenue/cashflow
+ * aggregations can filter without a lookup.
+ */
+const setTestFlag = async (applicationId, isTest) => {
+  const flag = !!isTest;
+  const application = await Application.findByIdAndUpdate(
+    applicationId,
+    { isTest: flag },
+    { new: true, runValidators: true }
+  )
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .lean();
+
+  if (!application) {
+    throw new AppError('Application not found', 404);
+  }
+
+  // Keep the denormalized flag in sync on every child doc that carries it, so
+  // revenue/cashflow/plan/certificate metrics exclude (or re-include) this app.
+  const PaymentPlan = require('../models/PaymentPlan');
+  await Promise.all([
+    Payment.updateMany({ applicationId }, { $set: { isTest: flag } }),
+    PaymentPlan.updateMany({ applicationId }, { $set: { isTest: flag } }),
+    Certificate.updateMany({ applicationId }, { $set: { isTest: flag } }),
+  ]);
+
+  return application;
+};
+
+/**
  * Log an RTO activity against an application (CA-06 audit trail).
  */
 const logRTOActivity = async (applicationId, { action, userId, detail }) => {
@@ -628,6 +661,10 @@ const updateStatus = async (applicationId, status) => {
 
   const finalStatus = application.status;
 
+  // Keep Payment.isArchived in sync so revenue/cashflow metrics exclude (or
+  // re-include) this application's payments when it is archived/unarchived.
+  await Payment.updateMany({ applicationId }, { $set: { isArchived: finalStatus === 'Archived' } });
+
   // Send notifications for key status changes (non-fatal)
   try {
     const { createNotification } = require('./notificationService');
@@ -746,6 +783,9 @@ const restoreFromArchive = async (applicationId) => {
   app.status = restoredStatus;
   app.previousStatus = undefined;
   await app.save();
+
+  // Re-include this application's payments in revenue/cashflow metrics.
+  await Payment.updateMany({ applicationId }, { $set: { isArchived: false } });
 
   const application = await Application.findById(applicationId)
     .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId screeningFormId')
@@ -1380,8 +1420,11 @@ const getStats = async (query = {}) => {
     if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); periodTo = d; }
   }
 
-  // Build match filter for period-scoped queries
-  const periodMatch = {};
+  // Build match filter for period-scoped queries. Test applications AND archived
+  // applications are excluded from every dashboard stat built on this match — the
+  // dashboard reflects the active pipeline, matching the Students list (which also
+  // hides archived). Archived apps have their own page.
+  const periodMatch = { isTest: { $ne: true }, status: { $ne: 'Archived' } };
   if (periodFrom) periodMatch.createdAt = { $gte: periodFrom };
   if (periodTo) periodMatch.createdAt = { ...periodMatch.createdAt, $lt: periodTo };
 
@@ -1448,10 +1491,10 @@ const getStats = async (query = {}) => {
 
       Application.countDocuments(periodMatch),
       Application.countDocuments({ assignedAgentId: null, ...periodMatch }),
-      Application.countDocuments({ createdAt: { $gte: firstDayOfMonth } }),
+      Application.countDocuments({ isTest: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: firstDayOfMonth } }),
 
       // Recent activity
-      Application.find()
+      Application.find({ isTest: { $ne: true } })
         .sort({ updatedAt: -1 })
         .limit(5)
         .select('applicationId status updatedAt studentId assignedAgentId')
@@ -1461,7 +1504,7 @@ const getStats = async (query = {}) => {
 
       // Daily application counts (last 14 days) — paid vs pending per day
       Application.aggregate([
-        { $match: { createdAt: { $gte: sevenDaysAgo } } },
+        { $match: { isTest: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: sevenDaysAgo } } },
         {
           $group: {
             _id: {
@@ -1474,7 +1517,7 @@ const getStats = async (query = {}) => {
         { $sort: { '_id.date': 1 } },
       ]),
 
-      User.countDocuments({ role: 'Agent', status: 'active' }),
+      User.countDocuments({ isSalesAgent: true, status: 'active' }),
       Certificate.countDocuments(periodMatch),
 
       // Unique student count (period-scoped)
@@ -1514,7 +1557,7 @@ const getStats = async (query = {}) => {
 
       // Monthly application trend (last 12 months) — count + revenue
       Application.aggregate([
-        { $match: { createdAt: { $gte: twelveMonthsAgo } } },
+        { $match: { isTest: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: twelveMonthsAgo } } },
         {
           $group: {
             _id: {
@@ -1553,7 +1596,7 @@ const getStats = async (query = {}) => {
   // Build monthly trend data — fill all 12 months
   const Payment = require('../models/Payment');
   const monthlyRevenue = await Payment.aggregate([
-    { $match: { status: 'completed', createdAt: { $gte: twelveMonthsAgo } } },
+    { $match: { isTest: { $ne: true }, isArchived: { $ne: true }, status: 'completed', createdAt: { $gte: twelveMonthsAgo } } },
     {
       $group: {
         _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
@@ -1734,7 +1777,7 @@ const getStudentDetail = async (studentId, applicationId) => {
     _id: applicationId,
     studentId,
   })
-    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId intakeFormId')
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId intakeFormId screeningFormId')
     .lean();
 
   if (!selectedApp) throw new AppError('Application not found', 404);
@@ -1865,6 +1908,7 @@ module.exports = {
   createApplication,
   assignAgent,
   assignRTO,
+  setTestFlag,
   updateSource,
   updateLeadStatus,
   sendToRTOPortal,

@@ -85,6 +85,15 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    // Whether this user operates as a sales agent — i.e. is assignable to
+    // applications and tracked in Agent Performance / the call scorecard / targets.
+    // Decoupled from `role` on purpose: higher roles (Admin/CEOReportingManager)
+    // often still sell, and should be trackable as agents without demoting them.
+    // Seeded from role on creation (Agent → true) via the pre-save hook below,
+    // then managed explicitly from the User Management page.
+    isSalesAgent: {
+      type: Boolean,
+    },
     // For agents: track their assigned applications count
     assignedApplicationsCount: {
       type: Number,
@@ -117,11 +126,22 @@ userSchema.pre('save', async function (next) {
   }
 });
 
+// Seed the sales-agent flag from role on creation when it wasn't set explicitly:
+// Agent-role users are sales agents by default; everyone else is opt-in. After
+// creation the flag is authoritative and only changes via User Management.
+userSchema.pre('save', function (next) {
+  if (this.isNew && (this.isSalesAgent === undefined || this.isSalesAgent === null)) {
+    this.isSalesAgent = this.role === 'Agent';
+  }
+  next();
+});
+
 // Method to compare password
 userSchema.methods.comparePassword = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 
 userSchema.index({ role: 1 });
+userSchema.index({ isSalesAgent: 1 });
 
 module.exports = mongoose.model('User', userSchema);

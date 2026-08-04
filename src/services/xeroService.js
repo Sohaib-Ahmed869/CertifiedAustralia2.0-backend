@@ -436,6 +436,7 @@ const syncAll = async () => {
     status: 'completed',
     xeroSyncStatus: { $in: [null, 'pending', 'failed'] },
     type: { $nin: INTERNAL_TYPES },
+    isTest: { $ne: true }, isArchived: { $ne: true },
   }).select('_id').lean();
 
   const results = { synced: 0, failed: 0, skipped: 0, errors: [] };
@@ -489,6 +490,7 @@ const reconcile = async () => {
     xeroSyncStatus: 'synced',
     xeroInvoiceId: { $in: xeroInvoiceIds },
     status: { $ne: 'completed' },
+    isTest: { $ne: true }, isArchived: { $ne: true },
   });
 
   let reconciled = 0;
@@ -538,23 +540,23 @@ const reconcile = async () => {
  */
 const getReconciliationReport = async () => {
   const [synced, pending, failed, totalPayments] = await Promise.all([
-    Payment.countDocuments({ xeroSyncStatus: 'synced' }),
-    Payment.countDocuments({ xeroSyncStatus: { $in: [null, 'pending'] }, status: 'completed', type: { $nin: INTERNAL_TYPES } }),
-    Payment.countDocuments({ xeroSyncStatus: 'failed' }),
-    Payment.countDocuments({ status: 'completed' }),
+    Payment.countDocuments({ xeroSyncStatus: 'synced', isTest: { $ne: true }, isArchived: { $ne: true } }),
+    Payment.countDocuments({ xeroSyncStatus: { $in: [null, 'pending'] }, status: 'completed', type: { $nin: INTERNAL_TYPES }, isTest: { $ne: true }, isArchived: { $ne: true } }),
+    Payment.countDocuments({ xeroSyncStatus: 'failed', isTest: { $ne: true }, isArchived: { $ne: true } }),
+    Payment.countDocuments({ status: 'completed', isTest: { $ne: true }, isArchived: { $ne: true } }),
   ]);
 
   const [syncedAmount, pendingAmount, failedAmount] = await Promise.all([
     Payment.aggregate([
-      { $match: { xeroSyncStatus: 'synced' } },
+      { $match: { xeroSyncStatus: 'synced', isTest: { $ne: true }, isArchived: { $ne: true } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
     Payment.aggregate([
-      { $match: { xeroSyncStatus: { $in: [null, 'pending'] }, status: 'completed', type: { $nin: INTERNAL_TYPES } } },
+      { $match: { xeroSyncStatus: { $in: [null, 'pending'] }, status: 'completed', type: { $nin: INTERNAL_TYPES }, isTest: { $ne: true }, isArchived: { $ne: true } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
     Payment.aggregate([
-      { $match: { xeroSyncStatus: 'failed' } },
+      { $match: { xeroSyncStatus: 'failed', isTest: { $ne: true }, isArchived: { $ne: true } } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
   ]);

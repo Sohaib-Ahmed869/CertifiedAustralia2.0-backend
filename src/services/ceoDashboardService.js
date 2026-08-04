@@ -131,11 +131,13 @@ function getDateTo(query = {}) {
  * Build a date filter for createdAt queries. Supports optional dateTo.
  */
 function dateFilter(dateFrom, dateTo) {
-  if (!dateFrom && !dateTo) return {};
+  // Test applications/payments/certs are excluded from every metric built on this base filter.
+  const base = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' } };
+  if (!dateFrom && !dateTo) return base;
   const filter = {};
   if (dateFrom) filter.$gte = dateFrom;
   if (dateTo) filter.$lte = dateTo;
-  return { createdAt: filter };
+  return { ...base, createdAt: filter };
 }
 
 /**
@@ -257,7 +259,7 @@ async function getOverview(query = {}) {
     weekBuckets.map(async (w) => {
       const weekStart = getWeekStartFromLabel(w.week);
       const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const wFilter = { createdAt: { $gte: weekStart, $lt: weekEnd } };
+      const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
       const [leads, paid] = await Promise.all([
         Application.countDocuments(wFilter),
         Application.countDocuments({ ...wFilter, status: { $in: PAID_STATUSES } }),
@@ -282,6 +284,7 @@ async function getOverview(query = {}) {
   const revenueByMonth = await Payment.aggregate([
     {
       $match: {
+        isTest: { $ne: true }, isArchived: { $ne: true },
         status: 'completed',
         type: { $in: REVENUE_PAYMENT_TYPES },
         createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth() - 11, 1) },
@@ -431,6 +434,7 @@ async function getOverview(query = {}) {
       const agg = await Payment.aggregate([
         {
           $match: {
+            isTest: { $ne: true }, isArchived: { $ne: true },
             status: 'completed',
             type: { $in: REVENUE_PAYMENT_TYPES },
             createdAt: { $gte: weekStart, $lt: weekEnd },
@@ -453,7 +457,7 @@ async function getOverview(query = {}) {
     funnelWeeks.map(async (w) => {
       const weekStart = getWeekStartFromLabel(w.week);
       const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const wFilter = { createdAt: { $gte: weekStart, $lt: weekEnd } };
+      const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
       const startStr = toDateStr(weekStart);
       const endStr = toDateStr(new Date(weekEnd.getTime() - 24 * 60 * 60 * 1000)); // inclusive last day
       const [leads, paid, calls] = await Promise.all([
@@ -520,6 +524,8 @@ async function getLeads(query = {}) {
       const weekStart = getWeekStartFromLabel(w.week);
       const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
       const count = await Application.countDocuments({
+        isTest: { $ne: true }, isArchived: { $ne: true },
+        status: { $ne: 'Archived' },
         createdAt: { $gte: weekStart, $lt: weekEnd },
       });
       return { week: w.week, label: w.label, count };
@@ -566,7 +572,7 @@ async function getLeads(query = {}) {
     weekBuckets.map(async (w) => {
       const weekStart = getWeekStartFromLabel(w.week);
       const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const wFilter = { createdAt: { $gte: weekStart, $lt: weekEnd } };
+      const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
       const [leads, paid] = await Promise.all([
         Application.countDocuments(wFilter),
         Application.countDocuments({ ...wFilter, status: { $in: PAID_STATUSES } }),
@@ -701,8 +707,8 @@ async function getAgentPerformance(query = {}) {
   const dateTo = getDateTo(query);
   const filter = dateFilter(dateFrom, dateTo);
 
-  // All agents
-  const agents = await User.find({ role: 'Agent', status: 'active' }).select('firstName lastName').lean();
+  // All agents (anyone flagged as a sales agent, regardless of role)
+  const agents = await User.find({ isSalesAgent: true, status: 'active' }).select('firstName lastName').lean();
 
   // Per-agent stats
   const details = await Promise.all(
@@ -1167,7 +1173,7 @@ async function getSupplierLiability(query = {}) {
   const now = new Date();
 
   // 1. Applications with an assigned RTO (these generate RTO liabilities)
-  const appFilter = { assignedRTOId: { $exists: true, $ne: null } };
+  const appFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, assignedRTOId: { $exists: true, $ne: null } };
   if (dateFrom || dateTo) {
     appFilter.createdAt = {};
     if (dateFrom) appFilter.createdAt.$gte = dateFrom;
@@ -1182,6 +1188,7 @@ async function getSupplierLiability(query = {}) {
 
   // 2. Existing RTO payments (type rtoPayable or rtoPayment with status completed)
   const paidPayments = await Payment.find({
+    isTest: { $ne: true }, isArchived: { $ne: true },
     type: { $in: ['rtoPayable', 'rtoPayment'] },
     status: 'completed',
   }).lean();
@@ -1292,7 +1299,7 @@ async function getSupplierLiability(query = {}) {
   const thisWeekLiability = thisWeekItems.reduce((s, i) => s + i.amountOwed, 0);
 
   // Revenue in period for net cash calculation
-  const revFilter = { status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } };
+  const revFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } };
   if (dateFrom) revFilter.createdAt = { $gte: dateFrom };
   const revAgg = await Payment.aggregate([
     { $match: revFilter },
@@ -1390,8 +1397,8 @@ async function getWeeklyScorecard(query = {}) {
   // Weeks spanned by the period — used to scale weekly targets for a month view.
   const weekEquiv = Math.max(1, Math.round((weekEnd.getTime() - weekStart.getTime()) / (7 * 86400000)));
 
-  const wFilter = { createdAt: { $gte: weekStart, $lt: weekEnd } };
-  const prevFilter = { createdAt: { $gte: prevStart, $lt: prevEnd } };
+  const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
+  const prevFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: prevStart, $lt: prevEnd } };
 
   // ── Company-Level Metrics ──
 
@@ -1458,9 +1465,11 @@ async function getWeeklyScorecard(query = {}) {
 
   // ── Role-Based Accountability Metrics ──
 
-  // All agents
-  const agents = await User.find({ role: 'Agent', status: 'active' }).select('firstName lastName email').lean();
-  const staffAll = await User.find({ role: { $in: ['Agent', 'Admin', 'CEOReportingManager'] }, status: 'active' }).select('firstName lastName email role').lean();
+  // All agents — anyone flagged as a sales agent, regardless of their role.
+  // (Previously this heuristically unioned Agent/Admin/CEO roles; the explicit
+  // isSalesAgent flag now decides who is tracked here.)
+  const agents = await User.find({ isSalesAgent: true, status: 'active' }).select('firstName lastName email').lean();
+  const staffAll = await User.find({ isSalesAgent: true, status: 'active' }).select('firstName lastName email role').lean();
 
   // Per-agent calls/quality come from the CallEvent log (single source of truth
   // shared with the daily Call Scorecard), not the Application contact counters.
@@ -1516,12 +1525,12 @@ async function getWeeklyScorecard(query = {}) {
   );
 
   // Forecast revenue (new leads × avg conversion × avg revenue per paid app)
-  const allTimePaid = await Application.countDocuments({ status: { $in: PAID_STATUSES } });
-  const allTimeTotal = await Application.countDocuments();
+  const allTimePaid = await Application.countDocuments({ isTest: { $ne: true }, isArchived: { $ne: true }, status: { $in: PAID_STATUSES } });
+  const allTimeTotal = await Application.countDocuments({ isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' } });
   const avgConvRate = allTimeTotal > 0 ? allTimePaid / allTimeTotal : 0;
 
   const allRevenueAgg = await Payment.aggregate([
-    { $match: { status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } } },
+    { $match: { isTest: { $ne: true }, isArchived: { $ne: true }, status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } } },
     { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
   ]);
   const avgRevenuePerPaid = allTimePaid > 0 ? (allRevenueAgg[0]?.total || 0) / allTimePaid : 0;
@@ -1630,7 +1639,7 @@ async function getLeadStatusTracking(query = {}) {
   const dateTo = getDateTo(query);
 
   // Pull every app's lead-status trail + current color/status.
-  const apps = await Application.find({ applicationId: { $ne: 'RECONCILIATION' } })
+  const apps = await Application.find({ isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, applicationId: { $ne: 'RECONCILIATION' } })
     .select('color status leadStatusHistory')
     .lean();
 

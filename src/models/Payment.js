@@ -57,6 +57,20 @@ const paymentSchema = new mongoose.Schema(
       ref: 'PaymentPlan',
     },
     installmentIndex: Number,
+    // Denormalized from Application.isTest — payments of a test application are
+    // excluded from all revenue/cashflow metrics. Set on creation from the app
+    // and re-synced when the application's test flag is toggled.
+    isTest: {
+      type: Boolean,
+      default: false,
+    },
+    // Denormalized from the application being Archived — payments of an archived
+    // application are excluded from all revenue/cashflow metrics. Kept in sync on
+    // archive (applicationService.updateStatus) and restore (restoreFromArchive).
+    isArchived: {
+      type: Boolean,
+      default: false,
+    },
     // Notes
     notes: String,
     // Audit
@@ -85,5 +99,26 @@ paymentSchema.index({ studentId: 1 });
 paymentSchema.index({ status: 1 });
 paymentSchema.index({ xeroSyncStatus: 1 });
 paymentSchema.index({ applicationId: 1, status: 1 });
+paymentSchema.index({ isTest: 1 });
+paymentSchema.index({ isArchived: 1 });
+
+// Inherit the test/archived flags from the parent application on creation, so
+// payments recorded against a test OR archived application are excluded from
+// revenue/cashflow metrics regardless of which code path created them. Toggling
+// the app re-syncs existing payments (setTestFlag / updateStatus / restore), so
+// this only needs to cover new docs.
+paymentSchema.pre('save', async function (next) {
+  if (!this.isNew) return next();
+  try {
+    if (this.applicationId && (this.isTest !== true || this.isArchived !== true)) {
+      const app = await mongoose.model('Application').findById(this.applicationId).select('isTest status').lean();
+      if (app) {
+        if (this.isTest !== true && app.isTest) this.isTest = true;
+        if (this.isArchived !== true && app.status === 'Archived') this.isArchived = true;
+      }
+    }
+  } catch { /* non-fatal — a later sync will correct it */ }
+  next();
+});
 
 module.exports = mongoose.model('Payment', paymentSchema);

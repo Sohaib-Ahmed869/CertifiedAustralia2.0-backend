@@ -53,6 +53,12 @@ const certificateSchema = new mongoose.Schema(
       type: String,
       enum: ['student', 'staff'],
     },
+    // Denormalized from Application.isTest — certificates of a test application
+    // are excluded from certificate metrics. Re-synced on toggle (setTestFlag).
+    isTest: {
+      type: Boolean,
+      default: false,
+    },
     // Notes
     notes: String,
     createdAt: {
@@ -65,5 +71,19 @@ const certificateSchema = new mongoose.Schema(
     },
   }
 );
+
+certificateSchema.index({ isTest: 1 });
+
+// Inherit the test flag from the parent application on creation.
+certificateSchema.pre('save', async function (next) {
+  if (!this.isNew || this.isTest === true) return next();
+  try {
+    if (this.applicationId) {
+      const app = await mongoose.model('Application').findById(this.applicationId).select('isTest').lean();
+      if (app?.isTest) this.isTest = true;
+    }
+  } catch { /* non-fatal — a later toggle sync will correct it */ }
+  next();
+});
 
 module.exports = mongoose.model('Certificate', certificateSchema);

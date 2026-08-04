@@ -140,6 +140,7 @@ async function getWeekSummary(weekKey) {
   const revenueAgg = await Payment.aggregate([
     {
       $match: {
+        isTest: { $ne: true }, isArchived: { $ne: true },
         status: 'completed',
         type: { $in: REVENUE_PAYMENT_TYPES },
         createdAt: { $gte: start, $lte: end },
@@ -158,6 +159,7 @@ async function getWeekSummary(weekKey) {
   const dailyRevenueAgg = await Payment.aggregate([
     {
       $match: {
+        isTest: { $ne: true }, isArchived: { $ne: true },
         status: 'completed',
         type: { $in: REVENUE_PAYMENT_TYPES },
         createdAt: { $gte: start, $lte: end },
@@ -403,6 +405,7 @@ async function getRangeSummary(dateFrom, dateTo) {
   const revenueAgg = await Payment.aggregate([
     {
       $match: {
+        isTest: { $ne: true }, isArchived: { $ne: true },
         status: 'completed',
         type: { $in: REVENUE_PAYMENT_TYPES },
         createdAt: { $gte: start, $lte: end },
@@ -423,6 +426,7 @@ async function getRangeSummary(dateFrom, dateTo) {
   const weeklyRevenueAgg = await Payment.aggregate([
     {
       $match: {
+        isTest: { $ne: true }, isArchived: { $ne: true },
         status: 'completed',
         type: { $in: REVENUE_PAYMENT_TYPES },
         createdAt: { $gte: start, $lte: end },

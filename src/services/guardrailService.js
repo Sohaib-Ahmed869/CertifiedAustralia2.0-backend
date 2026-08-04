@@ -191,7 +191,7 @@ async function recordSubmissionAlert() {
     if (!threshold || threshold <= 0 || emails.length === 0) return;
 
     const since = new Date(Date.now() - 60 * 60 * 1000);
-    const count = await Application.countDocuments({ createdAt: { $gte: since } });
+    const count = await Application.countDocuments({ createdAt: { $gte: since }, isTest: { $ne: true } });
     if (count < threshold) return;
 
     // Cooldown: alert at most once/hour (guarded by an atomic update on lastAlertAt).

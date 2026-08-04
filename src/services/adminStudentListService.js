@@ -98,6 +98,17 @@ async function buildBaseFilter(query) {
     filter.status = { $ne: 'Archived' };
   }
 
+  // Active / Test / All capsule toggle. Applies to both the list rows AND the
+  // summary KPIs (which are computed over this same filter).
+  //   'test' → only test applications
+  //   'all'  → everything (test + non-test)
+  //   'active' (default) → exclude test applications
+  if (query.appType === 'test') {
+    filter.isTest = true;
+  } else if (query.appType !== 'all') {
+    filter.isTest = { $ne: true };
+  }
+
   if (query.assignedAgentId) filter.assignedAgentId = oid(query.assignedAgentId);
   if (query.color) filter.color = query.color;
   if (query.industryId) filter.industryId = oid(query.industryId);
@@ -206,6 +217,8 @@ async function adminList(query = {}) {
   }
 
   // ── Forecast over the ENTIRE filtered set (not just the page) ──
+  // KPIs share the list filter, so they follow the Active/Test/All toggle
+  // (and the archived exclusion) applied in buildBaseFilter.
   const forecastAgg = await Application.aggregate([
     { $match: filter },
     {
@@ -356,6 +369,7 @@ async function adminExport(query = {}) {
     const closer = app.closedBy || {};
     return {
       applicationId: app.applicationId,
+      isTest: !!app.isTest,
       studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
       studentEmail: student.email || '',
       phone: student.phone || '',

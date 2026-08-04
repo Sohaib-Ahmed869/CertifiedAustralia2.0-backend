@@ -37,7 +37,7 @@ const PAID_STATUSES = [
 const upsertTarget = async (data) => {
   const { agentId, period, periodStart, ...fields } = data;
 
-  const agent = await User.findOne({ _id: agentId, role: 'Agent', status: 'active' });
+  const agent = await User.findOne({ _id: agentId, isSalesAgent: true, status: 'active' });
   if (!agent) throw new AppError('Agent not found or inactive', 404);
 
   const target = await AgentTarget.findOneAndUpdate(
@@ -126,9 +126,9 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
     periodEnd.setMonth(periodEnd.getMonth() + 1);
   }
 
-  // Get all active agents
+  // Get all active agents (anyone flagged as a sales agent, regardless of role)
   const agents = await User.find(
-    { role: 'Agent', status: 'active' },
+    { isSalesAgent: true, status: 'active' },
     'firstName lastName email'
   ).lean();
 
@@ -151,6 +151,8 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
     const assigned = await Application.countDocuments({
       assignedAgentId: agent._id,
       createdAt: { $gte: periodStart, $lt: periodEnd },
+      isTest: { $ne: true }, isArchived: { $ne: true },
+      status: { $ne: 'Archived' },
     });
 
     // Paid apps in period
@@ -158,6 +160,7 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
       assignedAgentId: agent._id,
       status: { $in: PAID_STATUSES },
       updatedAt: { $gte: periodStart, $lt: periodEnd },
+      isTest: { $ne: true }, isArchived: { $ne: true },
     });
 
     // Revenue in period
@@ -167,6 +170,7 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
           status: 'completed',
           type: { $in: ['upfront', 'plan', 'manualMarkPaid'] },
           createdAt: { $gte: periodStart, $lt: periodEnd },
+          isTest: { $ne: true }, isArchived: { $ne: true },
         },
       },
       {
@@ -313,6 +317,8 @@ const getMyPerformance = async (agentId) => {
   const assignedThisMonth = await Application.countDocuments({
     assignedAgentId: agentObjId,
     createdAt: { $gte: monthStart, $lt: monthEnd },
+    isTest: { $ne: true }, isArchived: { $ne: true },
+    status: { $ne: 'Archived' },
   });
 
   // Paid this month
@@ -320,6 +326,7 @@ const getMyPerformance = async (agentId) => {
     assignedAgentId: agentObjId,
     status: { $in: PAID_STATUSES },
     updatedAt: { $gte: monthStart, $lt: monthEnd },
+    isTest: { $ne: true }, isArchived: { $ne: true },
   });
 
   return {

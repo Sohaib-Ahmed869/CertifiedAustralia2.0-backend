@@ -348,13 +348,29 @@ const ROLE_DEFAULTS = {
  * Returns the effective permissions for a user.
  * Merges role defaults with any per-user overrides.
  */
+// Tabs that come with operating as a sales agent, regardless of the user's base
+// role. Granted on top of role defaults when `user.isSalesAgent` is true, so a
+// higher-role staffer (Admin/CEO) who also sells still gets the agent workspace
+// (call scorecard, call burst, customers, contacts, register customer). Explicit
+// per-user overrides still win, so any of these can be individually revoked.
+const AGENT_CAPABILITY_PERMISSIONS = [
+  'tab_my_call_scorecard',
+  'tab_call_burst',
+  'tab_customers',
+  'tab_register_customer',
+  'tab_contacts',
+];
+
 const getEffectivePermissions = (user) => {
   const roleDefaults = ROLE_DEFAULTS[user.role] || {};
+  const agentGrants = user.isSalesAgent
+    ? Object.fromEntries(AGENT_CAPABILITY_PERMISSIONS.map((key) => [key, true]))
+    : {};
   const overrides = user.permissions instanceof Map
     ? Object.fromEntries(user.permissions)
     : (user.permissions || {});
 
-  return { ...roleDefaults, ...overrides };
+  return { ...roleDefaults, ...agentGrants, ...overrides };
 };
 
 /**

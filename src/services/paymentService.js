@@ -489,7 +489,9 @@ const getStats = async (query = {}) => {
     const d = new Date(query.dateTo);
     if (!isNaN(d.getTime())) { d.setHours(23, 59, 59, 999); range.$lte = d; }
   }
-  const rangeMatch = Object.keys(range).length ? { createdAt: range } : {};
+  const rangeMatch = Object.keys(range).length
+    ? { createdAt: range, isTest: { $ne: true }, isArchived: { $ne: true } }
+    : { isTest: { $ne: true }, isArchived: { $ne: true } };
 
   const [
     revenueTotals,
@@ -530,6 +532,7 @@ const getStats = async (query = {}) => {
         $match: {
           status: 'completed',
           createdAt: { $gte: firstDayOfMonth },
+          isTest: { $ne: true }, isArchived: { $ne: true },
         },
       },
       {
@@ -555,6 +558,7 @@ const getStats = async (query = {}) => {
 
     // Overdue installments (from PaymentPlan)
     PaymentPlan.aggregate([
+      { $match: { isTest: { $ne: true }, isArchived: { $ne: true } } },
       { $unwind: '$installments' },
       {
         $match: {
@@ -611,6 +615,7 @@ const getStats = async (query = {}) => {
   // Payment plan totals
   const [planTotals] = await Promise.all([
     PaymentPlan.aggregate([
+      { $match: { isTest: { $ne: true }, isArchived: { $ne: true } } },
       {
         $group: {
           _id: null,
@@ -662,7 +667,7 @@ const getStats = async (query = {}) => {
 };
 
 const exportCsv = async (filters) => {
-  const query = {};
+  const query = { isTest: { $ne: true }, isArchived: { $ne: true } };
 
   if (filters.status) {
     query.status = filters.status;

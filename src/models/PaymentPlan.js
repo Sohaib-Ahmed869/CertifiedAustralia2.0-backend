@@ -102,6 +102,12 @@ const paymentPlanSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    // Denormalized from Application.isTest — plans of a test application are
+    // excluded from plan/installment metrics. Re-synced on toggle (setTestFlag).
+    isTest: {
+      type: Boolean,
+      default: false,
+    },
     createdAt: {
       type: Date,
       default: Date.now,
@@ -116,5 +122,18 @@ const paymentPlanSchema = new mongoose.Schema(
 paymentPlanSchema.index({ applicationId: 1 });
 paymentPlanSchema.index({ studentId: 1 });
 paymentPlanSchema.index({ status: 1 });
+paymentPlanSchema.index({ isTest: 1 });
+
+// Inherit the test flag from the parent application on creation.
+paymentPlanSchema.pre('save', async function (next) {
+  if (!this.isNew || this.isTest === true) return next();
+  try {
+    if (this.applicationId) {
+      const app = await mongoose.model('Application').findById(this.applicationId).select('isTest').lean();
+      if (app?.isTest) this.isTest = true;
+    }
+  } catch { /* non-fatal — a later toggle sync will correct it */ }
+  next();
+});
 
 module.exports = mongoose.model('PaymentPlan', paymentPlanSchema);

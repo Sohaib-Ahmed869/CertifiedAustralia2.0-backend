@@ -319,11 +319,21 @@ async function getIndividualScorecard({ date, from, to, agentId } = {}) {
   };
 }
 
+// Set of user IDs (as strings) currently flagged as sales agents. Call Tracking
+// only counts/shows calls made by active agents — staff who aren't agents but
+// happen to have logged a call are excluded from the team scorecard, consistent
+// with Agent Performance and the assign dropdowns.
+async function activeAgentIdSet() {
+  const agents = await User.find({ isSalesAgent: true, status: 'active' }).select('_id').lean();
+  return new Set(agents.map((u) => String(u._id)));
+}
+
 async function getTeamScorecard({ from, to, date } = {}) {
   const f = from || date || todayAEST();
   const t = to || date || f;
   const targets = await readTargets();
-  const events = await queryEvents({ from: f, to: t });
+  const agentIds = await activeAgentIdSet();
+  const events = (await queryEvents({ from: f, to: t })).filter((e) => agentIds.has(String(e.agentId)));
 
   // Daily targets scale by the number of days in the range so a week/month view
   // compares against the right cumulative goal (returned `targets` stays daily).
@@ -368,7 +378,8 @@ async function getTeamScorecard({ from, to, date } = {}) {
 async function getByTimeDashboard({ from, to, date } = {}) {
   const f = from || date || todayAEST();
   const t = to || date || f;
-  const events = await queryEvents({ from: f, to: t });
+  const agentIds = await activeAgentIdSet();
+  const events = (await queryEvents({ from: f, to: t })).filter((e) => agentIds.has(String(e.agentId)));
 
   const BLOCKS = [];
   for (let h = 9; h <= 19; h++) BLOCKS.push(blockForHour(h));
