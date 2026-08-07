@@ -51,6 +51,17 @@ const publicBase = () =>
 
 const webhook = (path) => `${publicBase()}/api/webhooks/twilio${path}`;
 
+// Media region for conferences. The account is homed in au1 (Sydney) and the
+// browser Device connects at the Sydney media edge; pinning the conference to
+// the same region keeps two-way audio in-country (no cross-region silence).
+const CONFERENCE_REGION = process.env.TWILIO_CONFERENCE_REGION || 'au1';
+
+// Answering-Machine Detection: how long (seconds) Twilio may analyse the answered
+// audio before deciding human vs machine. It holds the answered leg silent for
+// this window in the worst case, so keep it tight; ambiguous → AnsweredBy=unknown,
+// which we treat as human (never drop a real person).
+const AMD_TIMEOUT = Number(process.env.TWILIO_AMD_TIMEOUT || 5);
+
 /* ── Browser access token ──────────────────────────────────── */
 
 /**
@@ -102,6 +113,7 @@ function agentConferenceTwiml(conferenceName) {
     {
       startConferenceOnEnter: true,
       endConferenceOnExit: true,
+      region: CONFERENCE_REGION,
       // Silence Twilio's default hold music while waiting for a recipient.
       waitUrl: '',
       statusCallback: webhook('/conference'),
@@ -113,9 +125,12 @@ function agentConferenceTwiml(conferenceName) {
 }
 
 /**
- * Student leg — CONNECT ON ANSWER. Whoever picks up first is dropped straight
- * into the conference with the agent (no press-1, no AMD gating). Voicemails
- * don't answer, so they never win. Losers are hung up by the winner-lock.
+ * Student leg — CONNECT ON ANSWER, but only for HUMANS. The controller gates
+ * this on Twilio's Answering Machine Detection (`AnsweredBy`): a machine /
+ * voicemail / fax leg is hung up before it ever reaches here, so it can't join
+ * the conference and can't win the burst. Whoever answers first (human) is
+ * dropped straight into the conference with the agent; losers are hung up by
+ * the winner-lock. `region` pins conference media to the account's au1 region.
  */
 function studentConferenceTwiml(conferenceName) {
   const res = new twilio.twiml.VoiceResponse();
@@ -124,6 +139,7 @@ function studentConferenceTwiml(conferenceName) {
     {
       startConferenceOnEnter: true,
       endConferenceOnExit: false,
+      region: CONFERENCE_REGION,
       statusCallback: webhook('/conference'),
       statusCallbackEvent: 'join leave',
     },
@@ -188,8 +204,11 @@ function voicemailTwiml({ greeting } = {}) {
 /* ── Outbound calls ────────────────────────────────────────── */
 
 /**
- * Place one outbound call to a recipient's phone. On answer, Twilio fetches
- * the student voice webhook which returns studentConferenceTwiml.
+ * Place one outbound call to a recipient's phone. On answer, Twilio runs
+ * Answering-Machine Detection (synchronous — it waits until it decides human vs
+ * machine, up to AMD_TIMEOUT) and only THEN fetches the student voice webhook,
+ * passing `AnsweredBy`. The webhook bridges humans into the conference and hangs
+ * up machines/voicemail/fax, so voicemail can never be mistaken for a live pickup.
  * `from` is the initiating agent's allotted caller ID (falls back to the global
  * TWILIO_PHONE_NUMBER). `timeout` bounds the ring; unanswered legs → no-answer.
  */
@@ -200,6 +219,11 @@ async function callStudent({ to, burstId, from, timeout = 30 }) {
     url: webhook(`/voice/student?burstId=${encodeURIComponent(burstId)}`),
     method: 'POST',
     timeout,
+    // Synchronous AMD: 'Enable' resolves as soon as it hears a human or a machine
+    // greeting start (fast for humans), unlike 'DetectMessageEnd' which waits for
+    // the whole voicemail greeting. We only want to avoid machines, not leave one.
+    machineDetection: 'Enable',
+    machineDetectionTimeout: AMD_TIMEOUT,
     statusCallback: webhook(`/status?burstId=${encodeURIComponent(burstId)}`),
     statusCallbackMethod: 'POST',
     statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],

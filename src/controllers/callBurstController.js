@@ -113,10 +113,20 @@ const voiceAgent = asyncHandler(async (req, res) => {
   res.type('text/xml').send(twiml);
 });
 
-// A recipient answered → drop them into the conference (connect-on-answer).
+// A recipient answered → connect-on-answer, but only if a HUMAN picked up.
+// Twilio ran Answering-Machine Detection before this request and tells us who
+// answered via `AnsweredBy`: human | machine_start | machine_end_* | fax | unknown.
+// Machines/voicemail/fax are hung up here so they never join the conference and
+// can never win the burst (fixes voicemail showing "connected"). `unknown` (AMD
+// timed out / inconclusive) is treated as human so we never drop a real person.
 const voiceStudent = asyncHandler(async (req, res) => {
   if (!guard(req, res)) return;
   const burstId = req.query.burstId || req.body.burstId;
+  const answeredBy = req.body.AnsweredBy || '';
+  if (/^machine/.test(answeredBy) || answeredBy === 'fax') {
+    await callBurstService.markMachine(burstId, req.body.CallSid, answeredBy);
+    return res.type('text/xml').send('<Response><Hangup/></Response>');
+  }
   // We only need the conference name; fetch it via the service-owned model.
   const CallBurst = require('../models/CallBurst');
   const burst = await CallBurst.findById(burstId).select('conferenceName').lean();

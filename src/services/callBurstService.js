@@ -140,31 +140,60 @@ async function registerAgentLeg(burstId, callSid) {
   return twilioVoice.agentConferenceTwiml(burst.conferenceName);
 }
 
-/** Blast the outbound calls to every recipient. Idempotent-ish via status. */
+/**
+ * Blast the outbound calls to every recipient. Dials are fired in PARALLEL so
+ * every phone rings at (near) the same instant — a sequential await-loop made
+ * the last recipient ring seconds after the first (one Twilio REST round-trip
+ * to the au1 region + a CDR write per leg). Idempotent-ish via status.
+ */
 async function blastRecipients(burst) {
-  for (const p of burst.participants) {
-    if (p.callSid) continue; // already dialed
-    try {
-      const sid = await twilioVoice.callStudent({
-        to: p.phone,
-        burstId: String(burst._id),
-        from: burst.callerId,
-        timeout: RING_TIMEOUT,
-      });
-      p.callSid = sid;
-      p.status = 'ringing';
-      console.log(`[callBurst] dialing ${p.phone} (${p.displayApplicationId || '—'}) sid=${sid}`);
-      // Persist an outbound CDR row for Call Tracking, keyed by the leg's SID.
-      await writeLegRecord(burst, p, sid);
-    } catch (err) {
-      p.status = 'failed';
-      console.warn(`[callBurst] dial ${p.phone} FAILED: ${err.message}`);
-    }
-  }
+  await Promise.all(
+    burst.participants.map(async (p) => {
+      if (p.callSid) return; // already dialed
+      try {
+        const sid = await twilioVoice.callStudent({
+          to: p.phone,
+          burstId: String(burst._id),
+          from: burst.callerId,
+          timeout: RING_TIMEOUT,
+        });
+        p.callSid = sid;
+        p.status = 'ringing';
+        console.log(`[callBurst] dialing ${p.phone} (${p.displayApplicationId || '—'}) sid=${sid}`);
+        // Persist an outbound CDR row for Call Tracking, keyed by the leg's SID.
+        await writeLegRecord(burst, p, sid);
+      } catch (err) {
+        p.status = 'failed';
+        console.warn(`[callBurst] dial ${p.phone} FAILED: ${err.message}`);
+      }
+    })
+  );
   burst.status = 'ringing';
   await burst.save();
   emit(burst, 'ringing');
   try { emitCallRecordsUpdated(); } catch { /* socket optional */ }
+}
+
+/**
+ * markMachine — a dialed leg answered but Answering-Machine Detection flagged it
+ * as a machine / voicemail / fax. The webhook hangs that leg up (it never joins
+ * the conference, so it can't win), and here we record it as `voicemail` on the
+ * participant + CDR so reporting shows it truthfully instead of a live answer.
+ */
+async function markMachine(burstId, callSid, answeredBy = 'machine') {
+  if (!burstId || !callSid) return;
+  const burst = await CallBurst.findById(burstId);
+  if (!burst) return;
+  const p = burst.participants.find((x) => x.callSid === callSid);
+  if (!p || p.isWinner) return; // never override a real winner
+  p.status = 'voicemail';
+  await burst.save();
+  console.log(`[callBurst] ${burst._id} ${p.phone} → ${answeredBy} (voicemail) — not bridging`);
+  try {
+    await callRecordService.upsertLeg(callSid, { status: 'voicemail', connected: false });
+    emitCallRecordsUpdated();
+  } catch { /* CDR best-effort */ }
+  emit(burst, 'progress');
 }
 
 /** Create/refresh the outbound CallRecord for one dialed recipient leg. */
@@ -305,6 +334,10 @@ async function onStatusEvent(body) {
 
   const p = burst.participants.find((x) => x.callSid === callSid);
   if (!p) return;
+
+  // AMD already classified this leg as voicemail/machine and hung it up — keep
+  // that verdict; don't let the trailing `completed` event relabel it.
+  if (p.status === 'voicemail') return;
 
   const mapped = STATUS_MAP[raw] || raw;
   // Never downgrade the winner away from in-progress until it truly completes.
@@ -465,6 +498,7 @@ module.exports = {
   registerAgentLeg,
   onConferenceEvent,
   onStatusEvent,
+  markMachine,
   endBurst,
   hangup,
   getBurst,
