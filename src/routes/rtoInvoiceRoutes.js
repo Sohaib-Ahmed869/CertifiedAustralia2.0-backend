@@ -4,6 +4,7 @@ const { protect, authorize } = require('../middleware/auth');
 const asyncHandler = require('../utils/asyncHandler');
 const upload = require('../middleware/upload');
 const rtoInvoiceService = require('../services/rtoInvoiceService');
+const invoiceParserService = require('../services/invoiceParserService');
 
 let googleDriveService;
 try { googleDriveService = require('../services/googleDriveService'); } catch { /* optional */ }
@@ -12,6 +13,22 @@ const router = express.Router();
 
 router.use(protect);
 router.use(authorize('Admin', 'CEOReportingManager'));
+
+// Parse an uploaded invoice file and return extracted fields (DEXT-style).
+// Does NOT persist anything — the frontend uses this to pre-fill the upload form,
+// then the user reviews and submits POST / with the same file as usual.
+router.post('/parse', upload.single('file'), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+  try {
+    const buffer = fs.readFileSync(req.file.path);
+    const extracted = await invoiceParserService.parseInvoiceBuffer(buffer, req.file.mimetype);
+    // Don't ship the full raw text back to the client — keep the payload lean.
+    const { raw, ...fields } = extracted;
+    res.json({ extracted: fields });
+  } finally {
+    fs.unlink(req.file.path, () => {});
+  }
+}));
 
 // List invoices
 router.get('/', asyncHandler(async (req, res) => {
