@@ -76,6 +76,8 @@ const intakeFormSchema = new mongoose.Schema(
     hasCreditToTransfer: Boolean,
     creditQualificationName: String,
     creditYearCompleted: Number,
+    // Student agreement acknowledgement (student consents on submit; admin can set when filling on behalf)
+    agreementAccepted: Boolean,
     status: {
       type: String,
       enum: ['incomplete', 'submitted', 'approved', 'rejected'],
