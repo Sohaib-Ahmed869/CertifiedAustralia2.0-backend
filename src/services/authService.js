@@ -168,7 +168,18 @@ const register = async (data) => {
     );
   }
 
-  return { token, user: userData };
+  // The human-readable `APP#####` is what the student is told to quote, so hand
+  // it back alongside the token — the thank-you page and the agent-registration
+  // success modal both show it as the reference number.
+  return {
+    token,
+    user: userData,
+    application: {
+      _id: application._id,
+      applicationId: application.applicationId,
+      status: application.status,
+    },
+  };
 };
 
 const login = async ({ email, password }) => {
