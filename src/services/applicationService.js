@@ -114,11 +114,27 @@ const createApplication = async (data) => {
     }
   }
 
+  // The automatic signup discount applies to EVERY application a student starts, not just
+  // their first one at registration. Only skip it when the caller supplied its own
+  // discounts array (e.g. an import/backfill that already carries the discount).
+  const hasCallerDiscounts = Array.isArray(data.discounts) && data.discounts.length > 0;
+  const signupDiscount = hasCallerDiscounts
+    ? {}
+    : {
+        discounts: [{
+          amount: SIGNUP_DISCOUNT_AMOUNT,
+          note: 'Signup discount',
+          createdAt: new Date(),
+        }],
+        signupDiscountApplied: true,
+      };
+
   const application = await Application.create({
     ...data,
     applicationId,
     status: data.status || 'New',
     ...(sourceAttribution ? { sourceAttribution } : {}),
+    ...signupDiscount,
   });
 
   return refreshApplication(application._id);
