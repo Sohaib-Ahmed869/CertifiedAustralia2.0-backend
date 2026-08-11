@@ -63,7 +63,9 @@ router.patch('/:id/source', controller.updateSource);
 router.patch('/:id/lead-status', controller.updateLeadStatus);
 router.patch('/:id/assign-rto', controller.assignRTO);
 router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);
-router.post('/:id/rto-submission', controller.sendRTOSubmission);
+// Staff only — the ownership guard above lets a Student through on their own :id,
+// which would otherwise let them email their own package to an RTO.
+router.post('/:id/rto-submission', authorize('Admin', 'CEOReportingManager', 'Agent'), controller.sendRTOSubmission);
 router.patch('/:id/status', controller.updateStatus);
 router.patch('/:id/restore', controller.restoreFromArchive);
 router.post('/:id/notes', controller.addNote);
@@ -79,7 +81,9 @@ router.patch('/:id/additional-doc-requests/:requestId/submit', controller.submit
 router.patch('/:id/additional-doc-requests/:requestId/review', controller.reviewAdditionalDocs);
 
 // RTO submission versioning
-router.post('/:id/rto-submissions', controller.createRTOSubmission);
+router.post('/:id/rto-submissions', authorize('Admin', 'CEOReportingManager', 'Agent'), controller.createRTOSubmission);
+// Close a submission's emailed document links ahead of expiry
+router.post('/:id/rto-submissions/:submissionId/revoke', authorize('Admin', 'CEOReportingManager'), controller.revokeRTOSubmission);
 
 router.route('/:id/intake')
   .post(controller.createIntakeForm);

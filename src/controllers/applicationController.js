@@ -391,11 +391,23 @@ module.exports = {
   }),
 
   createRTOSubmission: asyncHandler(async (req, res) => {
-    const result = await service.createRTOSubmission(req.params.id, {
+    // createRTOSubmission returns the new subdoc id (used to sign document links);
+    // this route answers with the refreshed application, as it always has.
+    await service.createRTOSubmission(req.params.id, {
       ...req.body,
       sentBy: req.user._id,
     });
+    const result = await service.applications.getById(req.params.id);
     res.status(201).json({ item: result });
+  }),
+
+  revokeRTOSubmission: asyncHandler(async (req, res) => {
+    const result = await service.revokeRTOSubmission(
+      req.params.id,
+      req.params.submissionId,
+      req.user._id
+    );
+    res.status(200).json({ item: result });
   }),
 
   logCall: asyncHandler(async (req, res) => {

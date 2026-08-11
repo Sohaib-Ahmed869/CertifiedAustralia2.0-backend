@@ -57,6 +57,15 @@ app.get('/api/track/:token', async (req, res) => {
   res.end(TRANSPARENT_GIF);
 });
 
+/* ── RTO document access (signed links emailed to external RTOs) ──
+   Mounted before the authenticated `/api` router: external RTOs have no portal
+   account. The signed token + submission state is the whole authorisation model.
+   Two path segments on /pkg/, so it never collides with the single-segment doc route. */
+app.get('/api/rto-docs/pkg/:token', (req, res) =>
+  require('./controllers/rtoDocController').servePackage(req, res));
+app.get('/api/rto-docs/:token', (req, res) =>
+  require('./controllers/rtoDocController').serveDocument(req, res));
+
 /* ── Proxy file endpoint (matches old project /proxy-file) ── */
 app.get('/api/proxy-file', async (req, res) => {
   const { url, inline, name } = req.query;

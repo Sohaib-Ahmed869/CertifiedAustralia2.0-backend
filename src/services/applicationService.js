@@ -8,6 +8,7 @@ const Document = require('../models/Document');
 const Certificate = require('../models/Certificate');
 const Payment = require('../models/Payment');
 const appEmails = require('./applicationEmailService');
+const rtoDocAccess = require('./rtoDocAccessService');
 const { SIGNUP_DISCOUNT_AMOUNT } = require('../config/pricing');
 
 /**
@@ -458,6 +459,10 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
 
   if (!application) throw new AppError('Application not found', 404);
 
+  // Set once the submission record exists, so the catch block can close its links
+  // again if the email never actually goes out.
+  let submissionId = null;
+
   // ── Build and send the RTO assessment email ──
   // NOTE: No payment or internal process info is shared with external RTOs.
   // Generates Student Intake Form PDF + collects all document links.
@@ -503,27 +508,31 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
     }
     const industry = application.industryId || {};
 
-    // Normalise Drive URL to a publicly accessible link
-    const toPublicUrl = (raw) => {
-      if (!raw) return null;
-      const m = raw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-      if (m) return `https://drive.google.com/file/d/${m[1]}/view?usp=sharing`;
-      const m2 = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-      if (m2) return `https://drive.google.com/file/d/${m2[1]}/view?usp=sharing`;
-      return raw;
-    };
+    // ── Create the submission version record BEFORE composing the email ──
+    // Document links are signed against this record's _id, so it has to exist first.
+    // Creating it also supersedes every earlier submission, which is what closes the
+    // previous email's links. See Docs/RTO-DOC-ACCESS-IMPLEMENTATION-PLAN.md
+    const linkableDocs = documents.filter(
+      (d) => d.googleDriveFileId || d.googleDriveLink
+    );
+    submissionId = await createRTOSubmission(applicationId, {
+      sentBy: null,
+      sentToEmail: rtoEmail,
+      documentsIncluded: documents.map((d) => d.fileName || d.fieldName || 'document'),
+      documentIds: linkableDocs.map((d) => d._id),
+      emailSent: false,
+    });
 
-    // Build document links grouped by type
+    // Build document links grouped by type — portal-controlled, not raw Drive URLs,
+    // so access can be withdrawn after the email has been sent.
     const docsByType = {};
-    documents.forEach((doc) => {
+    linkableDocs.forEach((doc) => {
       const type = doc.fieldName || doc.documentType || 'Other';
       if (!docsByType[type]) docsByType[type] = [];
-      const rawLink = doc.googleDriveLink
-        || (doc.googleDriveFileId ? `https://drive.google.com/file/d/${doc.googleDriveFileId}/view` : null);
-      const link = toPublicUrl(rawLink);
-      if (link) {
-        docsByType[type].push({ name: doc.fileName, link });
-      }
+      docsByType[type].push({
+        name: doc.fileName,
+        link: rtoDocAccess.buildDocUrl(submissionId, doc._id),
+      });
     });
 
     // Build document links HTML — each doc as a clickable card-style link
@@ -544,9 +553,13 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
       ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:20px 0;border-radius:12px;background:#fff;border:1px solid ${T.primaryBorder};overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.04);">` +
           `<tr><td style="padding:18px 20px 0 20px;border-bottom:2px solid ${T.primaryLight};">` +
             `<p style="margin:0 0 12px 0;font-family:${T.fontStack};font-size:14px;font-weight:700;color:${T.primary};text-transform:uppercase;letter-spacing:0.6px;">Supporting Documents (${docCount})</p>` +
-            `<p style="margin:0 0 14px 0;font-family:${T.fontStack};font-size:13px;color:${T.textTertiary};">Click on any document below to view or download:</p>` +
+            `<p style="margin:0 0 14px 0;font-family:${T.fontStack};font-size:13px;color:${T.textTertiary};">Click on any document below to view or download. These links are specific to this submission &mdash; if an updated application is sent, they are replaced by the links in that email.</p>` +
           `</td></tr>` +
           `<tr><td style="padding:4px 20px 16px 20px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">${docLinksHtml}</table></td></tr>` +
+          `<tr><td style="padding:0 20px 18px 20px;">` +
+            `<a href="${rtoDocAccess.buildPackageUrl(submissionId)}" target="_blank" style="font-family:${T.fontStack};font-size:13px;font-weight:600;color:${T.primary};text-decoration:none;">View all documents in one page &rarr;</a>` +
+            `<p style="margin:8px 0 0 0;font-family:${T.fontStack};font-size:12px;color:${T.textTertiary};">Document access is available for ${rtoDocAccess.TTL_DAYS()} days from the date of this email.</p>` +
+          `</td></tr>` +
         `</table>`
       : '';
 
@@ -604,19 +617,32 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
 
     console.log('[RTO Submission] Email sent to %s for app %s (%d PDFs, %d doc links)', rtoEmail, application.applicationId, pdfAttachments.length, docCount);
 
-    // Create RTO submission version record
+    // Mark the record as actually delivered
     try {
-      await createRTOSubmission(applicationId, {
-        sentBy: null,
-        documentsIncluded: documents.map((d) => d.fileName || d.fieldName || 'document'),
-        emailSent: true,
-      });
+      await Application.updateOne(
+        { _id: applicationId, 'rtoSubmissions._id': submissionId },
+        { $set: { 'rtoSubmissions.$.emailSent': true } }
+      );
     } catch (vErr) {
       console.error('[RTO Submission] Version record failed:', vErr.message);
     }
   } catch (emailErr) {
     console.error('[RTO Submission] Email failed for app %s:', application.applicationId, emailErr.message);
-    // Don't throw — the DB update succeeded, email is best-effort
+    // The email never went out, so its links must not stay live. The previous
+    // submission has already been superseded by this point and is NOT reinstated —
+    // failing closed is the safe direction. The admin is told to resend.
+    if (submissionId) {
+      try {
+        await rtoDocAccess.revokeSubmission(applicationId, submissionId, null);
+      } catch (rErr) {
+        console.error('[RTO Submission] Failed to close links after send failure:', rErr.message);
+      }
+    }
+    // Surfaced to the admin so they know the previous package is now closed.
+    throw new AppError(
+      'The application could not be emailed to the RTO. Document links from the previous submission have been closed — please resend.',
+      502
+    );
   }
 
   return application;
@@ -1357,7 +1383,16 @@ const reviewAdditionalDocs = async (applicationId, requestId, { status, reviewNo
 
 // ── RTO Submission Versioning (CA-08 duplicate prevention) ──
 
-async function createRTOSubmission(applicationId, { sentBy, documentsIncluded, emailSent }) {
+/**
+ * Push a new submission version and supersede every earlier one.
+ *
+ * Superseding is what closes the previous email's document links — see
+ * rtoDocAccessService. Returns the new subdocument's _id, which the caller signs
+ * the emailed links with.
+ */
+async function createRTOSubmission(applicationId, {
+  sentBy, sentToEmail, documentsIncluded, documentIds, emailSent,
+}) {
   const application = await Application.findById(applicationId);
   if (!application) throw new AppError('Application not found', 404);
 
@@ -1366,18 +1401,32 @@ async function createRTOSubmission(applicationId, { sentBy, documentsIncluded, e
     sub.superseded = true;
   }
 
+  const sentAt = new Date();
   const version = (application.rtoSubmissions.length || 0) + 1;
   application.rtoSubmissions.push({
-    sentAt: new Date(),
+    sentAt,
     sentBy,
+    sentToEmail,
     packageVersion: version,
     documentsIncluded: documentsIncluded || [],
+    documentIds: documentIds || [],
     emailSent: emailSent || false,
     superseded: false,
+    expiresAt: rtoDocAccess.linkExpiryFrom(sentAt),
   });
 
   await application.save();
-  return refreshApplication(application._id);
+  return application.rtoSubmissions[application.rtoSubmissions.length - 1]._id;
+}
+
+/**
+ * Manually close a submission's document links ahead of expiry.
+ * Used for withdrawn or mistakenly sent packages.
+ */
+async function revokeRTOSubmission(applicationId, submissionId, userId) {
+  const ok = await rtoDocAccess.revokeSubmission(applicationId, submissionId, userId);
+  if (!ok) throw new AppError('Submission not found', 404);
+  return refreshApplication(applicationId);
 }
 
 const reviewDocument = async (applicationId, documentId, reviewData) => {
@@ -2002,6 +2051,7 @@ module.exports = {
   submitAdditionalDocs,
   reviewAdditionalDocs,
   createRTOSubmission,
+  revokeRTOSubmission,
   addFollowUp,
   completeFollowUp,
   deleteFollowUp,

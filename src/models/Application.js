@@ -332,6 +332,37 @@ const applicationSchema = new mongoose.Schema(
           type: Boolean,
           default: false,
         },
+        // ── Document access control (see Docs/RTO-DOC-ACCESS-IMPLEMENTATION-PLAN.md) ──
+        // Emailed document links are signed against this subdoc's _id. The link is only
+        // honoured while the submission is the current one, unrevoked and unexpired —
+        // so sending a new submission closes the previous submission's links.
+        sentToEmail: String,
+        documentIds: [
+          {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Document',
+          },
+        ],
+        expiresAt: Date,
+        revokedAt: Date,
+        revokedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        accessLog: [
+          {
+            documentId: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: 'Document',
+            },
+            at: {
+              type: Date,
+              default: Date.now,
+            },
+            ip: String,
+            userAgent: String,
+          },
+        ],
       },
     ],
     // RTO activity log — tracks all RTO actions for audit (CA-06)
@@ -442,6 +473,8 @@ applicationSchema.index({ status: 1 });
 applicationSchema.index({ assignedAgentId: 1 });
 applicationSchema.index({ assignedRTOId: 1 });
 applicationSchema.index({ studentId: 1, status: 1 });
+// Subdocument _ids are not indexed by default — RTO document links resolve by this.
+applicationSchema.index({ 'rtoSubmissions._id': 1 });
 
 // ── Status history tracking ──────────────────────────────────────────
 // Record every journey-stage transition (used by the Timeline tab to show
