@@ -315,7 +315,7 @@ const buildEmail = (bodyContent, preheader = '') => {
 
         // FOOTER
         `<tr><td class="email-footer" align="center" style="padding:24px 40px;background:${T.footerGradient};border-top:1px solid ${T.primaryBorder};text-align:center;font-family:${T.fontStack};">` +
-          `<p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:${T.textSecondary};">Certified Australia Pty Ltd</p>` +
+          `<p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:${T.textSecondary};">Certified Australia Group Pty Ltd</p>` +
           `<p style="margin:0 0 10px 0;font-size:12px;color:${T.textTertiary};">&copy; ${year} All rights reserved.</p>` +
           `<p style="margin:0;font-size:11px;color:${T.textTertiary};line-height:1.6;">This is an automated message. Please do not reply directly to this email.</p>` +
         `</td></tr>` +

@@ -193,6 +193,53 @@ const updateLeadStatus = async (applicationId, color, actor = {}) => {
   return application;
 };
 
+// Lead statuses that a payment must NOT overwrite: 'yellow' is already
+// "Payment Proceeded" (no-op), 'green' is "Certified" — further along the
+// journey, so an installment landing later must not regress it.
+const PAYMENT_PROCEEDED_LOCKED_COLORS = ['yellow', 'green'];
+
+/**
+ * Auto-set the lead status to "Payment Proceeded" (yellow) as soon as money is
+ * received from a student — the first installment or any later one.
+ *
+ * Fired from Payment's post-save hook, so it covers every path that completes a
+ * student payment: Square checkout, manual mark-paid, plan installments, the
+ * payment-plan editor, auto-debit, the Square webhook and Xero reconciliation.
+ *
+ * Never throws — tagging a lead must not break a payment.
+ */
+const markPaymentProceeded = async (applicationId) => {
+  if (!applicationId) return;
+
+  try {
+    const current = await Application.findById(applicationId).select('color status').lean();
+    if (!current || current.status === 'Archived') return;
+
+    const previousColor = current.color || '';
+    if (PAYMENT_PROCEEDED_LOCKED_COLORS.includes(previousColor)) return;
+
+    // Guard the update on the color we read so two concurrent payments can't
+    // both push a history entry for the same transition. ('' also has to match
+    // legacy docs saved before `color` existed, hence the $in with null.)
+    await Application.findOneAndUpdate(
+      { _id: applicationId, color: previousColor === '' ? { $in: ['', null] } : previousColor },
+      {
+        $set: { color: 'yellow' },
+        $push: {
+          leadStatusHistory: {
+            color: 'yellow',
+            previousColor,
+            changedAt: new Date(),
+            changedByName: 'System (payment received)',
+          },
+        },
+      }
+    );
+  } catch (err) {
+    console.error('[ApplicationService] markPaymentProceeded error:', err.message);
+  }
+};
+
 const assignAgent = async (applicationId, assignedAgentId) => {
   const update = { assignedAgentId };
   if (assignedAgentId) update.agentAssignedAt = new Date();
@@ -1927,6 +1974,7 @@ module.exports = {
   setTestFlag,
   updateSource,
   updateLeadStatus,
+  markPaymentProceeded,
   sendToRTOPortal,
   sendRTOSubmission,
   updateStatus,

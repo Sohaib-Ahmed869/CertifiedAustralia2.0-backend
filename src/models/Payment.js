@@ -121,4 +121,33 @@ paymentSchema.pre('save', async function (next) {
   next();
 });
 
+// ── Auto lead status: "Payment Proceeded" ──────────────────────────────────
+// Money-in types only. Discounts, refunds and RTO payables/payments are not
+// student money and must not tag the lead.
+const MONEY_IN_TYPES = ['upfront', 'plan', 'manualMarkPaid'];
+
+// Record whether this save is the moment the payment became completed, so the
+// post hook only fires on the real transition (not on later xero-sync saves).
+paymentSchema.pre('save', function (next) {
+  this.$locals.becameCompleted =
+    this.status === 'completed' && (this.isNew || this.isModified('status'));
+  next();
+});
+
+// Receiving any payment from a student — the first installment or any later
+// one — flips the application's lead status to "Payment Proceeded" (yellow).
+// Hooked on the model rather than the service so every write path is covered:
+// Square checkout, manual mark-paid, plan installments, the payment-plan
+// editor, scheduled auto-debit, the Square webhook and Xero reconciliation.
+paymentSchema.post('save', function (doc) {
+  if (!doc.$locals?.becameCompleted) return;
+  if (!doc.applicationId || doc.isArchived) return; // skips the reconciliation dummy app
+  if (!MONEY_IN_TYPES.includes(doc.type)) return;
+
+  // Lazy require: applicationService requires this model.
+  Promise.resolve()
+    .then(() => require('../services/applicationService').markPaymentProceeded(doc.applicationId))
+    .catch((err) => console.error('[Payment] markPaymentProceeded hook error:', err.message));
+});
+
 module.exports = mongoose.model('Payment', paymentSchema);

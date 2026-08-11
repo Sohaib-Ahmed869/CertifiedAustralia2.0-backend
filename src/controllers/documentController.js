@@ -86,7 +86,10 @@ const ensureDriveFolder = async (application) => {
   );
 
   application.googleDriveFolderId = folderId;
-  await application.save();
+  // Targeted $set rather than a full save() — parallel uploads each hold their
+  // own copy of the application doc, so saving the whole thing could clobber a
+  // sibling request's writes.
+  await Application.updateOne({ _id: application._id }, { $set: { googleDriveFolderId: folderId } });
   return folderId;
 };
 
@@ -191,18 +194,16 @@ const uploadSingle = asyncHandler(async (req, res) => {
 
   const document = await Document.create(docData);
 
-  if (!application.documentIds.includes(document._id)) {
-    application.documentIds.push(document._id);
-    await application.save();
-  }
+  // $addToSet is atomic, so uploads running in parallel each append their own id
+  // without one overwriting the other's (a read-modify-save would).
+  await Application.updateOne({ _id: appId }, { $addToSet: { documentIds: document._id } });
 
   // Link document to the additional doc request's documentIds array
   if (additionalDocRequestId) {
-    const request = application.additionalDocRequests?.id(additionalDocRequestId);
-    if (request && !request.documentIds.includes(document._id)) {
-      request.documentIds.push(document._id);
-      await application.save();
-    }
+    await Application.updateOne(
+      { _id: appId, 'additionalDocRequests._id': additionalDocRequestId },
+      { $addToSet: { 'additionalDocRequests.$.documentIds': document._id } }
+    );
   }
 
   // Auto-resolve any active feedback on this document field

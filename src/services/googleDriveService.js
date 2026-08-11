@@ -11,6 +11,18 @@ let _driveClient = null;
 /* ── In-memory folder cache: applicationId → Drive folder ID ── */
 const _folderCache = new Map();
 
+/* ── In-flight folder lookups, so concurrent uploads for the same application
+   share one Drive round-trip instead of each creating a duplicate folder.
+   Keyed the same way as the cache above; the entry is dropped once settled. ── */
+const _folderInflight = new Map();
+
+/* ── Submission-subfolder cache + in-flight map, keyed `parentId::name`.
+   Every document upload asks for its submission subfolder, so without this each
+   file paid a files.list round-trip and parallel uploads raced into creating
+   several "Initial Submission" folders side by side. ── */
+const _subfolderCache = new Map();
+const _subfolderInflight = new Map();
+
 const loadServiceAccountCredentials = () => {
   const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
   const jsonCredentials = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -110,43 +122,56 @@ const getOrCreateAppFolder = async (applicationId, folderName) => {
   if (_folderCache.has(applicationId)) {
     return _folderCache.get(applicationId);
   }
-
-  const drive = createDriveClient();
-  const rootFolderId = resolveFolderId();
-
-  // Search for existing folder with this applicationId in name
-  const searchRes = await drive.files.list({
-    q: `'${rootFolderId}' in parents and name contains '${applicationId}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-    fields: 'files(id)',
-    spaces: 'drive',
-    pageSize: 1,
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-  });
-
-  if (searchRes.data.files && searchRes.data.files.length > 0) {
-    const folderId = searchRes.data.files[0].id;
-    _folderCache.set(applicationId, folderId);
-    return folderId;
+  // Concurrent uploads for the same application join the first lookup rather
+  // than each searching-then-creating their own folder.
+  if (_folderInflight.has(applicationId)) {
+    return _folderInflight.get(applicationId);
   }
 
-  // Create new folder
-  const name = folderName || applicationId;
-  const folder = await drive.files.create({
-    requestBody: {
-      name,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: [rootFolderId],
-    },
-    fields: 'id',
-    supportsAllDrives: true,
-  });
+  const task = (async () => {
+    const drive = createDriveClient();
+    const rootFolderId = resolveFolderId();
 
-  await trySetPublicRead(drive, folder.data.id);
+    // Search for existing folder with this applicationId in name
+    const searchRes = await drive.files.list({
+      q: `'${rootFolderId}' in parents and name contains '${applicationId}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id)',
+      spaces: 'drive',
+      pageSize: 1,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
 
-  const folderId = folder.data.id;
-  _folderCache.set(applicationId, folderId);
-  return folderId;
+    if (searchRes.data.files && searchRes.data.files.length > 0) {
+      return searchRes.data.files[0].id;
+    }
+
+    // Create new folder
+    const name = folderName || applicationId;
+    const folder = await drive.files.create({
+      requestBody: {
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [rootFolderId],
+      },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+
+    await trySetPublicRead(drive, folder.data.id);
+
+    return folder.data.id;
+  })();
+
+  _folderInflight.set(applicationId, task);
+  try {
+    const folderId = await task;
+    _folderCache.set(applicationId, folderId);
+    return folderId;
+  } finally {
+    // Failures are never cached — the next upload retries from scratch.
+    _folderInflight.delete(applicationId);
+  }
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -274,30 +299,49 @@ const createApplicationFolder = async ({ applicationId, studentName, qualificati
    ═══════════════════════════════════════════════════════ */
 
 const createSubmissionSubfolder = async ({ parentFolderId, name }) => {
-  const drive = createDriveClient();
+  const cacheKey = `${parentFolderId}::${name}`;
 
-  // Reuse existing subfolder with same name (avoid duplicates for "Initial Submission")
-  try {
-    const search = await drive.files.list({
-      q: `'${parentFolderId}' in parents and name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-      fields: 'files(id, webViewLink)',
+  // Resolved once per (parent, name) for the life of the process — this is on
+  // the hot path of every document upload.
+  if (_subfolderCache.has(cacheKey)) return _subfolderCache.get(cacheKey);
+  if (_subfolderInflight.has(cacheKey)) return _subfolderInflight.get(cacheKey);
+
+  const task = (async () => {
+    const drive = createDriveClient();
+
+    // Reuse existing subfolder with same name (avoid duplicates for "Initial Submission")
+    try {
+      const search = await drive.files.list({
+        q: `'${parentFolderId}' in parents and name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        fields: 'files(id, webViewLink)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+      if (search.data.files?.length > 0) return search.data.files[0];
+    } catch { /* search failed — create new */ }
+
+    const response = await drive.files.create({
+      requestBody: {
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentFolderId],
+      },
+      fields: 'id, webViewLink',
       supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
     });
-    if (search.data.files?.length > 0) return search.data.files[0];
-  } catch { /* search failed — create new */ }
 
-  const response = await drive.files.create({
-    requestBody: {
-      name,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: [parentFolderId],
-    },
-    fields: 'id, webViewLink',
-    supportsAllDrives: true,
-  });
+    return response.data;
+  })();
 
-  return response.data;
+  _subfolderInflight.set(cacheKey, task);
+  try {
+    const folder = await task;
+    _subfolderCache.set(cacheKey, folder);
+    return folder;
+  } finally {
+    // Failures are never cached — the caller falls back to the parent folder.
+    _subfolderInflight.delete(cacheKey);
+  }
 };
 
 /* ═══════════════════════════════════════════════════════
