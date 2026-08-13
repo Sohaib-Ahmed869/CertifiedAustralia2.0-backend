@@ -1,13 +1,40 @@
 const CallLog = require('../models/CallLog');
 const Application = require('../models/Application');
+const User = require('../models/User');
 const AppError = require('../utils/AppError');
 
+// Outcome → scorecard booleans. Anything that implies a conversation took place
+// counts as answered; only an explicit conversion counts as converted.
+const ANSWERED_OUTCOMES = new Set([
+  'answered',
+  'converted',
+  'follow_up_required',
+  'progressed',
+  'support_completed',
+]);
+
+const STATUS_MAP = {
+  answered: 'Contacted',
+  not_answered: 'No Answer',
+  converted: 'Converted',
+  follow_up_required: 'Follow-up Required',
+  progressed: 'Progressed',
+  support_completed: 'Support Completed',
+  no_action: 'No Action',
+};
+
 /**
- * Log a call against an application.
- * Auto-increments contactAttempts or incomingCalls on the Application.
+ * Log a call against an application (legacy agent-portal call log).
+ *
+ * Writes the CallLog row for that page's history AND mirrors it into the Call
+ * Scorecard (CallEvent) so the one set of numbers drives everything: the
+ * scorecard, CEO Call Tracking, and the Application's Contact Tracking
+ * counters — which contactTrackingService then recomputes from those events.
  */
 const logCall = async (applicationId, { agentId, direction, outcome, notes }) => {
-  const application = await Application.findById(applicationId);
+  const application = await Application.findById(applicationId)
+    .populate('studentId', 'firstName lastName')
+    .populate('qualificationId', 'name');
   if (!application) throw new AppError('Application not found', 404);
 
   const callLog = await CallLog.create({
@@ -18,26 +45,43 @@ const logCall = async (applicationId, { agentId, direction, outcome, notes }) =>
     notes: notes || '',
   });
 
-  // Auto-increment counters on Application
-  if (direction === 'outbound') {
-    application.contactAttempts = (application.contactAttempts || 0) + 1;
-  } else {
-    application.incomingCalls = (application.incomingCalls || 0) + 1;
+  // Mirror into the scorecard — createEvent also resyncs the contact counters.
+  try {
+    const agent = agentId
+      ? await User.findById(agentId).select('firstName lastName email').lean()
+      : null;
+    if (agent) {
+      const callScorecardService = require('./callScorecardService');
+      await callScorecardService.createEvent(
+        {
+          agentId,
+          leadName:
+            `${application.studentId?.firstName || ''} ${application.studentId?.lastName || ''}`.trim() ||
+            null,
+          qualification: application.qualificationId?.name || null,
+          applicationId: application._id,
+          displayApplicationId: application.applicationId || null,
+          answered: ANSWERED_OUTCOMES.has(outcome),
+          converted: outcome === 'converted',
+          direction: direction === 'outbound' ? 'outbound' : 'incoming',
+          note: notes || null,
+          entryMethod: 'agent-call-log',
+        },
+        { ...agent, _id: agentId }
+      );
+    }
+  } catch (err) {
+    console.warn(`[callLog] scorecard mirror failed for ${applicationId}: ${err.message}`);
   }
-  application.lastContactedAt = new Date();
 
-  // Update contact status based on outcome
-  const statusMap = {
-    answered: 'Contacted',
-    not_answered: 'No Answer',
-    converted: 'Converted',
-    follow_up_required: 'Follow-up Required',
-    progressed: 'Progressed',
-    support_completed: 'Support Completed',
-    no_action: 'No Action',
-  };
-  application.contactStatus = statusMap[outcome] || application.contactStatus;
-  await application.save();
+  // Contact status stays a plain label off the outcome (the counters and
+  // lastContactedAt are handled by the scorecard sync above).
+  if (STATUS_MAP[outcome]) {
+    await Application.updateOne(
+      { _id: application._id },
+      { $set: { contactStatus: STATUS_MAP[outcome] } }
+    );
+  }
 
   return CallLog.findById(callLog._id)
     .populate('agentId', 'firstName lastName')

@@ -34,6 +34,45 @@ async function findAssignee(number) {
   return candidates.find((u) => callRecords.phoneKey(u.assignedPhoneNumber) === key) || null;
 }
 
+/* ── Scorecard mirror ──────────────────────────────────────── */
+
+/**
+ * Mirror a finished inbound leg into the Call Scorecard (CallEvent) so it lands
+ * in the student's Call Log and bumps Application.incomingCalls automatically —
+ * agents no longer tick the Incoming Calls stepper by hand.
+ *
+ * Only fires for a leg we could attribute to BOTH a staff member (the assignee
+ * whose number was dialed) and an application; an unattributable call still
+ * shows in Call Tracking as a raw CDR. `scorecardLogged` makes it idempotent
+ * across re-delivered webhooks. Never throws — call flow comes first.
+ */
+async function logScorecardEvent(record, { answered }) {
+  if (!record || record.scorecardLogged) return;
+  if (!record.agentId || !record.applicationId) return;
+  try {
+    const callScorecardService = require('./callScorecardService');
+    const [firstName, ...rest] = String(record.agentName || '').trim().split(' ');
+    await callScorecardService.createEvent(
+      {
+        agentId: record.agentId,
+        agentName: record.agentName || undefined,
+        leadName: record.contactName || record.fromNumber || null,
+        applicationId: record.applicationId,
+        displayApplicationId: record.displayApplicationId || null,
+        answered,
+        direction: 'incoming',
+        entryMethod: 'inbound-call',
+        timestamp: record.startedAt,
+      },
+      { _id: record.agentId, firstName: firstName || '', lastName: rest.join(' '), email: record.agentName }
+    );
+    record.scorecardLogged = true;
+    await record.save();
+  } catch (err) {
+    console.warn(`[inboundCall] scorecard mirror failed: ${err.message}`);
+  }
+}
+
 /* ── 1. Incoming call ──────────────────────────────────────── */
 
 async function handleIncoming(body) {
@@ -114,6 +153,7 @@ async function handleDialAction(body) {
       record.endedAt = new Date();
       record.durationSec = dialDuration;
       await record.save();
+      await logScorecardEvent(record, { answered: true });
       emitIncomingResolved(String(record.agentId || ''), { callSid, outcome: 'answered' });
       emitCallRecordsUpdated();
     }
@@ -128,6 +168,8 @@ async function handleDialAction(body) {
     record.status = 'missed';
     record.endedAt = new Date();
     await record.save();
+    // A missed call is still an inbound contact — log it unanswered.
+    await logScorecardEvent(record, { answered: false });
     emitIncomingResolved(String(record.agentId || ''), { callSid, outcome: 'missed' });
     await callRecords.notifyMissed(record);
   }
@@ -148,6 +190,8 @@ async function handleVoicemail(body) {
     record.voicemailDurationSec = recordingDuration;
     if (!record.endedAt) record.endedAt = new Date();
     await record.save();
+    // No-op if the dial-action pass already mirrored this leg.
+    await logScorecardEvent(record, { answered: false });
     await callRecords.notifyMissed(record, { voicemail: true });
     emitCallRecordsUpdated();
   }
@@ -158,4 +202,10 @@ async function handleVoicemail(body) {
   return res.toString();
 }
 
-module.exports = { handleIncoming, handleDialAction, handleVoicemail, findAssignee };
+module.exports = {
+  handleIncoming,
+  handleDialAction,
+  handleVoicemail,
+  findAssignee,
+  logScorecardEvent,
+};

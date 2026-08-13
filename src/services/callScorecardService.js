@@ -3,6 +3,7 @@ const CallScorecardConfig = require('../models/CallScorecardConfig');
 const Application = require('../models/Application');
 const User = require('../models/User');
 const AppError = require('../utils/AppError');
+const contactTracking = require('./contactTrackingService');
 
 /* ═══════════════════════════════════════════════════════
    CONSTANTS
@@ -206,6 +207,11 @@ async function createEvent(body = {}, user) {
     entryMethod: body.entryMethod || 'manual',
     reviewStatus: 'logged',
   });
+
+  // Contact Tracking on the application is derived from these events — no more
+  // hand-cranking the +/- steppers after logging a call.
+  await contactTracking.syncApplication(event.applicationId);
+
   return event.toObject();
 }
 
@@ -232,12 +238,19 @@ async function updateEvent(id, body = {}) {
 
   Object.assign(existing, updates);
   await existing.save();
+
+  // Direction can flip outbound ⇄ incoming, which moves the count between the
+  // two Contact Tracking counters.
+  await contactTracking.syncApplication(existing.applicationId);
+
   return existing.toObject();
 }
 
 async function deleteEvent(id) {
   const deleted = await CallEvent.findByIdAndDelete(id);
   if (!deleted) throw new AppError('Call event not found.', 404);
+  // Recompute so a mis-logged call doesn't leave the counter overstated.
+  await contactTracking.syncApplication(deleted.applicationId);
   return { success: true };
 }
 

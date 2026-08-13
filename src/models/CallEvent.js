@@ -56,5 +56,8 @@ const callEventSchema = new mongoose.Schema(
 
 // Compound index for the common per-agent-per-day scorecard query
 callEventSchema.index({ agentId: 1, date: 1 });
+// Per-application lookups: the student-detail Call Log and the contact-counter
+// recompute in contactTrackingService both hit this.
+callEventSchema.index({ applicationId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('CallEvent', callEventSchema);

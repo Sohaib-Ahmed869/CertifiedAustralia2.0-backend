@@ -79,6 +79,11 @@ const callRecordSchema = new mongoose.Schema(
     // Denormalised from the matched Application so Call Tracking can exclude
     // test traffic from real metrics without a join. See Application.isTest.
     isTest: { type: Boolean, default: false, index: true },
+
+    // Set once this leg has been mirrored into the Call Scorecard (CallEvent),
+    // which is what feeds the application's Contact Tracking counters. Guards
+    // against a re-delivered Twilio webhook logging the same call twice.
+    scorecardLogged: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
