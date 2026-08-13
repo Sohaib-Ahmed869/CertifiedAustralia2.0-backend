@@ -450,24 +450,31 @@ const syncDeadlineToOutlook = async (connection, eventData) => {
 
 /**
  * Get calendar events for a date range — aggregates tasks, follow-ups, and deadlines.
+ *
+ * `dateFrom`/`dateTo` are AEST civil dates ("YYYY-MM-DD") — the calendar cells the
+ * user is looking at — and are widened to the matching UTC instants so a 5pm Sydney
+ * follow-up lands on the Sydney day it was booked for, not the UTC one.
+ *
+ * Scoping: Admin/CEO oversee the whole pipeline and see every event; other staff
+ * (agents) see what is theirs — assigned to them, created by them, or logged by them.
  */
-const getCalendarEvents = async (userId, dateFrom, dateTo) => {
+const getCalendarEvents = async (user, dateFrom, dateTo) => {
   const Task = require('../models/Task');
   const Application = require('../models/Application');
+  const { aestDayStartUtc, aestDayEndUtc, aestDateKey, aestTimeLabel } = require('../utils/aestTime');
 
-  const from = new Date(dateFrom);
-  from.setHours(0, 0, 0, 0);
-  const to = new Date(dateTo);
-  to.setHours(23, 59, 59, 999);
+  const userId = user?._id || user;
+  const seesAll = ['Admin', 'CEOReportingManager'].includes(user?.role);
+
+  const from = aestDayStartUtc(dateFrom) || new Date(dateFrom);
+  const to = aestDayEndUtc(dateTo) || new Date(dateTo);
 
   const events = [];
 
   // Tasks with due dates in range
+  const taskScope = seesAll ? {} : { $or: [{ assignedTo: userId }, { createdBy: userId }] };
   const tasks = await Task.find({
-    $or: [
-      { assignedTo: userId },
-      { createdBy: userId },
-    ],
+    ...taskScope,
     dueDate: { $gte: from, $lte: to },
   })
     .populate('applicationId', 'applicationId studentId')
@@ -484,6 +491,8 @@ const getCalendarEvents = async (userId, dateFrom, dateTo) => {
       priority: t.priority,
       applicationId: t.applicationId?.applicationId,
       assignedTo: t.assignedTo ? `${t.assignedTo.firstName} ${t.assignedTo.lastName}` : null,
+      dateKey: aestDateKey(t.dueDate),
+      time: aestTimeLabel(t.dueDate),
       link: t.applicationId?.studentId
         ? `/admin/students/${t.applicationId.studentId}`
         : '/admin/tasks',
@@ -491,12 +500,15 @@ const getCalendarEvents = async (userId, dateFrom, dateTo) => {
     });
   }
 
-  // Follow-up calls in range
+  // Follow-up calls in range.
+  // Match on `loggedBy` as well as `assignedAgentId` — the follow-up belongs to
+  // whoever booked it, and plenty of applications have no agent assigned yet.
+  const followUpScope = seesAll
+    ? {}
+    : { $or: [{ assignedAgentId: userId }, { 'followUpCalls.loggedBy': userId }] };
   const appsWithFollowUps = await Application.find({
+    ...followUpScope,
     'followUpCalls.scheduledFor': { $gte: from, $lte: to },
-    $or: [
-      { assignedAgentId: userId },
-    ],
   })
     .populate('studentId', 'firstName lastName')
     .select('applicationId studentId followUpCalls assignedAgentId')
@@ -507,30 +519,37 @@ const getCalendarEvents = async (userId, dateFrom, dateTo) => {
       ? `${app.studentId.firstName} ${app.studentId.lastName}`
       : 'Unknown';
     for (const call of app.followUpCalls || []) {
+      if (!call.scheduledFor) continue;
       const d = new Date(call.scheduledFor);
-      if (d >= from && d <= to) {
-        events.push({
-          id: `followup-${app._id}-${call._id}`,
-          type: 'follow_up',
-          title: `Follow-up: ${studentName}`,
-          date: call.scheduledFor,
-          status: call.completedAt ? 'done' : 'pending',
-          applicationId: app.applicationId,
-          link: `/admin/students/${app.studentId?._id || app._id}`,
-          color: '#8b5cf6',
-          notes: call.outcome || call.notes || '',
-        });
-      }
+      if (d < from || d > to) continue;
+      // A matched application can carry follow-ups logged by someone else — keep
+      // only the ones this user should see.
+      if (!seesAll
+        && String(app.assignedAgentId || '') !== String(userId)
+        && String(call.loggedBy || '') !== String(userId)) continue;
+      events.push({
+        id: `followup-${app._id}-${call._id}`,
+        type: 'follow_up',
+        title: `Follow-up: ${studentName}`,
+        date: call.scheduledFor,
+        dateKey: aestDateKey(call.scheduledFor),
+        time: aestTimeLabel(call.scheduledFor),
+        status: call.completedAt ? 'done' : 'pending',
+        applicationId: app.applicationId,
+        link: `/admin/students/${app.studentId?._id || app._id}`,
+        color: '#8b5cf6',
+        notes: call.outcome || call.notes || '',
+      });
     }
   }
 
   // Application deadlines (RTO completion) in range
+  const deadlineScope = seesAll
+    ? {}
+    : { $or: [{ assignedAgentId: userId }, { assignedRTOId: userId }] };
   const deadlineApps = await Application.find({
+    ...deadlineScope,
     rtoCompletionDeadline: { $gte: from, $lte: to },
-    $or: [
-      { assignedAgentId: userId },
-      { assignedRTOId: userId },
-    ],
   })
     .populate('studentId', 'firstName lastName')
     .select('applicationId studentId rtoCompletionDeadline status')
@@ -545,6 +564,8 @@ const getCalendarEvents = async (userId, dateFrom, dateTo) => {
       type: 'deadline',
       title: `21-Day Deadline: ${studentName}`,
       date: app.rtoCompletionDeadline,
+      dateKey: aestDateKey(app.rtoCompletionDeadline),
+      time: aestTimeLabel(app.rtoCompletionDeadline),
       status: app.status,
       applicationId: app.applicationId,
       link: `/admin/students/${app.studentId?._id || app._id}`,

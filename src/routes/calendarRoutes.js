@@ -124,7 +124,7 @@ router.get(
     if (!dateFrom || !dateTo) {
       return res.status(400).json({ message: 'dateFrom and dateTo are required' });
     }
-    const events = await calendarService.getCalendarEvents(req.user._id, dateFrom, dateTo);
+    const events = await calendarService.getCalendarEvents(req.user, dateFrom, dateTo);
     res.json({ events });
   })
 );
