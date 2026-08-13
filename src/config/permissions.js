@@ -332,9 +332,9 @@ const ROLE_DEFAULTS = {
     tab_chat: true,
     tab_settings: true,
     tab_settings_password: true,
-    feature_view_marketing_data: true,
-    feature_log_marketing_spend: true,
-    feature_export_marketing_data: true,
+    // NOTE: keep every key here inside PERMISSION_KEYS above. `getDefaults` ships
+    // this object straight to the Add User wizard, and the PATCH endpoint rejects
+    // the entire payload if it contains a key the list doesn't know.
   },
 
   Student: {
