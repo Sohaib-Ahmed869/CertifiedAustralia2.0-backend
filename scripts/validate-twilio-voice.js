@@ -21,6 +21,7 @@ const {
   TWILIO_API_KEY_SECRET,
   TWILIO_TWIML_APP_SID,
   TWILIO_REGION,
+  TWILIO_DEVICE_EDGE,
   TWILIO_EDGE,
 } = process.env;
 
@@ -37,8 +38,15 @@ const info = (m) => console.log(`    ${m}`);
   console.log('  TWILIO_API_KEY_SECRET:', mask(TWILIO_API_KEY_SECRET));
   console.log('  TWILIO_TWIML_APP_SID :', mask(TWILIO_TWIML_APP_SID));
   console.log('  TWILIO_REGION        :', TWILIO_REGION || '(default us1)');
-  console.log('  TWILIO_EDGE          :', TWILIO_EDGE || '(default)');
+  console.log('  TWILIO_DEVICE_EDGE   :', TWILIO_DEVICE_EDGE || '(missing → browser Device falls back to roaming)');
   console.log('');
+
+  // The browser edge is the ONLY edge we want set. TWILIO_EDGE is auto-read by the
+  // Twilio SDK and combined with TWILIO_REGION into an invalid REST host (20003).
+  if (TWILIO_EDGE) bad(`TWILIO_EDGE is set ("${TWILIO_EDGE}") — remove it. Use TWILIO_DEVICE_EDGE for the browser edge.`);
+  if (!TWILIO_DEVICE_EDGE && TWILIO_REGION && TWILIO_REGION !== 'us1') {
+    bad(`TWILIO_DEVICE_EDGE is missing while the account is homed in ${TWILIO_REGION} — a region-bound API key may reject the browser Device's roaming edge (20101).`);
+  }
 
   // Sanity: prefixes.
   if (!/^AC/.test(TWILIO_ACCOUNT_SID || '')) bad('ACCOUNT_SID should start with "AC"');
