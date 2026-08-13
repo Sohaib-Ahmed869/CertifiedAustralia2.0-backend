@@ -18,6 +18,12 @@ const paidItemSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    // The ExpenseLedger row this mark-paid created, so undo removes exactly
+    // that entry rather than the first match for the week/tier/item.
+    expenseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ExpenseLedger',
+    },
   },
   { _id: false }
 );
