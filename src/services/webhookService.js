@@ -41,6 +41,18 @@ const verifySquareWebhookSignature = ({
     .digest('base64');
 
   if (!timingSafeCompare(expectedSignature, provided)) {
+    // Square signs `notificationUrl + rawBody` using the SUBSCRIPTION's signature
+    // key, so a mismatch is almost always config, not tampering: the URL we
+    // rebuilt here differs from the one registered on the subscription, or the
+    // key belongs to a different subscription (sandbox vs production, or
+    // rotated). Log both sides — never the key itself — so the cause is visible
+    // in the server log instead of guessable only from Square's failure email.
+    console.warn(
+      `[squareWebhook] signature mismatch (${algorithm}). ` +
+        `Signed URL used: "${webhookUrl}" — this must match the subscription's ` +
+        'Notification URL character for character (scheme, host, path, no trailing slash). ' +
+        `Signature key fingerprint: ${crypto.createHash('sha256').update(secret).digest('hex').slice(0, 12)}`
+    );
     throw new AppError('Invalid Square webhook signature', 401);
   }
 
