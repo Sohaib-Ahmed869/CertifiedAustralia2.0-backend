@@ -955,7 +955,7 @@ module.exports = {
 
     const app = await Application.findById(req.params.id)
       .populate('studentId', 'firstName lastName email')
-      .populate('qualificationId', 'name code')
+      .populate('qualificationId', 'name code caPrice')
       .lean();
     if (!app) throw new AppError('Application not found', 404);
 
@@ -965,12 +965,24 @@ module.exports = {
     const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student';
     const qualName = typeof app.qualificationId === 'object' ? (app.qualificationId.name || '') : '';
 
-    // Price calculation
+    // ── Price calculation ────────────────────────────────────────────────────
+    // The list price is the qualification's `caPrice` (Application has no price
+    // field of its own); electrical quotes a fixed course fee and aircon a range.
+    // Discounts recorded on the application — which include the $500 intake
+    // discount written at registration — come off the list price, so the quote
+    // matches what the student sees on the payment page and welcome email.
     const isElectrical = templateType === 'electrical' || templateType.startsWith('electrical_');
     const isAircon = templateType.startsWith('aircon_');
-    const basePrice = isElectrical ? 18998 : (app.price || 0);
-    const disc = app.discount || 0;
-    const netPrice = isAircon ? '$10,000 – $15,000' : (basePrice ? `$${Math.max(0, basePrice - disc).toLocaleString()}` : 'Contact us for pricing');
+    const listPrice = isElectrical ? 18998 : Number(app.qualificationId?.caPrice || 0);
+    const discountTotal = (app.discounts || []).reduce((sum, d) => sum + (d.amount || 0), 0);
+    const netPrice = Math.max(0, listPrice - discountTotal);
+    const hasPricing = listPrice > 0;
+    const money = (amount) => `$${Number(amount).toLocaleString()}`;
+    const priceText = isAircon
+      ? '$10,000 – $15,000'
+      : (hasPricing ? money(netPrice) : 'Contact us for pricing');
+    const showsDiscount = hasPricing && !isAircon && discountTotal > 0;
+    const savingsNote = `Usually <span style="text-decoration:line-through;">${money(listPrice)}</span> &mdash; includes your ${money(discountTotal)} intake discount`;
 
     const baseUrl = process.env.APP_BASE_URL || 'https://portal.certifiedaustralia.com.au';
 
@@ -981,16 +993,23 @@ module.exports = {
     const airconDocs = `<ul style="padding-left:24px;margin:0;"><li style="margin-bottom:8px;">100 Points of Identification</li><li style="margin-bottom:8px;">Updated Resume</li><li style="margin-bottom:8px;">Reference Letter (signed by someone licensed in air conditioning &amp; refrigeration)</li><li style="margin-bottom:8px;">USI Transcript</li><li style="margin-bottom:8px;">Payslips and/or Invoices demonstrating work experience</li><li style="margin-bottom:8px;">Photo and video evidence of practical work</li><li style="margin-bottom:8px;">Any additional supporting documents</li></ul>`;
 
     const section = (title, body) => `<div style="margin:24px 0;"><h3 style="color:#0a9d42;font-size:16px;font-weight:600;margin:0 0 12px;">${title}</h3>${body}</div>`;
-    const priceFmt = `<p style="font-size:28px;font-weight:700;color:#0a9d42;margin:0;">${netPrice}</p>`;
+    // Big green figure used by the electrical/aircon course templates.
+    const priceFmt =
+      `<p style="font-size:28px;font-weight:700;color:#0a9d42;margin:0;">${priceText}</p>` +
+      (showsDiscount ? `<p style="font-size:13px;color:#6b7280;margin:6px 0 0;">${savingsNote}</p>` : '');
+    // Inline "Cost:" value used by the RPL enquiry templates.
+    const costLine = showsDiscount
+      ? `${priceText} <span style="color:#6b7280;font-weight:400;">(${savingsNote})</span>`
+      : priceText;
 
     const TEMPLATES = {
       general_rpl: {
         subject: `RPL Enquiry - ${qualName}`,
-        content: `<p>Hi ${studentName},</p><p>Thank you for your enquiry regarding the <strong>${qualName}</strong>.</p><p>We offer this qualification through Recognition of Prior Learning (RPL), which allows your existing skills and experience to be formally recognised without attending formal training. This qualification is nationally recognised, meaning it is valid across Australia.</p>${section('Documentation Required for RPL', rplDocs)}${section('Details', `<ul style="padding-left:24px;margin:0;"><li style="margin-bottom:8px;"><strong>Processing time:</strong> Approximately 4-6 weeks</li><li style="margin-bottom:8px;"><strong>Cost:</strong> ${netPrice}</li></ul>`)}<p>Please don't hesitate to contact us if you have any questions.</p>`,
+        content: `<p>Hi ${studentName},</p><p>Thank you for your enquiry regarding the <strong>${qualName}</strong>.</p><p>We offer this qualification through Recognition of Prior Learning (RPL), which allows your existing skills and experience to be formally recognised without attending formal training. This qualification is nationally recognised, meaning it is valid across Australia.</p>${section('Documentation Required for RPL', rplDocs)}${section('Details', `<ul style="padding-left:24px;margin:0;"><li style="margin-bottom:8px;"><strong>Processing time:</strong> Approximately 4-6 weeks</li><li style="margin-bottom:8px;"><strong>Cost:</strong> ${costLine}</li></ul>`)}<p>Please don't hesitate to contact us if you have any questions.</p>`,
       },
       community_hospitality: {
         subject: `RPL Enquiry - ${qualName}`,
-        content: `<p>Hi ${studentName},</p><p>Thank you for your enquiry regarding the <strong>${qualName}</strong>.</p><p>We offer this qualification through Recognition of Prior Learning (RPL), which allows your existing skills and experience to be formally recognised without attending formal training. This qualification is nationally recognised, meaning it is valid across Australia.</p>${section('Documentation Required for RPL', communityDocs)}${section('Details', `<ul style="padding-left:24px;margin:0;"><li style="margin-bottom:8px;"><strong>Processing time:</strong> Approximately 4-6 weeks</li><li style="margin-bottom:8px;"><strong>Cost:</strong> ${netPrice}</li></ul>`)}<p>Please don't hesitate to contact us if you have any questions.</p>`,
+        content: `<p>Hi ${studentName},</p><p>Thank you for your enquiry regarding the <strong>${qualName}</strong>.</p><p>We offer this qualification through Recognition of Prior Learning (RPL), which allows your existing skills and experience to be formally recognised without attending formal training. This qualification is nationally recognised, meaning it is valid across Australia.</p>${section('Documentation Required for RPL', communityDocs)}${section('Details', `<ul style="padding-left:24px;margin:0;"><li style="margin-bottom:8px;"><strong>Processing time:</strong> Approximately 4-6 weeks</li><li style="margin-bottom:8px;"><strong>Cost:</strong> ${costLine}</li></ul>`)}<p>Please don't hesitate to contact us if you have any questions.</p>`,
       },
       // Ships with the Certificate III in Plumbing checklist PDF (see TEMPLATE_ATTACHMENTS below).
       plumbing: {
