@@ -114,6 +114,58 @@ const cap = (str) =>
   str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
 
 /**
+ * Resolve the qualification name, industry name and price for an application.
+ *
+ * Callers usually hand us the raw Application document, which only carries
+ * `qualificationId` / `industryId` — so any email that printed
+ * `application.qualificationName` directly rendered an em dash. Accepts an
+ * already-hydrated value, a populated ref, or a bare id, and only hits the DB
+ * for what is still missing.
+ *
+ * @param {object} application
+ * @returns {Promise<{ qualificationName?: string, industryName?: string, price?: number }>}
+ */
+const resolveCatalogInfo = async (application = {}) => {
+  // A populated ref arrives as an object with `name`; a bare ref is an ObjectId.
+  const refName = (ref) =>
+    ref && typeof ref === 'object' && ref.name ? ref.name : undefined;
+  const refId = (ref) =>
+    ref && typeof ref === 'object' && ref._id ? ref._id : ref;
+
+  let qualificationName =
+    application.qualificationName || refName(application.qualificationId);
+  let industryName =
+    application.industryName || refName(application.industryId);
+  let price = application.price;
+
+  try {
+    if ((!qualificationName || price == null) && application.qualificationId) {
+      const Qualification = require('../models/Qualification');
+      const qual = await Qualification.findById(refId(application.qualificationId))
+        .select('name caPrice')
+        .lean();
+      if (qual) {
+        qualificationName = qualificationName || qual.name;
+        price = price != null ? price : qual.caPrice;
+      }
+    }
+
+    if (!industryName && application.industryId) {
+      const Industry = require('../models/Industry');
+      const industry = await Industry.findById(refId(application.industryId))
+        .select('name')
+        .lean();
+      if (industry) industryName = industry.name;
+    }
+  } catch (err) {
+    // Never let a catalog lookup break an email — fall back to whatever we have.
+    console.error('[applicationEmailService] resolveCatalogInfo error:', err.message);
+  }
+
+  return { qualificationName, industryName, price };
+};
+
+/**
  * Wrap status item rows in a table shell.
  * @param {string} rows - HTML from one or more statusItem() calls
  * @returns {string}
@@ -144,19 +196,7 @@ const sendWelcomeEmail = async (student, application) => {
 
     // Resolve qualification name + price for the details table. The caller may have
     // hydrated them already; otherwise look them up from the qualification.
-    let qualificationName = application.qualificationName;
-    let price = application.price;
-
-    if ((!qualificationName || price == null) && application.qualificationId) {
-      const Qualification = require('../models/Qualification');
-      const qual = await Qualification.findById(application.qualificationId)
-        .select('name caPrice')
-        .lean();
-      if (qual) {
-        qualificationName = qualificationName || qual.name;
-        price = price != null ? price : qual.caPrice;
-      }
-    }
+    const { qualificationName, price } = await resolveCatalogInfo(application);
 
     const money = (amount) => `$${Number(amount).toLocaleString()}`;
     const hasPricing = price != null && !Number.isNaN(Number(price));
@@ -401,6 +441,8 @@ const sendAgentWelcomeEmail = async (student, application, agent) => {
   try {
     const loginUrl = `${BASE_URL}/login`;
 
+    const { qualificationName, price } = await resolveCatalogInfo(application);
+
     const body =
       greeting(student.firstName) +
       heading2('Welcome to Certified Australia') +
@@ -413,11 +455,11 @@ const sendAgentWelcomeEmail = async (student, application, agent) => {
         { label: 'Application ID', value: application.applicationId },
         {
           label: 'Qualification',
-          value: application.qualificationName || '—',
+          value: qualificationName || '—',
         },
         {
           label: 'Total Price',
-          value: application.price != null ? formatAUD(application.price) : '—',
+          value: price != null ? formatAUD(price) : '—',
         },
       ]) +
       paragraph(
@@ -463,6 +505,8 @@ const sendAdminNewRegistrationEmail = async (student, application, registeredBy)
   try {
     const viewUrl = `${BASE_URL}/admin/applications/${application.applicationId}`;
 
+    const { qualificationName, industryName } = await resolveCatalogInfo(application);
+
     const registeredByText =
       registeredBy === 'self'
         ? 'Self-registered via portal'
@@ -486,9 +530,9 @@ const sendAdminNewRegistrationEmail = async (student, application, registeredBy)
         { label: 'Phone', value: student.phone || '—' },
         {
           label: 'Qualification',
-          value: application.qualificationName || '—',
+          value: qualificationName || '—',
         },
-        { label: 'Industry', value: application.industryName || '—' },
+        { label: 'Industry', value: industryName || '—' },
         { label: 'Registered By', value: registeredByText },
         { label: 'Date', value: formatDateTime(new Date()) },
       ]) +
@@ -997,6 +1041,8 @@ const sendRTOApplicationCompleteEmail = async (student, application) => {
 
     const reviewUrl = `${BASE_URL}/rto/applications/${application.applicationId}`;
 
+    const { qualificationName } = await resolveCatalogInfo(application);
+
     const body =
       heading2('New Completed Application Ready for Review') +
       paragraph(
@@ -1011,7 +1057,7 @@ const sendRTOApplicationCompleteEmail = async (student, application) => {
         { label: 'Student Email', value: student.email },
         {
           label: 'Qualification',
-          value: application.qualificationName || '—',
+          value: qualificationName || '—',
         },
         { label: 'Submitted', value: formatDateTime(new Date()) },
       ]) +
