@@ -42,6 +42,7 @@ const register = async (data) => {
     industryId, qualificationId,
     yearsOfExperience, experienceLocation, state,
     hasFormalQualifications, formalQualifications,
+    howDidYouHear,
     registeredById,
   } = data;
 
@@ -110,6 +111,7 @@ const register = async (data) => {
     state: state || undefined,
     hasFormalQualifications: hasFormalQualifications || false,
     formalQualifications: formalQualifications ? [formalQualifications] : [],
+    howDidYouHear: howDidYouHear || undefined,
     status: 'submitted',
     submittedAt: new Date(),
   });
