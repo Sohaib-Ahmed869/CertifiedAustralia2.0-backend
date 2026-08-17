@@ -11,6 +11,19 @@ const POPULATE_FIELDS = [
 ];
 
 /**
+ * Queue an invoice into its batch week. Non-fatal by design: an upload must
+ * never fail because the payment queue hiccuped — the daily
+ * `paymentBatchService.reconcile()` cron sweeps up anything that slipped.
+ */
+const syncToBatch = async (invoiceId) => {
+  try {
+    await require('./paymentBatchService').assignInvoice(invoiceId);
+  } catch (err) {
+    console.error('[RTOInvoice] Batch assignment failed:', err.message);
+  }
+};
+
+/**
  * Create an RTO invoice from an uploaded file.
  * In production, this would trigger OCR/AI extraction.
  * For now, we store the file reference and accept manual data entry.
@@ -31,6 +44,10 @@ const createInvoice = async (data) => {
       await applicationService.updateStatus(data.applicationId, 'RTOInvoiceUploaded');
     }
   }
+
+  // Uploading the invoice stops the 21-day timer — that instant decides which
+  // batch week this payable falls into.
+  await syncToBatch(invoice._id);
 
   return RTOInvoice.findById(invoice._id).populate(POPULATE_FIELDS).lean();
 };
@@ -99,6 +116,11 @@ const verify = async (id, { invoiceNumber, invoiceDate, dueDate, amount, taxAmou
   invoice.verifiedAt = new Date();
 
   await invoice.save();
+
+  // Verification confirms the amount and the application mapping — refresh the
+  // queued row and flip it to ready for payment.
+  await syncToBatch(id);
+
   return RTOInvoice.findById(id).populate(POPULATE_FIELDS).lean();
 };
 
@@ -140,6 +162,11 @@ const reject = async (id, { rejectedBy, reason }) => {
   invoice.rejectedAt = new Date();
   invoice.rejectionReason = reason || '';
   await invoice.save();
+
+  // A rejected invoice must not sit in a payment queue. Throws if it was
+  // already paid — that needs a batch reversal, not a rejection.
+  await require('./paymentBatchService').removeInvoice(id);
+
   return RTOInvoice.findById(id).populate(POPULATE_FIELDS).lean();
 };
 
@@ -147,6 +174,10 @@ const reject = async (id, { rejectedBy, reason }) => {
  * Delete an invoice.
  */
 const remove = async (id) => {
+  // Pull it out of its batch week first — removeInvoice refuses if the row has
+  // already been paid, so a settled pay run can't be deleted out from under us.
+  await require('./paymentBatchService').removeInvoice(id);
+
   const invoice = await RTOInvoice.findByIdAndDelete(id);
   if (!invoice) throw new AppError('Invoice not found', 404);
   return { message: 'Invoice deleted' };
@@ -185,6 +216,8 @@ const autoMap = async (id) => {
   if (matched) {
     invoice.applicationId = matched._id;
     await invoice.save();
+    // The row now has an application — refresh its student/qualification/date columns.
+    await syncToBatch(id);
   }
 
   return {

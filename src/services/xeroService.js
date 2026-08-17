@@ -47,6 +47,26 @@ const getConnection = async () => {
 };
 
 /**
+ * The OAuth callback URL.
+ *
+ * Xero matches this character-for-character against the URI registered on the
+ * app — a mismatch fails the handshake with an unhelpful error, so it is derived
+ * in ONE place and used by both the authorize URL and the token exchange (they
+ * must agree, or the code exchange 400s after the user has already consented).
+ *
+ * Precedence: explicit XERO_REDIRECT_URI → the public backend URL (tunnel or
+ * deployed host) → localhost on the port this process actually listens on.
+ * Deriving from PORT matters: hardcoding a port silently breaks the moment the
+ * server runs anywhere but the default.
+ */
+const getRedirectUri = () => {
+  if (process.env.XERO_REDIRECT_URI) return process.env.XERO_REDIRECT_URI;
+  const base = process.env.API_PUBLIC_URL || process.env.BACKEND_URL;
+  if (base) return `${base.replace(/\/+$/, '')}/api/xero/callback`;
+  return `http://localhost:${process.env.PORT || 5000}/api/xero/callback`;
+};
+
+/**
  * Build Basic auth header for token exchange.
  */
 const basicAuthHeader = () => {
@@ -65,7 +85,7 @@ const exchangeToken = async (grantType, codeOrToken) => {
   const body = new URLSearchParams({ grant_type: grantType });
   if (grantType === 'authorization_code') {
     body.append('code', codeOrToken);
-    body.append('redirect_uri', process.env.XERO_REDIRECT_URI || 'http://localhost:5000/api/xero/callback');
+    body.append('redirect_uri', getRedirectUri());
   } else {
     body.append('refresh_token', codeOrToken);
   }
@@ -183,10 +203,15 @@ const getConnectionStatus = async () => {
 
 /**
  * Generate the Xero OAuth2 authorization URL.
+ *
+ * `userId` is carried through the OAuth `state` and handed back on the callback,
+ * which is public (Xero redirects a browser to it, so there is no session). That
+ * is the only way `connectedBy` can be recorded — without it the audit trail for
+ * a finance integration says nobody connected it.
  */
-const getAuthUrl = () => {
+const getAuthUrl = (userId = null) => {
   const clientId = process.env.XERO_CLIENT_ID;
-  const redirectUri = process.env.XERO_REDIRECT_URI || 'http://localhost:5000/api/xero/callback';
+  const redirectUri = getRedirectUri();
 
   if (!clientId) {
     throw new AppError('XERO_CLIENT_ID not configured', 500);
@@ -203,10 +228,24 @@ const getAuthUrl = () => {
     client_id: clientId,
     redirect_uri: redirectUri,
     scope: scopes,
-    state: Date.now().toString(36),
+    state: encodeState(userId),
   });
 
   return `${XERO_IDENTITY_URL}/connect/authorize?${params.toString()}`;
+};
+
+/** Pack the initiating user + a nonce into the OAuth `state` parameter. */
+const encodeState = (userId) =>
+  Buffer.from(JSON.stringify({ u: userId ? String(userId) : null, t: Date.now() })).toString('base64url');
+
+/** Read back what encodeState packed. Never throws — state is attacker-supplied. */
+const decodeState = (state) => {
+  try {
+    const parsed = JSON.parse(Buffer.from(String(state || ''), 'base64url').toString('utf8'));
+    return { userId: parsed.u || null, issuedAt: parsed.t || null };
+  } catch {
+    return { userId: null, issuedAt: null };
+  }
 };
 
 /**
@@ -597,6 +636,70 @@ const getSyncHistory = async (page = 1, limit = 20) => {
 };
 
 // ---------------------------------------------------------------------------
+// RTO batch payments (ACCPAY)
+// ---------------------------------------------------------------------------
+
+/**
+ * Push one RTO payable to Xero as an ACCPAY bill.
+ *
+ * Deliberately separate from `syncInvoice`: that path builds its contact from the
+ * *student*, which is right for ACCREC (the student owes CA) but wrong for a bill
+ * CA owes an RTO. A batch row bills the RTO, references the application, and
+ * carries the RTO's own invoice number so it reconciles against their statement.
+ *
+ * When the row has already been paid in the portal, the linked Payment is stamped
+ * with the same Xero invoice ID — otherwise the nightly `syncAll()` would see an
+ * unsynced completed payment and raise a second, student-contact bill for it.
+ */
+const syncRTOBill = async ({
+  paymentId, rtoId, rtoName, invoiceNumber, reference, description, amount, date, dueDate,
+}) => {
+  if (!(amount > 0)) throw new AppError('Cannot push a zero-amount row to Xero', 400);
+
+  let contactName = (rtoName || '').trim();
+  if (!contactName && rtoId) {
+    const User = require('../models/User');
+    const rto = await User.findById(rtoId).select('firstName lastName email').lean();
+    if (rto) contactName = `${rto.firstName || ''} ${rto.lastName || ''}`.trim();
+  }
+  if (!contactName) throw new AppError('Row has no RTO to bill — assign an RTO first', 400);
+
+  const billData = {
+    Type: 'ACCPAY',
+    Contact: { Name: contactName },
+    LineItems: [{
+      Description: description || `RTO fee${reference ? ` — ${reference}` : ''}`,
+      Quantity: 1,
+      UnitAmount: amount,
+      AccountCode: '310', // Cost of Sales / RTO Fees — same code syncInvoice uses
+      TaxType: 'INPUT',
+    }],
+    Date: formatXeroDate(date),
+    DueDate: formatXeroDate(dueDate || date),
+    Reference: reference || undefined,
+    Status: 'AUTHORISED',
+    CurrencyCode: 'AUD',
+    LineAmountTypes: 'Inclusive',
+  };
+  if (invoiceNumber) billData.InvoiceNumber = invoiceNumber;
+
+  const result = await xeroRequest('PUT', '/Invoices', { Invoices: [billData] });
+  const bill = result.Invoices?.[0];
+  const xeroInvoiceId = bill?.InvoiceID || null;
+
+  if (paymentId) {
+    await Payment.findByIdAndUpdate(paymentId, {
+      xeroInvoiceId,
+      xeroSyncStatus: 'synced',
+      xeroSyncedAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  return { xeroInvoiceId, invoiceNumber: bill?.InvoiceNumber, status: 'synced' };
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -614,7 +717,10 @@ module.exports = {
   getAuthUrl,
   handleCallback,
   disconnect,
+  getRedirectUri,
+  decodeState,
   syncInvoice,
+  syncRTOBill,
   syncAll,
   reconcile,
   getReconciliationReport,

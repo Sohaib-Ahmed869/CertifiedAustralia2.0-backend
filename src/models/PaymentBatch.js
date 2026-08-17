@@ -1,68 +1,120 @@
 const mongoose = require('mongoose');
 
+/**
+ * PaymentBatch — one document per "BATCH WEEK ENDING" block in the client's RTO
+ * finance workbook. Batches are created AUTOMATICALLY: uploading an RTO invoice
+ * stops the application's 21-day assessment timer, and that upload instant
+ * decides which week the payable falls into (see utils/batchWeek).
+ *
+ * Two things are deliberately denormalised onto each row: the display fields
+ * (App ID, student, RTO, qualification, invoice number) and the dates the queue
+ * is judged on (completion, eligibility). The batch is a financial record of what
+ * was paid on a given week — it must still read correctly years later even if the
+ * application is renamed, re-assigned to another RTO, or archived. Live data is
+ * re-snapshotted onto UNPAID rows by paymentBatchService.reconcile(); paid rows
+ * are frozen.
+ */
+
 const batchItemSchema = new mongoose.Schema({
-  rtoInvoiceId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'RTOInvoice',
-  },
-  applicationId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Application',
-  },
-  rtoId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-  },
-  amount: {
-    type: Number,
-    required: true,
-    min: 0,
-  },
-  status: {
+  // ── Links ──
+  rtoInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'RTOInvoice' },
+  applicationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Application' },
+  rtoId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  // The rtoPayable/rtoPayment record settled when this row was marked paid.
+  paymentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' },
+
+  // ── Snapshot columns (workbook layout) ──
+  applicationCode: String,   // APP4164
+  studentName: String,
+  rtoName: String,
+  qualificationName: String,
+  invoiceNumber: String,     // the RTO's own invoice number, e.g. INV-13323
+
+  amount: { type: Number, required: true, min: 0 },
+
+  completionDate: Date,      // student completed / timer started
+  eligibilityDate: Date,     // completion + 21 days
+  invoiceUploadedAt: Date,   // timer stopped — this is what buckets the week
+
+  // ── Workflow flags (the sheet's Yes/No columns) ──
+  readyForPayment: { type: Boolean, default: false },
+  invoiceSentToAccounts: { type: Boolean, default: false },
+
+  // ── Payment ──
+  // pending = queued, not actioned · unpaid = actioned but deliberately withheld
+  // · paid = money out. Mirrors the sheet's Payment Status column.
+  paymentStatus: {
     type: String,
-    enum: ['pending', 'paid', 'skipped'],
+    enum: ['pending', 'unpaid', 'paid'],
     default: 'pending',
   },
+  paymentDate: Date,
+  paidAmount: { type: Number, default: 0, min: 0 },
+  markedPaidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  markedPaidAt: Date,
+
+  notes: String,
+
+  // ── Xero (per row, because a push can partially fail) ──
+  xeroInvoiceId: String,
+  xeroSyncStatus: { type: String, enum: ['pending', 'synced', 'failed'], default: null },
+  xeroSyncedAt: Date,
+  xeroError: String,
+
+  // Set when an admin moves a row out of its auto-assigned week.
+  movedFromWeekKey: String,
+
+  addedAt: { type: Date, default: Date.now },
 }, { _id: true });
 
 const paymentBatchSchema = new mongoose.Schema({
+  // Week-ending Sydney civil date, "YYYY-MM-DD" (e.g. 2026-04-24).
   weekKey: {
     type: String,
     required: true,
-    index: true,
+    unique: true, // one document per batch week — ensureBatch upserts on it
   },
+  weekStartDate: Date,
+  weekEndingDate: { type: Date, index: true },
+  // The weekEndingDay in force when this batch was created — kept so a later
+  // config change doesn't misrepresent a historical week's boundaries.
+  weekEndingDay: { type: Number, default: 5 },
+
   items: [batchItemSchema],
-  totalAmount: {
-    type: Number,
-    default: 0,
-    min: 0,
-  },
+
+  totalAmount: { type: Number, default: 0, min: 0 },
+  paidAmount: { type: Number, default: 0, min: 0 },
+
+  // Week-level lifecycle. `approved` is the only manual gate (CEO); `released`
+  // and `completed` are derived from row payments by recalcTotals().
   status: {
     type: String,
     enum: ['draft', 'approved', 'released', 'completed'],
     default: 'draft',
   },
-  approvedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-  },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   approvedAt: Date,
-  releasedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-  },
+  releasedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   releasedAt: Date,
   completedAt: Date,
+
+  // Xero push rollup across items.
+  xeroSyncStatus: {
+    type: String,
+    enum: ['notSynced', 'partial', 'synced', 'failed'],
+    default: 'notSynced',
+  },
+  xeroSyncedAt: Date,
+  xeroSyncedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+
   notes: String,
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    index: true,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
+  autoGenerated: { type: Boolean, default: true },
+
+  createdAt: { type: Date, default: Date.now, index: true },
+  updatedAt: { type: Date, default: Date.now },
 });
+
+paymentBatchSchema.index({ 'items.rtoInvoiceId': 1 });
+paymentBatchSchema.index({ status: 1 });
 
 module.exports = mongoose.model('PaymentBatch', paymentBatchSchema);

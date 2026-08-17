@@ -724,6 +724,7 @@ let xeroSyncJob = null;
 let rtoTimerJob = null;
 let campaignBounceJob = null;
 let sequenceTickJob = null;
+let batchReconcileJob = null;
 
 const startScheduler = () => {
   console.log('[Scheduler] Starting schedulers...');
@@ -830,6 +831,19 @@ const startScheduler = () => {
     }
   });
 
+  // RTO batch payment queue reconcile — daily at 1:30 AM, right after the timer
+  // check. Batches are built on invoice upload; this is the safety net that
+  // catches anything that slipped and refreshes the unpaid rows' snapshots.
+  batchReconcileJob = cron.schedule('30 1 * * *', async () => {
+    try {
+      const paymentBatchService = require('./paymentBatchService');
+      const result = await paymentBatchService.reconcile();
+      console.log(`[Scheduler] Batch queue reconcile: ${result.added} queued, ${result.refreshed} refreshed, ${result.errors.length} errors`);
+    } catch (err) {
+      console.error('[Scheduler] Batch queue reconcile error:', err.message);
+    }
+  });
+
   // Email-sequence (drip) tick — every 5 minutes, unless disabled.
   if (process.env.SEQUENCE_SCHEDULER_ENABLED !== 'false') {
     sequenceTickJob = cron.schedule('*/5 * * * *', async () => {
@@ -880,6 +894,7 @@ const startScheduler = () => {
   console.log('  - Follow-up call checks: every 2 hours (7AM–7PM)');
   console.log('  - Xero sync + reconciliation: daily at 10:00 PM');
   console.log('  - Campaign bounce polling: every 5 minutes');
+  console.log('  - RTO batch queue reconcile: daily at 1:30 AM');
 };
 
 const stopScheduler = () => {
@@ -891,6 +906,7 @@ const stopScheduler = () => {
   if (xeroSyncJob) xeroSyncJob.stop();
   if (campaignBounceJob) campaignBounceJob.stop();
   if (sequenceTickJob) sequenceTickJob.stop();
+  if (batchReconcileJob) batchReconcileJob.stop();
   console.log('[Scheduler] All schedulers stopped');
 };
 
