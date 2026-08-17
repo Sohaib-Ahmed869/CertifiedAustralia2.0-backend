@@ -24,6 +24,9 @@ router.post('/escalate', asyncHandler(async (req, res) => {
     studentId: req.user._id,
     chatTranscript: req.body.transcript,
     subject: req.body.subject,
+    applicationId: req.body.applicationId || null,
+    category: req.body.category,
+    priority: req.body.priority,
   });
   res.status(201).json({ item: ticket });
 }));

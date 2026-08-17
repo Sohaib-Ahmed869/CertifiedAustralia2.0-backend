@@ -13,6 +13,8 @@ const Application = require('../models/Application');
 const Payment = require('../models/Payment');
 const PaymentPlan = require('../models/PaymentPlan');
 const Checklist = require('../models/Checklist');
+const Student = require('../models/Student');
+const IntakeForm = require('../models/IntakeForm');
 const ticketService = require('./ticketService');
 const buildCrud = require('./commonCrud');
 
@@ -25,7 +27,7 @@ const knowledgeCrud = buildCrud(KnowledgeBase, {});
 const INTENTS = [
   'NEXT_STEP', 'APP_STATUS', 'DOCS_NEEDED', 'DOCS_PENDING',
   'CERTIFICATE', 'PAYMENT', 'HUMAN_SUPPORT', 'REFERENCE_LETTER',
-  'GENERAL',
+  'USI', 'CANCELLATION', 'GENERAL',
 ];
 
 /**
@@ -33,6 +35,12 @@ const INTENTS = [
  */
 const classifyIntent = async (message) => {
   // Regex patterns — ORDER MATTERS: more specific patterns first
+  // CANCELLATION must precede PAYMENT ("cancel my payment plan", "refund") and
+  // USI must precede DOCS_NEEDED ("USI transcript document") — both are narrower.
+  if (/\b(cancel|cancelling|canceling|cancellation|withdraw|withdrawal|terminate|discontinue|opt.?out|back.?out|pull.?out|quit)\b/i.test(message)
+    || /\b(stop|end|close).{0,20}\b(payment|plan|subscription|direct.?debit|application|enrol|enroll|course|membership|account)/i.test(message)
+    || /\b(no longer|don'?t|do not).{0,15}\b(want|wish|need).{0,25}\b(continue|proceed|application|course|qualification|enrol|enroll)/i.test(message)) return 'CANCELLATION';
+  if (/\busi\b|\bunique student identifier\b/i.test(message)) return 'USI';
   // Document-related intents must come before NEXT_STEP to avoid "what do I need" matching NEXT_STEP
   if (/\b(what.*document|which.*document|document.*need|what.*upload|required.*document|checklist|evidence.*need|what.*do.*i.*need.*upload|what.*need.*submit)\b/i.test(message)) return 'DOCS_NEEDED';
   if (/\b(pending.*document|missing.*document|outstanding|incomplete|remaining.*upload|what.*uploaded|upload.*status|have.*i.*uploaded)\b/i.test(message)) return 'DOCS_PENDING';
@@ -407,6 +415,96 @@ const handleHumanSupport = () => {
   return null; // Signal to frontend to show support button
 };
 
+/**
+ * The USI is per-student, not per-application. It is captured on the Student
+ * record at sign-up and again on the Intake Form — read both, newest wins.
+ */
+const getStudentUSI = async (studentId) => {
+  if (!studentId) return null;
+  try {
+    const student = await Student.findById(studentId).select('usi').lean();
+    if (student?.usi) return String(student.usi).trim();
+
+    // IntakeForm is keyed by applicationId, not studentId — go via the student's
+    // applications to reach it.
+    const apps = await Application.find({ studentId }).select('_id').lean();
+    if (!apps.length) return null;
+    const intake = await IntakeForm.findOne({ applicationId: { $in: apps.map((a) => a._id) }, usi: { $nin: [null, ''] } })
+      .sort('-createdAt')
+      .select('usi')
+      .lean();
+    return intake?.usi ? String(intake.usi).trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+const USI_HELP_LINKS = "**Create a USI (free):** https://www.usi.gov.au/students/get-a-usi\n**Forgotten your USI?** https://www.usi.gov.au/faqs/i-have-forgotten-my-usi";
+
+/**
+ * USI questions split into a few distinct asks — "what is it", "I don't have
+ * one", "I forgot mine", "where do I put it", "the USI documents".
+ * All of them are answerable without an LLM, so this stays deterministic.
+ */
+const handleUSI = (message, usiOnFile) => {
+  const msg = String(message || '').toLowerCase();
+
+  const noUSI = /\b(no|don'?t|do not|dont|haven'?t|have not|without|need|get|create|apply|obtain|register|sign.?up|new)\b/.test(msg)
+    && !/\b(what.*is|meaning|stands? for)\b/.test(msg);
+  const forgotten = /\b(forgot|forgotten|lost|can'?t remember|cannot remember|find my|retrieve|recover|what.*is my|where.*is my)\b/.test(msg);
+  const whereToEnter = /\b(enter|put|add|update|change|provide|submit|where.*do.*i)\b/.test(msg);
+  const aboutDocs = /\b(transcript|screenshot|document|upload|evidence)\b/.test(msg);
+
+  const onFileLine = usiOnFile
+    ? `\n\n📄 The USI we currently have on file for you is **${usiOnFile}**.`
+    : `\n\n📄 We don't have a USI on file for you yet — you'll need to add it to your **Student Intake Form** before your application can be assessed.`;
+
+  let response = "**USI — Unique Student Identifier**\n\nA USI is a free, government-issued 10-character code (letters and numbers) that acts as your permanent reference number for all nationally recognised training in Australia. By law, every student doing nationally recognised training needs one — we can't issue your certificate without it.";
+
+  // Order matters: a question about the USI *documents* ("do I need to upload
+  // the USI transcript") contains "need"/"upload" and would otherwise be read
+  // as "I don't have a USI". Recovery beats creation — never send someone who
+  // has lost their USI off to create a second one.
+  if (aboutDocs) {
+    response += "\n\n**We ask for two USI items** in **Documents → Educational Qualifications**:\n- **USI VET Transcript** — a digital record of all nationally recognised training you've completed in Australia. To get it: log in at https://www.usi.gov.au with your USI, then download your transcript.\n- **USI Portal Screenshot** — a screenshot of your USI portal showing your **name and USI number** together.";
+    response += onFileLine;
+    return response;
+  }
+
+  if (forgotten) {
+    response = "**Forgotten or lost your USI?**\n\nYou don't need to create a new one — you can recover your existing USI. Go to https://www.usi.gov.au/faqs/i-have-forgotten-my-usi and use the **Forgotten USI** option. You'll need the ID you originally created it with (for example your driver's licence, Medicare card, or passport).";
+    response += onFileLine;
+    response += "\n\nOnce you have it, add it to your **Student Intake Form** in the portal.";
+    return response;
+  }
+
+  if (noUSI) {
+    response += "\n\n**You can create one yourself in about 5 minutes — it's free:**\n1. Go to https://www.usi.gov.au/students/get-a-usi\n2. Click **Create your USI**\n3. Agree to the terms and verify your identity with **one** form of ID — driver's licence, Medicare card, Australian passport, birth certificate, citizenship certificate, ImmiCard, or visa\n4. Enter your personal details exactly as they appear on that ID\n5. Set your contact details and check questions, then submit\n\nYour USI is issued immediately on screen — save it somewhere safe.";
+    response += onFileLine;
+    response += `\n\nIf you think you might already have one (for example from previous TAFE or college study), check first: https://www.usi.gov.au/faqs/i-have-forgotten-my-usi\n\nIf you get stuck creating your USI, create a support ticket below or call us on **1300 044 927** and we'll walk you through it.`;
+    return response;
+  }
+
+  if (whereToEnter) {
+    response += "\n\n**Where to enter it:** open your **Student Intake Form** in the portal — the USI field is in the personal details section and is required. If your intake form is already submitted and the USI needs correcting, create a support ticket below and our team will update it for you.";
+    response += onFileLine;
+    return response;
+  }
+
+  response += onFileLine;
+  response += `\n\n${USI_HELP_LINKS}\n\nYou'll also need to upload your **USI VET Transcript** and a **USI Portal Screenshot** under **Documents → Educational Qualifications**.\n\nAnything else about your USI I can help with?`;
+  return response;
+};
+
+/**
+ * Cancellations, withdrawals and refunds are commercial decisions — the bot
+ * must never confirm or action one. It hands the student to support warmly and
+ * flags the ticket so it doesn't sit in the queue as a routine query.
+ */
+const handleCancellation = () => (
+  "I'm sorry to hear you're thinking about cancelling.\n\nCancellations, withdrawals and refunds aren't something I can process myself — they need to go to our support team so they can talk it through with you properly, explain what it means for your application and any payments already made, and check whether there's anything we can sort out for you first.\n\n**Please create a support ticket below and a team member will contact you to discuss this.**\n\nIf you'd rather speak to someone straight away, call us on **1300 044 927** or email **info@certifiedaustralia.com.au**."
+);
+
 // ---------------------------------------------------------------------------
 // Embedding helpers
 // ---------------------------------------------------------------------------
@@ -565,6 +663,8 @@ COMMON STUDENT SITUATIONS YOU SHOULD HANDLE:
 13. "I need to speak to someone" — Acknowledge warmly and offer the support ticket option.
 14. "I've been asked to resubmit documents" — Admin has reviewed and needs corrections. Check notifications for details, then re-upload in the Documents section.
 15. "I've been asked to provide additional documents" — Named upload slots have been created. Go to Documents → Additional Documents section.
+16. "What is a USI / I don't have a USI" — A Unique Student Identifier: a free, government-issued 10-character code required by law for all nationally recognised training in Australia. Students create one at https://www.usi.gov.au/students/get-a-usi with one form of ID; a forgotten USI is recovered at https://www.usi.gov.au/faqs/i-have-forgotten-my-usi (never tell a student to create a second USI). It is entered on the Student Intake Form, and students also upload a USI VET Transcript and a USI Portal Screenshot under Documents → Educational Qualifications.
+17. "I want to cancel / withdraw / get a refund" — NEVER confirm, action, or promise a cancellation or refund, and never quote cancellation terms or fees. Respond with empathy, explain that this needs to be discussed with the support team, and direct them to create a support ticket or call 1300 044 927.
 
 PORTAL NAVIGATION:
 - Dashboard: overview of applications and quick actions
@@ -699,6 +799,33 @@ const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => 
     };
   }
 
+  // Step 2b: Cancellation / withdrawal / refund — always route to a human, and
+  // tag the escalation so support sees it as urgent rather than a general query.
+  if (intent === 'CANCELLATION') {
+    return {
+      answer: handleCancellation(),
+      matched: true,
+      source: 'deterministic',
+      intent,
+      suggestEscalation: true,
+      meta: {
+        showSupportButton: true,
+        escalation: { category: 'payments', priority: 'high' },
+      },
+    };
+  }
+
+  // Step 2c: USI — answered from the student's own record, no LLM needed
+  if (intent === 'USI') {
+    const usiOnFile = await getStudentUSI(studentId);
+    return {
+      answer: handleUSI(message, usiOnFile),
+      matched: true,
+      source: 'deterministic',
+      intent,
+    };
+  }
+
   // Step 3: Get application context for app-specific intents
   const appSpecificIntents = ['NEXT_STEP', 'APP_STATUS', 'DOCS_NEEDED', 'DOCS_PENDING', 'CERTIFICATE', 'PAYMENT', 'REFERENCE_LETTER'];
   let appContext = null;
@@ -809,7 +936,7 @@ const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => 
 
   // Step 8: No match — suggest escalation
   return {
-    answer: "I'm sorry, I couldn't find an answer to your question. Would you like me to create a support ticket so our team can help you?\n\nYou can also reach us at **info@certifiedaustralia.com.au** or call **1300 044 927**.",
+    answer: "That one's best answered by a person rather than me. Create a support ticket below and our team will get back to you to discuss it.\n\nYou can also reach us at **info@certifiedaustralia.com.au** or call **1300 044 927**.\n\nIn the meantime, I can help with your application status, next steps, required documents, payments, reference letters, your USI, or your certificate.",
     matched: false,
     suggestEscalation: true,
   };
@@ -819,19 +946,54 @@ const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => 
 // Escalation
 // ---------------------------------------------------------------------------
 
-const escalateToTicket = async ({ studentId, chatTranscript, subject }) => {
+// Transcript lines arrive either as strings or as { role, text|content }. The
+// widget sends role 'user' for the student — normalise everything to
+// 'student' | 'bot' so the support UI has a single shape to render.
+const normaliseTranscript = (chatTranscript) => (chatTranscript || []).map((line) => {
+  if (typeof line === 'string') {
+    return {
+      role: line.startsWith('Student') ? 'student' : 'bot',
+      content: line,
+    };
+  }
+  const role = line.role === 'user' || line.role === 'student' ? 'student' : 'bot';
+  const entry = {
+    role,
+    content: line.text || line.content || String(line),
+  };
+  if (line.at || line.timestamp) entry.timestamp = new Date(line.at || line.timestamp);
+  return entry;
+});
+
+// Whitelisted against the Ticket schema enums — an unknown value from the
+// client would otherwise fail validation and 500 the escalation.
+const TICKET_CATEGORIES = ['intake_form', 'documents', 'payments', 'technical', 'rto_support', 'general', 'other'];
+const TICKET_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
+
+const escalateToTicket = async ({ studentId, chatTranscript, subject, applicationId, category, priority }) => {
+  const transcript = normaliseTranscript(chatTranscript);
+
+  // The student's last question is what support actually needs to answer — use
+  // it as the title so chatbot tickets aren't all identically named in the inbox.
+  const lastQuestion = [...transcript].reverse().find((l) => l.role === 'student' && l.content?.trim())?.content?.trim();
+  const title = lastQuestion
+    ? (lastQuestion.length > 90 ? `${lastQuestion.slice(0, 90)}...` : lastQuestion)
+    : (subject || 'Chatbot Escalation');
+
+  const description = lastQuestion
+    ? `Escalated from chatbot — the assistant could not resolve this.\n\nStudent's question:\n"${lastQuestion}"\n\nThe full chatbot conversation is shown on this ticket.`
+    : 'Escalated from chatbot — student question could not be resolved automatically.';
+
   const ticket = await ticketService.createTicket({
     requesterId: studentId,
-    title: subject || 'Chatbot Escalation',
-    description: 'Escalated from chatbot — student question could not be resolved automatically.',
+    title,
+    description,
     type: 'query',
-    category: 'general',
-    priority: 'medium',
+    category: TICKET_CATEGORIES.includes(category) ? category : 'general',
+    priority: TICKET_PRIORITIES.includes(priority) ? priority : 'medium',
     source: 'chatbot',
-    chatbotTranscript: (chatTranscript || []).map((line) => ({
-      role: typeof line === 'string' ? (line.startsWith('Student') ? 'student' : 'bot') : (line.role || 'bot'),
-      content: typeof line === 'string' ? line : (line.text || line.content || String(line)),
-    })),
+    ...(applicationId ? { applicationId } : {}),
+    chatbotTranscript: transcript,
   });
 
   return ticket;
