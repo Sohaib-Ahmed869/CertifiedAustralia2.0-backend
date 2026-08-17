@@ -971,18 +971,20 @@ module.exports = {
     // Discounts recorded on the application — which include the $500 intake
     // discount written at registration — come off the list price, so the quote
     // matches what the student sees on the payment page and welcome email.
+    //
+    // Only the FINAL (discounted) figure is shown — no list price, no strikethrough
+    // and no "includes your $X discount" note. This mirrors the legacy portal's
+    // `calculatePromotionPrice()`, which prints a single `$0000.00` value.
     const isElectrical = templateType === 'electrical' || templateType.startsWith('electrical_');
     const isAircon = templateType.startsWith('aircon_');
     const listPrice = isElectrical ? 18998 : Number(app.qualificationId?.caPrice || 0);
     const discountTotal = (app.discounts || []).reduce((sum, d) => sum + (d.amount || 0), 0);
     const netPrice = Math.max(0, listPrice - discountTotal);
     const hasPricing = listPrice > 0;
-    const money = (amount) => `$${Number(amount).toLocaleString()}`;
+    const money = (amount) => `$${Number(amount).toFixed(2)}`;
     const priceText = isAircon
       ? '$10,000 – $15,000'
       : (hasPricing ? money(netPrice) : 'Contact us for pricing');
-    const showsDiscount = hasPricing && !isAircon && discountTotal > 0;
-    const savingsNote = `Usually <span style="text-decoration:line-through;">${money(listPrice)}</span> &mdash; includes your ${money(discountTotal)} intake discount`;
 
     const baseUrl = process.env.APP_BASE_URL || 'https://portal.certifiedaustralia.com.au';
 
@@ -994,13 +996,9 @@ module.exports = {
 
     const section = (title, body) => `<div style="margin:24px 0;"><h3 style="color:#0a9d42;font-size:16px;font-weight:600;margin:0 0 12px;">${title}</h3>${body}</div>`;
     // Big green figure used by the electrical/aircon course templates.
-    const priceFmt =
-      `<p style="font-size:28px;font-weight:700;color:#0a9d42;margin:0;">${priceText}</p>` +
-      (showsDiscount ? `<p style="font-size:13px;color:#6b7280;margin:6px 0 0;">${savingsNote}</p>` : '');
+    const priceFmt = `<p style="font-size:28px;font-weight:700;color:#0a9d42;margin:0;">${priceText}</p>`;
     // Inline "Cost:" value used by the RPL enquiry templates.
-    const costLine = showsDiscount
-      ? `${priceText} <span style="color:#6b7280;font-weight:400;">(${savingsNote})</span>`
-      : priceText;
+    const costLine = priceText;
 
     const TEMPLATES = {
       general_rpl: {
