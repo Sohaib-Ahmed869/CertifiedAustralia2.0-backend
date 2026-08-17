@@ -29,8 +29,8 @@ const DEFAULT_CONFIG = {
       color: 'violet',
       protected: true,
       items: [
-        { id: 'proven', name: 'Proven', amount: 10000 },
-        { id: 'get_social', name: 'Get Social', amount: 9950 },
+        { id: 'proven', name: 'Proven', amount: 0 },
+        { id: 'get_social', name: 'Get Social', amount: 950 },
       ],
     },
     {
@@ -48,8 +48,8 @@ const DEFAULT_CONFIG = {
       priority: 4,
       color: 'rose',
       items: [
-        { id: 'executive', name: 'Executive', amount: 5000, debtTracking: true, debtKey: 'executive' },
-        { id: 'dlk', name: 'DLK', amount: 3250, debtTracking: true, debtKey: 'dlk' },
+        { id: 'executive', name: 'Executive', amount: 3250, debtTracking: true, debtKey: 'executive' },
+        { id: 'dlk', name: 'DLK', amount: 5000, debtTracking: true, debtKey: 'dlk' },
       ],
     },
     {
@@ -64,7 +64,7 @@ const DEFAULT_CONFIG = {
       ],
     },
   ],
-  debtBalances: { executive: 13000, dlk: 25000, bizcap: 75000, super: 25000 },
+  debtBalances: { executive: 8000, dlk: 17000, bizcap: 35000, super: 30000 },
 };
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -128,13 +128,36 @@ function statusFromRevenue(revenueIn, target, stretch) {
 
 /**
  * Get or create the singleton CashflowConfig.
+ *
+ * Also self-heals a config that exists but has lost its tiers. A partial
+ * settings save made before `updateConfig` guarded against an empty `tiers`
+ * array could blank the tier definitions outright, and nothing here treated
+ * that as broken — so the whole tab rendered with no payment cards, no
+ * waterfall stages and "$0 required", permanently. Restoring the defaults is
+ * far better than making an admin retype every supplier.
  */
 async function getConfig() {
   let config = await CashflowConfig.findOne().lean();
+
   if (!config) {
     const created = await CashflowConfig.create(DEFAULT_CONFIG);
     config = created.toObject();
+  } else if (!Array.isArray(config.tiers) || config.tiers.length === 0) {
+    await CashflowConfig.updateOne(
+      { _id: config._id },
+      { $set: { tiers: DEFAULT_CONFIG.tiers, updatedAt: new Date() } }
+    );
+    config = await CashflowConfig.findOne().lean();
   }
+
+  // `.lean()` skips schema defaults, so a debtBalances sub-doc that was written
+  // with only some keys comes back with the rest undefined. Normalise on read
+  // (no write) so every consumer sees all four accounts.
+  config.debtBalances = {
+    executive: 0, dlk: 0, bizcap: 0, super: 0,
+    ...(config.debtBalances || {}),
+  };
+
   return config;
 }
 
