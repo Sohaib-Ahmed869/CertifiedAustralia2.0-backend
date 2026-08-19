@@ -402,7 +402,7 @@ const applicationSchema = new mongoose.Schema(
     // Color-coding for application management
     color: {
       type: String,
-      enum: ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
+      enum: ['red', 'orange', 'purple', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
       default: '',
     },
     // Application status (journey stage) change trail — powers the Timeline tab dates.
@@ -418,11 +418,11 @@ const applicationSchema = new mongoose.Schema(
       {
         color: {
           type: String,
-          enum: ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
+          enum: ['red', 'orange', 'purple', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
         },
         previousColor: {
           type: String,
-          enum: ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
+          enum: ['red', 'orange', 'purple', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''],
         },
         changedAt: { type: Date, default: Date.now },
         changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

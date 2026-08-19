@@ -33,6 +33,7 @@ const REVENUE_PAYMENT_TYPES = ['upfront', 'plan', 'manualMarkPaid'];
 const COLOR_SOURCE_MAP = {
   red: 'Hot Lead',
   orange: 'Warm Lead',
+  purple: 'Neutral Lead',
   gray: 'Cold Lead',
   yellow: 'Proceeded',
   lightblue: 'Impacted',
@@ -1609,6 +1610,7 @@ async function getWeeklyScorecard(query = {}) {
 const LEAD_STATUS_META = [
   { value: 'red', label: 'Hot Lead', color: '#ef4444' },
   { value: 'orange', label: 'Warm Lead', color: '#f97316' },
+  { value: 'purple', label: 'Neutral Lead', color: '#a855f7' },
   { value: 'gray', label: 'Cold Lead', color: '#94a3b8' },
   { value: 'yellow', label: 'Payment Proceeded', color: '#eab308' },
   { value: 'green', label: 'Certified', color: '#22c55e' },

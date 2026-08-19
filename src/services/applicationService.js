@@ -154,7 +154,7 @@ const updateSource = async (applicationId, source) => {
   return application;
 };
 
-const LEAD_COLORS = ['red', 'orange', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''];
+const LEAD_COLORS = ['red', 'orange', 'purple', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''];
 
 const updateLeadStatus = async (applicationId, color, actor = {}) => {
   const next = (color ?? '').toString().trim().toLowerCase();
