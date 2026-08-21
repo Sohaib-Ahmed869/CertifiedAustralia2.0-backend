@@ -11,6 +11,50 @@ const appEmails = require('./applicationEmailService');
 const rtoDocAccess = require('./rtoDocAccessService');
 const { SIGNUP_DISCOUNT_AMOUNT } = require('../config/pricing');
 
+// ── Journey stage ordering ───────────────────────────────────────────────
+// Mirrors the `status` enum in models/Application.js, in journey order.
+// 'Archived' is deliberately absent: it is a parking state, not a stage, and
+// must never be reachable by a rank comparison.
+const STATUS_ORDER = [
+  'New',
+  'WaitingForPayment',
+  'StudentIntakeForm',
+  'UploadDocuments',
+  'DocumentsUploaded',
+  'StudentCompleted',
+  'SentToRTO',
+  'WaitingForVerification',
+  'ReadyForRTOPayment',
+  'RTOInvoiceUploaded',
+  'CertificateGenerated',
+  'CertificateIssued',
+];
+
+const SENT_TO_RTO_RANK = STATUS_ORDER.indexOf('SentToRTO');
+
+/**
+ * Should handing this application to an RTO advance it to `SentToRTO`?
+ *
+ * Only when it has not already moved PAST that stage. Once an RTO has started
+ * assessing (`WaitingForVerification`), finished (`ReadyForRTOPayment`), billed
+ * us (`RTOInvoiceUploaded`) or the certificate exists, re-sending the package —
+ * a corrected document set, a second RTO, a resend after a bounced email — is
+ * not a step backwards in the journey and must not rewrite the status.
+ *
+ * This is not cosmetic. `rtoInvoiceService.createInvoice` gates invoice upload
+ * on ['StudentCompleted','SentToRTO','WaitingForVerification','ReadyForRTOPayment'],
+ * so regressing an already-invoiced application to `SentToRTO` would make it
+ * eligible to be invoiced a second time. It would also append a bogus
+ * transition to `statusHistory`, which is what the Timeline tab renders.
+ *
+ * Unknown/legacy statuses return false — leave anything we don't model alone.
+ */
+const shouldMarkSentToRTO = (currentStatus) => {
+  if (currentStatus === 'Archived') return false;
+  const rank = STATUS_ORDER.indexOf(currentStatus);
+  return rank !== -1 && rank < SENT_TO_RTO_RANK;
+};
+
 /**
  * Check if the student has completed their 3 obligations and advance status.
  * Then, if RTO is also assigned, start the 21-day KPI timer.
@@ -384,17 +428,25 @@ const sendToRTOPortal = async (applicationId, rtoUserId) => {
 
   const rtoName = `${rtoUser.firstName || ''} ${rtoUser.lastName || ''}`.trim();
 
+  // Same staging rule as the emailed package: re-sending to the portal (a
+  // re-assignment, a corrected document set) must not drag an application that
+  // is already being assessed or invoiced back to `SentToRTO`.
+  const before = await Application.findById(applicationId).select('status').lean();
+  if (!before) throw new AppError('Application not found', 404);
+
+  const update = {
+    assignedRTOId: rtoUserId,
+    rtoAssignmentDate: new Date(),
+    sentToRTOPortal: true,
+    sentToRTOPortalAt: new Date(),
+    portalRtoEmail: rtoUser.email,
+    portalRtoName: rtoName,
+  };
+  if (shouldMarkSentToRTO(before.status)) update.status = 'SentToRTO';
+
   const application = await Application.findByIdAndUpdate(
     applicationId,
-    {
-      assignedRTOId: rtoUserId,
-      rtoAssignmentDate: new Date(),
-      sentToRTOPortal: true,
-      sentToRTOPortalAt: new Date(),
-      portalRtoEmail: rtoUser.email,
-      portalRtoName: rtoName,
-      status: 'SentToRTO',
-    },
+    update,
     { new: true, runValidators: true }
   )
     .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
@@ -444,14 +496,22 @@ const sendToRTOPortal = async (applicationId, rtoUserId) => {
 };
 
 const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
+  // Read the stage first — whether this send advances the status depends on
+  // where the application already is. See shouldMarkSentToRTO.
+  const before = await Application.findById(applicationId).select('status').lean();
+  if (!before) throw new AppError('Application not found', 404);
+
+  const update = {
+    sentToRTOEmail: true,
+    sentToRTOEmailAt: new Date(),
+    rtoSubmissionEmail: rtoEmail,
+    rtoSubmissionName: rtoName || rtoEmail,
+  };
+  if (shouldMarkSentToRTO(before.status)) update.status = 'SentToRTO';
+
   const application = await Application.findByIdAndUpdate(
     applicationId,
-    {
-      sentToRTOEmail: true,
-      sentToRTOEmailAt: new Date(),
-      rtoSubmissionEmail: rtoEmail,
-      rtoSubmissionName: rtoName || rtoEmail,
-    },
+    update,
     { new: true, runValidators: true }
   )
     .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
@@ -2026,6 +2086,7 @@ module.exports = {
   markPaymentProceeded,
   sendToRTOPortal,
   sendRTOSubmission,
+  shouldMarkSentToRTO,
   updateStatus,
   restoreFromArchive,
   createIntakeForm,
