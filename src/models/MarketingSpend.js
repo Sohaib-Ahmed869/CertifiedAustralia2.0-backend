@@ -16,6 +16,8 @@ const marketingSpendSchema = new mongoose.Schema(
         'instagram_ads',
         'linkedin',
         'google',
+        'linktree',
+        'seo',
         'print',
         'print_qr',
         'mainline',

@@ -355,18 +355,20 @@ const handleDocsNeeded = async (ctx) => {
     return response;
   }
 
+  // SWMS and Visual Evidence share the same trade-industry gate
+  const VISUAL_EVIDENCE_INDUSTRIES = ['automotive', 'building & construction', 'hospitality', 'information & communications technology', 'beauty therapy & hairdressing'];
+  const isTradeIndustry = VISUAL_EVIDENCE_INDUSTRIES.some((n) => (ctx.industryName || '').toLowerCase().includes(n));
+
   // Generic document list
   const docs = [
     '**Identity Documents** (100+ points required) — combine from: Driver\'s Licence (40pts), Passport (70pts), Birth Certificate (70pts), Medicare Card (25pts), ID Card (40pts), Credit Card (15pts), Australian Citizenship (70pts)',
     '**Educational Documents** — USI VET Transcript, USI Portal Screenshot, Previous Qualifications',
-    '**Employment Evidence** — Resume, Employment Letter, Reference One, Reference Two, Payslips/Invoices (at least 3)',
+    `**Employment Evidence** — Resume, Employment Letter, Reference One, Reference Two, ${isTradeIndustry ? 'SWMS (Safe Work Method Statement), ' : ''}Payslips/Invoices (at least 3)`,
   ];
 
   let response = `For your **${ctx.qualificationName}** application, you'll need:\n\n${docs.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n\n`;
 
-  // Check if visual evidence is needed
-  const VISUAL_EVIDENCE_INDUSTRIES = ['automotive', 'building & construction', 'hospitality', 'information & communications technology', 'beauty therapy & hairdressing'];
-  if (VISUAL_EVIDENCE_INDUSTRIES.some((n) => (ctx.industryName || '').toLowerCase().includes(n))) {
+  if (isTradeIndustry) {
     response += '4. **Visual Evidence** — Photos of your work (min 10) and Videos (min 5)\n\n';
   }
 

@@ -50,6 +50,7 @@ const DOC_TYPE_MAP = {
   'Reference One': 'Reference Letter',
   'Reference Two': 'Reference Letter',
   'Payslips/Invoices': 'Work Experience Certificate',
+  'SWMS': 'Work Experience Certificate',
   'images': 'Other',
   'videos': 'Other',
 };

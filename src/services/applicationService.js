@@ -750,9 +750,19 @@ const updateStatus = async (applicationId, status) => {
     eduRequired.push('Previous Qualifications');
     eduRequired.forEach((name) => { if (!uploadedFields.has(name)) missing.push(name); });
 
+    // Trade-industry gate — drives both the SWMS and the Visual Evidence requirements.
+    // Mirrored on the frontend in `lib/documentRequirements.js`.
+    const VISUAL_EVIDENCE_INDUSTRIES = [
+      'automotive', 'building & construction', 'hospitality',
+      'information & communications technology', 'beauty therapy & hairdressing',
+    ];
+    const industryName = (typeof app.industryId === 'object' ? app.industryId?.name : '').toLowerCase();
+    const isTradeIndustry = VISUAL_EVIDENCE_INDUSTRIES.some((n) => industryName.includes(n));
+
     // 3. Employment Details
     const empRequired = [
       { name: 'Resume' }, { name: 'Employment Letter' }, { name: 'Reference One' },
+      ...(isTradeIndustry ? [{ name: 'SWMS' }] : []),
       { name: 'Payslips/Invoices', min: 3 },
     ];
     empRequired.forEach((d) => {
@@ -761,12 +771,7 @@ const updateStatus = async (applicationId, status) => {
     });
 
     // 4. Visual Evidence — only for specific industries
-    const VISUAL_EVIDENCE_INDUSTRIES = [
-      'automotive', 'building & construction', 'hospitality',
-      'information & communications technology', 'beauty therapy & hairdressing',
-    ];
-    const industryName = (typeof app.industryId === 'object' ? app.industryId?.name : '').toLowerCase();
-    if (VISUAL_EVIDENCE_INDUSTRIES.some((n) => industryName.includes(n))) {
+    if (isTradeIndustry) {
       if (fieldCount('images') < 10) missing.push(`Photos (${fieldCount('images')}/10)`);
       if (fieldCount('videos') < 5) missing.push(`Videos (${fieldCount('videos')}/5)`);
     }
