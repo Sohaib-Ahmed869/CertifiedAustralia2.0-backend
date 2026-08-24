@@ -275,9 +275,9 @@ async function getOverview(query = {}) {
     paid: paidApps,
     completed: completedApps,
     certified: certificateCount,
-    leadToPaidPct: totalLeads > 0 ? Math.round((paidApps / totalLeads) * 10000) / 100 : 0,
-    paidToCompletedPct: paidApps > 0 ? Math.round((completedApps / paidApps) * 10000) / 100 : 0,
-    completedToCertifiedPct: completedApps > 0 ? Math.round((certificateCount / completedApps) * 10000) / 100 : 0,
+    leadToPaid: totalLeads > 0 ? Math.round((paidApps / totalLeads) * 10000) / 100 : 0,
+    paidToDone: paidApps > 0 ? Math.round((completedApps / paidApps) * 10000) / 100 : 0,
+    certRate: completedApps > 0 ? Math.round((certificateCount / completedApps) * 10000) / 100 : 0,
   };
 
   // Revenue trend (last 12 months)
@@ -351,12 +351,16 @@ async function getOverview(query = {}) {
   sourceRevAgg.forEach((s) => {
     sourceRevMap[s._id || ''] = s.revenue;
   });
-  const leadSources = leadSourceAgg.map((s) => ({
-    source: s._id || '',
-    label: COLOR_SOURCE_MAP[s._id || ''] || 'Direct',
-    count: s.count,
-    revenue: sourceRevMap[s._id || ''] || 0,
-  }));
+  const leadSources = leadSourceAgg
+    // Exclude applications with no lead-status colour set — there's no real "Direct" channel here,
+    // just leads that haven't been colour-tagged yet, and showing them as a source is misleading.
+    .filter((s) => s._id)
+    .map((s) => ({
+      source: s._id,
+      label: COLOR_SOURCE_MAP[s._id] || s._id,
+      count: s.count,
+      revenue: sourceRevMap[s._id] || 0,
+    }));
 
   // Top agents by revenue
   const topAgentsAgg = await Payment.aggregate([
