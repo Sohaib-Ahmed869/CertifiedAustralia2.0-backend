@@ -157,7 +157,7 @@ const servePackage = async (req, res) => {
     .join('');
 
   const expiryNote = submission.expiresAt
-    ? `These links remain available until ${new Date(submission.expiresAt).toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' })}, or until a newer submission is sent.`
+    ? `These links remain available until ${new Date(submission.expiresAt).toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' })}, or until a newer submission is sent.`
     : 'These links close automatically when a newer submission is sent.';
 
   res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex, nofollow');

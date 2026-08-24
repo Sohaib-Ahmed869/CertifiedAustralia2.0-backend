@@ -641,7 +641,7 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
     // Compose the email body — NO payment or internal process info
     const emailBody = buildEmail(
       heading2(`New Application Submission`) +
-      paragraph(`Application ID: <strong>${application.applicationId}</strong> &nbsp;|&nbsp; Submitted: ${new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' })}`) +
+      paragraph(`Application ID: <strong>${application.applicationId}</strong> &nbsp;|&nbsp; Submitted: ${new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' })}`) +
       paragraph(`Dear RTO Assessment Team,`) +
       paragraph(`Please find below the complete application details for your assessment. All supporting documents are securely hosted and accessible via the links provided.`) +
       pdfNotice +
@@ -651,7 +651,7 @@ const sendRTOSubmission = async (applicationId, { rtoEmail, rtoName }) => {
         { label: 'Phone', value: student.phone || intakeForm?.phoneNumber || '—' },
         { label: 'USI', value: student.usi || intakeForm?.usi || '—' },
         { label: 'State', value: intakeForm?.state || '—' },
-        { label: 'Date of Birth', value: intakeForm?.dateOfBirth ? new Date(intakeForm.dateOfBirth).toLocaleDateString('en-AU') : '—' },
+        { label: 'Date of Birth', value: intakeForm?.dateOfBirth ? new Date(intakeForm.dateOfBirth).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' }) : '—' },
         ...(intakeForm?.employmentStatus ? [{ label: 'Employment', value: intakeForm.employmentStatus }] : []),
       ]) +
       detailsTable('Course Information', [

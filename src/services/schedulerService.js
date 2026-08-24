@@ -207,7 +207,7 @@ const processAutoDebit = async (plan, installment, amount) => {
         detailsTable('Payment Details', [
           { label: 'Installment', value: `#${installment.index + 1}` },
           { label: 'Amount', value: `$${amount.toFixed(2)} AUD` },
-          { label: 'Date', value: new Date().toLocaleDateString('en-AU') },
+          { label: 'Date', value: new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' }) },
         ]) +
         buttonGroup({ text: 'View Payments', url: `${baseUrl}/student/payments` }) +
         signOff();
@@ -317,7 +317,7 @@ const sendPaymentReminders = async () => {
         const outstanding = installment.amount - (installment.paidAmount || 0);
         if (outstanding <= 0) continue;
 
-        const dueDate = new Date(installment.dueDate).toLocaleDateString('en-AU');
+        const dueDate = new Date(installment.dueDate).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' });
 
         // In-portal notification
         await Notification.create({
@@ -598,7 +598,7 @@ const sendApplicationReminders = async () => {
           ? `${app.studentId.firstName || ''} ${app.studentId.lastName || ''}`.trim()
           : 'Student';
         const callTime = new Date(call.scheduledFor).toLocaleTimeString('en-AU', {
-          hour: '2-digit', minute: '2-digit',
+          hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Sydney',
         });
 
         await Notification.create({
@@ -782,7 +782,7 @@ const startScheduler = () => {
         const studentName = app.studentId
           ? `${app.studentId.firstName || ''} ${app.studentId.lastName || ''}`.trim()
           : 'Student';
-        const callTime = new Date(call.scheduledFor).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+        const callTime = new Date(call.scheduledFor).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Sydney' });
         await Notification.create({
           userId: agent._id,
           type: 'general',

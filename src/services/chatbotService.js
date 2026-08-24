@@ -308,7 +308,7 @@ const handlePayment = (ctx) => {
   } else if (ctx.hasPlan) {
     response += `\n**Payment plan:** ${ctx.planCompleted} of ${ctx.planInstallments} instalments completed (${ctx.planStatus}).`;
     if (ctx.planNextDue) {
-      const dueDate = new Date(ctx.planNextDue.dueDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+      const dueDate = new Date(ctx.planNextDue.dueDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' });
       response += `\nNext instalment: **$${ctx.planNextDue.amount.toLocaleString('en-AU')}** due on **${dueDate}**.`;
     }
   } else if (ctx.totalPaid === 0) {

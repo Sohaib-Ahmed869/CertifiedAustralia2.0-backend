@@ -16,7 +16,7 @@ const fmtDate = (d) => {
   const date = new Date(d);
   return isNaN(date.getTime())
     ? '—'
-    : date.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+    : date.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' });
 };
 
 /**

@@ -86,6 +86,7 @@ const formatDate = (date) => {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    timeZone: 'Australia/Sydney',
   });
 };
 
@@ -102,6 +103,7 @@ const formatDateTime = (date) => {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'Australia/Sydney',
   });
 };
 
@@ -1500,6 +1502,7 @@ const sendFollowUpScheduledEmail = async (
             day: 'numeric',
             month: 'long',
             year: 'numeric',
+            timeZone: 'Australia/Sydney',
           }),
         },
         {
@@ -1507,6 +1510,7 @@ const sendFollowUpScheduledEmail = async (
           value: dateObj.toLocaleTimeString('en-AU', {
             hour: '2-digit',
             minute: '2-digit',
+            timeZone: 'Australia/Sydney',
           }),
         },
         ...(notes ? [{ label: 'Notes', value: notes }] : []),

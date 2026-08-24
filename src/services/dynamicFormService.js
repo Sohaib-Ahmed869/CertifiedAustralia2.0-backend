@@ -380,7 +380,7 @@ const generateSubmissionPDF = (submission) => {
     doc.fontSize(14).font('Helvetica-Bold').fillColor('#000').text(formName);
     doc.fontSize(10).font('Helvetica').fillColor('#555');
     doc.text(`Student: ${studentName}`);
-    doc.text(`Submitted: ${submission.createdAt ? new Date(submission.createdAt).toLocaleDateString('en-AU') : 'N/A'}`);
+    doc.text(`Submitted: ${submission.createdAt ? new Date(submission.createdAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' }) : 'N/A'}`);
     doc.text(`Status: ${submission.status}`);
     doc.moveDown(1);
     doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#ddd');
