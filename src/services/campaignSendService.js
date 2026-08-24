@@ -4,6 +4,7 @@ const CampaignRecipient = require('../models/CampaignRecipient');
 const Application = require('../models/Application');
 const Mailbox = require('../models/Mailbox');
 const EmailTemplate = require('../models/EmailTemplate');
+const { interpolate } = require('./emailTemplateService');
 const { makeToken, trackingPixel } = require('./campaignTrackingService');
 const { emitCampaignProgress, emitCampaignCompleted } = require('../socket');
 
@@ -47,14 +48,15 @@ function audienceQuery(audienceConfig = {}) {
   return q;
 }
 
-/** Resolve the audience to a deduped list of { leadId, applicationId, email, name }. */
+/** Resolve the audience to a deduped list of { leadId, applicationId, email, name, ... }. */
 async function resolveAudience(campaign) {
   const query = audienceQuery(campaign.audienceConfig);
   const excludeIds = (campaign.audienceConfig?.excludeIds || []).map(String);
 
   const apps = await Application.find(query)
-    .select('_id studentId')
+    .select('_id applicationId studentId qualificationId')
     .populate('studentId', 'firstName lastName email status role')
+    .populate('qualificationId', 'name')
     .lean();
 
   const byStudent = new Map();
@@ -70,6 +72,10 @@ async function resolveAudience(campaign) {
       applicationId: app._id,
       email: s.email.trim().toLowerCase(),
       name: `${s.firstName || ''} ${s.lastName || ''}`.trim() || s.email,
+      firstName: s.firstName || '',
+      lastName: s.lastName || '',
+      qualification: app.qualificationId?.name || '',
+      applicationDisplayId: app.applicationId || '',
     });
   }
   return [...byStudent.values()];
@@ -90,6 +96,10 @@ async function buildRecipients(campaign) {
           applicationId: a.applicationId,
           email: a.email,
           recipientName: a.name,
+          firstName: a.firstName,
+          lastName: a.lastName,
+          qualification: a.qualification,
+          applicationDisplayId: a.applicationDisplayId,
           status: 'queued',
           trackingToken: token,
         },
@@ -169,12 +179,21 @@ async function reserveQuota(mailbox) {
    PERSONALISATION
    ═══════════════════════════════════════════════════════ */
 
+/** Build the {{key}} → value map for a recipient's merge tags. */
+function mergeVariables(recipient) {
+  return {
+    firstName: recipient.firstName || (recipient.recipientName || '').split(' ')[0] || '',
+    lastName: recipient.lastName || '',
+    name: recipient.recipientName || '',
+    email: recipient.email || '',
+    qualification: recipient.qualification || '',
+    qualificationName: recipient.qualification || '',
+    applicationId: recipient.applicationDisplayId || '',
+  };
+}
+
 function personalize(html, recipient) {
-  const first = (recipient.recipientName || '').split(' ')[0] || '';
-  return String(html || '')
-    .replace(/\{\{\s*firstName\s*\}\}/gi, first)
-    .replace(/\{\{\s*name\s*\}\}/gi, recipient.recipientName || '')
-    .replace(/\{\{\s*email\s*\}\}/gi, recipient.email || '');
+  return interpolate(String(html || ''), mergeVariables(recipient));
 }
 
 function injectPreheader(html, preview) {
@@ -292,7 +311,7 @@ async function processCampaign(campaignId) {
           const info = await transportFor(mailbox).sendMail({
             from: mailbox.displayName ? `"${mailbox.displayName}" <${mailbox.email}>` : mailbox.email,
             to: recipient.email,
-            subject: campaign.subject,
+            subject: personalize(campaign.subject, recipient),
             html,
             replyTo: campaign.replyTo || undefined,
           });

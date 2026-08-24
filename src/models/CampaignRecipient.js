@@ -30,6 +30,14 @@ const campaignRecipientSchema = new mongoose.Schema(
     recipientName: {
       type: String,
     },
+    // Merge-tag data, snapshotted at audience-resolve time (same "snapshot not
+    // populate" convention as PaymentBatch rows) — {{firstName}}/{{lastName}}/
+    // {{qualification}}/{{applicationId}} keep resolving correctly even if the
+    // student's application is later renamed, re-assigned, or archived.
+    firstName: { type: String },
+    lastName: { type: String },
+    qualification: { type: String },
+    applicationDisplayId: { type: String },
     status: {
       type: String,
       enum: ['queued', 'sending', 'sent', 'failed', 'bounced'],

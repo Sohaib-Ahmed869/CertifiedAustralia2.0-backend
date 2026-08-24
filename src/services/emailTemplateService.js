@@ -87,4 +87,5 @@ module.exports = {
   templates,
   sendTemplate,
   sendBulk,
+  interpolate,
 };

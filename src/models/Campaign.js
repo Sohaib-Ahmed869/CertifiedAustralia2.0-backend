@@ -31,7 +31,7 @@ const campaignSchema = new mongoose.Schema(
     audienceConfig: {
       target: {
         type: String,
-        enum: ['all', 'active', 'paid', 'intake', 'leads'],
+        enum: ['all', 'active', 'paid', 'intake', 'leads', 'specific'],
         default: 'all',
       },
       excludeIds: [
