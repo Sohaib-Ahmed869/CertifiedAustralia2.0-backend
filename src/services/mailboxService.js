@@ -30,16 +30,30 @@ const probeSmtp = async (mailbox) => {
     await transporter.verify();
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err.message || 'SMTP verification failed' };
+    // Only a REJECTED SIGN-IN proves the mailbox is bad. A DNS hiccup or a timeout
+    // says nothing about the credentials, and marking `unhealthy` on one of those
+    // would stop every campaign and sequence that uses this mailbox until someone
+    // noticed and re-verified.
+    const authFailed = err.code === 'EAUTH' || Number(err.responseCode) === 535 || Number(err.responseCode) === 534;
+    return { ok: false, authFailed, error: err.message || 'SMTP verification failed' };
   } finally {
     try { transporter.close(); } catch { /* already closed */ }
   }
 };
 
 const connect = async (data) => {
+  // Refuse to store a mailbox we could not sign in to — saving one unverified is
+  // exactly how a wrong app password used to sit there looking "healthy" while
+  // every send failed. Adding a mailbox is a rare interactive action, so asking
+  // for a retry on an unreachable server is the safer trade.
   const probe = await probeSmtp(data);
   if (!probe.ok) {
-    throw new AppError(`Could not sign in to ${data.email}: ${probe.error}`, 400);
+    throw new AppError(
+      probe.authFailed
+        ? `Could not sign in to ${data.email}: ${probe.error}. Check the app password.`
+        : `Could not reach the mail server for ${data.email}: ${probe.error}. Check the host and port, then try again.`,
+      400,
+    );
   }
 
   const mailbox = await Mailbox.create({
@@ -61,12 +75,23 @@ const verify = async (id) => {
   const probe = await probeSmtp(mailbox);
 
   mailbox.lastVerifiedAt = new Date();
-  mailbox.healthStatus = probe.ok ? 'healthy' : 'unhealthy';
-  if (probe.ok) mailbox.cooldownUntil = null; // a good handshake clears a throttle park
+  if (probe.ok) {
+    mailbox.healthStatus = 'healthy';
+    mailbox.cooldownUntil = null; // a good handshake clears a throttle park
+  } else if (probe.authFailed) {
+    mailbox.healthStatus = 'unhealthy'; // credentials really are wrong — stop sending
+  } // else: couldn't reach the server; leave the existing status alone.
 
   await mailbox.save();
 
-  if (!probe.ok) throw new AppError(`Could not sign in to ${mailbox.email}: ${probe.error}`, 400);
+  if (!probe.ok) {
+    throw new AppError(
+      probe.authFailed
+        ? `Could not sign in to ${mailbox.email}: ${probe.error}`
+        : `Could not reach the mail server for ${mailbox.email}: ${probe.error}. The mailbox was left as-is — try again.`,
+      400,
+    );
+  }
 
   return Mailbox.findById(mailbox._id)
     .populate('createdBy')

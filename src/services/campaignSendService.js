@@ -357,22 +357,34 @@ async function processCampaign(campaignId) {
         return;
       }
 
-      for (const recipient of batch) {
+      for (const row of batch) {
+        // CLAIM the row before spending quota on it. `find` then `save` leaves the
+        // whole SMTP round-trip as a race window, so two workers (a second server
+        // instance — crons and senders run in-process) could both pick the same
+        // queued recipient and mail the student twice. Same guard the sequence
+        // step claim uses; the loser just moves on.
+        const recipient = await CampaignRecipient.findOneAndUpdate(
+          { _id: row._id, status: 'queued' },
+          { $set: { status: 'sending' } },
+          { new: true },
+        );
+        if (!recipient) continue; // another worker got there first
+
         const ok = await reserveQuota(mailbox);
         if (!ok) {
+          // Put the claim back so the row isn't stranded in `sending`.
+          await CampaignRecipient.updateOne({ _id: recipient._id, status: 'sending' }, { $set: { status: 'queued' } });
           await pauseWithError(campaignId, `Mailbox ${mailbox.email} hit its sending quota. Resume later or add another mailbox.`);
           return;
         }
 
-        recipient.status = 'sending';
-        await recipient.save();
-
+        let info;
         try {
           let html = personalize(baseHtml, recipient);
           html = injectPreheader(html, campaign.previewText);
           html = injectPixel(html, recipient.trackingToken);
 
-          const info = await transportFor(mailbox).sendMail({
+          info = await transportFor(mailbox).sendMail({
             from: mailbox.displayName ? `"${mailbox.displayName}" <${mailbox.email}>` : mailbox.email,
             to: recipient.email,
             subject: personalize(campaign.subject, recipient),
@@ -381,13 +393,6 @@ async function processCampaign(campaignId) {
           });
 
           if (info.rejected && info.rejected.length) throw new Error('Address rejected by SMTP server');
-
-          recipient.status = 'sent';
-          recipient.sentAt = new Date();
-          recipient.messageId = info.messageId || null;
-          recipient.mailboxId = mailbox._id;
-          await recipient.save();
-          await Campaign.updateOne({ _id: campaignId }, { $inc: { 'stats.sent': 1, 'stats.queued': -1 } });
         } catch (err) {
           // A throttle refusal is NOT a bad address. Marking these `failed` would
           // permanently drop real students from the send (they are never retried),
@@ -408,6 +413,27 @@ async function processCampaign(campaignId) {
           recipient.failureCode = err && err.responseCode ? String(err.responseCode) : null;
           await recipient.save();
           await Campaign.updateOne({ _id: campaignId }, { $inc: { 'stats.failed': 1, 'stats.queued': -1 } });
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+
+        // ── Delivered. Bookkeeping gets its own guard so a write failure here is
+        // never re-read as a send failure (that is what produced a phantom
+        // "failed" for an email the student had actually received). ──
+        try {
+          recipient.status = 'sent';
+          recipient.sentAt = new Date();
+          recipient.messageId = info.messageId || null;
+          recipient.mailboxId = mailbox._id;
+          await recipient.save();
+          await Campaign.updateOne({ _id: campaignId }, { $inc: { 'stats.sent': 1, 'stats.queued': -1 } });
+        } catch (err) {
+          console.error(`[campaignSend] post-send bookkeeping failed (${recipient.email}):`, err.message);
+          // Never leave it claimed as `sending` — it went out.
+          await CampaignRecipient.updateOne(
+            { _id: recipient._id },
+            { $set: { status: 'sent', sentAt: new Date(), messageId: info.messageId || null, mailboxId: mailbox._id } },
+          ).catch(() => {});
         }
       }
 
