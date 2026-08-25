@@ -7,14 +7,32 @@ const AppError = require('../utils/AppError');
 const templates = buildCrud(EmailTemplate);
 
 /**
+ * The template builder's merge-variable picker inserts each token inside a green
+ * monospace "chip" span so it stands out WHILE EDITING. That styling is design-time
+ * decoration — but it is part of the saved HTML, so it used to survive substitution
+ * and the student received "Hi `Asad`" with the name set in a green code pill, and
+ * "your `CPC30220 Certificate III in Carpentry` through …" mid-sentence.
+ *
+ * Unwrapping the chip (before substituting) makes a resolved value inherit the
+ * surrounding paragraph's font, size and colour, which is what staff expect from a
+ * merge field. Matched on the SPAN CONTENTS, not the attributes, so templates saved
+ * by the old builder are fixed without anyone re-editing them. The trailing
+ * `&nbsp;` the picker adds goes too — it was the extra gap after each chip.
+ */
+const MERGE_CHIP_RE = /<span\b[^>]*>\s*(\{\{\s*\w+\s*\}\})\s*<\/span>(?:&nbsp;| )?/gi;
+
+const unwrapMergeChips = (html) => String(html || '').replace(MERGE_CHIP_RE, '$1');
+
+/**
  * Replace {{placeholder}} tokens in a string with the supplied variable values.
+ * Unknown tokens are left as-is so a typo is visible rather than silently blank.
  *
  * @param {string} text
  * @param {object} variables - key/value map, e.g. { firstName: 'Jane' }
  * @returns {string}
  */
 const interpolate = (text, variables = {}) =>
-  text.replace(/\{\{(\w+)\}\}/g, (match, key) =>
+  unwrapMergeChips(text).replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) =>
     variables[key] !== undefined ? String(variables[key]) : match,
   );
 
@@ -88,4 +106,5 @@ module.exports = {
   sendTemplate,
   sendBulk,
   interpolate,
+  unwrapMergeChips,
 };
