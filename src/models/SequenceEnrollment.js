@@ -11,11 +11,17 @@ const enrollmentStepSchema = new mongoose.Schema(
   {
     stepId: { type: String },
     order: { type: Number },
+    // `sending` is a CLAIM, not a state a human sees: a runner flips pending→sending
+    // atomically before dispatching so a second runner (a concurrent cron tick, a
+    // "Run due now" click, or a second server instance) can't send the same step
+    // twice. It is released back to `pending` if the send never happened, and
+    // `claimedAt` lets a later tick reap a claim orphaned by a crash mid-send.
     status: {
       type: String,
-      enum: ['pending', 'sent', 'opened', 'skipped', 'bounced', 'failed'],
+      enum: ['pending', 'sending', 'sent', 'opened', 'skipped', 'bounced', 'failed'],
       default: 'pending',
     },
+    claimedAt: { type: Date },
     sentAt: { type: Date },
     openedAt: { type: Date },
     messageId: { type: String },

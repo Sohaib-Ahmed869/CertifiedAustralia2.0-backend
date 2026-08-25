@@ -99,6 +99,16 @@ async function buildRecipients(campaign) {
    MAILBOX / TRANSPORT / QUOTA
    ═══════════════════════════════════════════════════════ */
 
+/**
+ * Cached, POOLED transport per mailbox.
+ *
+ * `pool: true` is load-bearing, not a tuning knob. Without it nodemailer opens a
+ * fresh connection and a fresh LOGIN for every single message, which is exactly
+ * what tripped Gmail's `454 Too many login attempts` on the legacy portal — its
+ * fix was one authenticated connection reused across the batch. `maxConnections: 1`
+ * keeps it to a single session, `rateLimit` paces messages within that session, and
+ * `maxMessages` recycles the connection before providers start refusing a long one.
+ */
 function transportFor(mailbox) {
   const key = String(mailbox._id);
   if (transports.has(key)) return transports.get(key);
@@ -107,9 +117,21 @@ function transportFor(mailbox) {
     port: mailbox.smtpPort || 587,
     secure: (mailbox.smtpPort || 587) === 465,
     auth: { user: mailbox.email, pass: mailbox.appPassword },
+    pool: true,
+    maxConnections: 1,
+    maxMessages: Number(process.env.SMTP_MAX_MESSAGES) || 50,
+    rateDelta: 1000,
+    rateLimit: Number(process.env.SMTP_RATE_LIMIT) || 3, // messages per second
   });
   transports.set(key, t);
   return t;
+}
+
+/** Drop a cached transport (after credential edits, or a poisoned pool). */
+function resetTransport(mailboxId) {
+  const key = String(mailboxId);
+  const t = transports.get(key);
+  if (t) { try { t.close(); } catch { /* already closed */ } transports.delete(key); }
 }
 
 /** An active, healthy mailbox not in cooldown — or null. */
@@ -151,6 +173,69 @@ async function reserveQuota(mailbox) {
   mailbox.usage = usage;
   await mailbox.save();
   return true;
+}
+
+/**
+ * A rate-limit / throttle refusal (Gmail's 454 "Too many login attempts", 421, 450)
+ * as opposed to a bad address. Shared by campaigns and sequences: both must treat
+ * these as "try again later", never as a recipient failure.
+ */
+function isThrottleError(err) {
+  const code = Number(err?.responseCode);
+  if (code === 454 || code === 421 || code === 450) return true;
+  return /too many|rate limit|throttl|try again later/i.test(err?.message || '');
+}
+
+/** Park a mailbox the provider is refusing, so the next pass doesn't hammer it. */
+async function coolDownMailbox(mailbox, err) {
+  const mins = Number(process.env.MAILBOX_THROTTLE_COOLDOWN_MIN) || 30;
+  const until = new Date(Date.now() + mins * 60 * 1000);
+  // `healthStatus` too, not just the timestamp — the Mailbox Config page only
+  // renders the cooldown banner for the 'cooldown' state, so setting one without
+  // the other leaves a parked mailbox looking perfectly healthy in the UI.
+  await Mailbox.updateOne(
+    { _id: mailbox._id },
+    { $set: { cooldownUntil: until, healthStatus: 'cooldown' } },
+  ).catch(() => {});
+  resetTransport(mailbox._id); // a refused pool is not worth reusing
+  console.warn(`[mailbox] ${mailbox.email} throttled (${err?.responseCode || err?.message}) → cooldown until ${until.toISOString()}`);
+}
+
+/**
+ * Return mailboxes whose cooldown has elapsed to 'healthy'. Called at the top of
+ * each send pass — otherwise a throttled mailbox keeps its 'cooldown' badge (and
+ * its scary banner) forever until somebody clicks Verify.
+ */
+async function expireCooldowns() {
+  await Mailbox.updateMany(
+    {
+      healthStatus: 'cooldown',
+      $or: [{ cooldownUntil: null }, { cooldownUntil: { $exists: false } }, { cooldownUntil: { $lte: new Date() } }],
+    },
+    { $set: { healthStatus: 'healthy' }, $unset: { cooldownUntil: '' } },
+  ).catch(() => {});
+}
+
+/**
+ * Hand back a reservation whose send never happened (transport refused, connection
+ * dropped). Without this a mailbox that is merely unreachable burns its hourly and
+ * daily budget on retries and locks itself out for the rest of the day.
+ */
+async function releaseQuota(mailbox) {
+  if (!mailbox?._id) return;
+  await Mailbox.updateOne(
+    { _id: mailbox._id },
+    { $inc: { 'usage.sentToday': -1, 'usage.sentThisHour': -1 } },
+  ).catch(() => {});
+  // Never let a race drive a counter negative.
+  await Mailbox.updateOne(
+    { _id: mailbox._id, 'usage.sentToday': { $lt: 0 } },
+    { $set: { 'usage.sentToday': 0 } },
+  ).catch(() => {});
+  await Mailbox.updateOne(
+    { _id: mailbox._id, 'usage.sentThisHour': { $lt: 0 } },
+    { $set: { 'usage.sentThisHour': 0 } },
+  ).catch(() => {});
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -255,6 +340,7 @@ async function processCampaign(campaignId) {
       }
     }
 
+    await expireCooldowns();
     const baseHtml = await resolveHtml(campaign);
 
     // eslint-disable-next-line no-constant-condition
@@ -303,6 +389,20 @@ async function processCampaign(campaignId) {
           await recipient.save();
           await Campaign.updateOne({ _id: campaignId }, { $inc: { 'stats.sent': 1, 'stats.queued': -1 } });
         } catch (err) {
+          // A throttle refusal is NOT a bad address. Marking these `failed` would
+          // permanently drop real students from the send (they are never retried),
+          // so requeue the recipient, park the mailbox, and pause for a human.
+          if (isThrottleError(err)) {
+            await releaseQuota(mailbox);
+            recipient.status = 'queued';
+            await recipient.save();
+            await coolDownMailbox(mailbox, err);
+            await pauseWithError(
+              campaignId,
+              `Mailbox ${mailbox.email} is being rate limited by its provider (${err.responseCode || 'throttled'}). Nobody was skipped — resume once it settles.`,
+            );
+            return;
+          }
           recipient.status = 'failed';
           recipient.failureReason = (err && err.message) ? err.message.slice(0, 300) : 'Send failed';
           recipient.failureCode = err && err.responseCode ? String(err.responseCode) : null;
@@ -357,7 +457,12 @@ module.exports = {
   // Shared send primitives — reused by the sequence (drip) scheduler so both
   // features draw from one mailbox pool / quota budget.
   transportFor,
+  resetTransport,
   pickMailbox,
   reserveQuota,
+  releaseQuota,
+  isThrottleError,
+  coolDownMailbox,
+  expireCooldowns,
   injectPreheader,
 };

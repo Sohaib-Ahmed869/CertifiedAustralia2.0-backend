@@ -49,6 +49,9 @@ const sequenceSchema = new mongoose.Schema(
       includeApplicationIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Application' }],
     },
     mailboxId: { type: mongoose.Schema.Types.ObjectId, ref: 'Mailbox' },
+    // When this sequence last filled a send batch. The tick keeps ≥ SEQ_BATCH_INTERVAL
+    // between batches so a large audience goes out paced, not as one SMTP burst.
+    lastBatchAt: { type: Date },
     steps: [sequenceStepSchema],
     status: {
       type: String,

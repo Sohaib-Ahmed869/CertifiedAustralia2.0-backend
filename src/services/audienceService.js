@@ -20,6 +20,7 @@ const ScreeningForm = require('../models/ScreeningForm');
 const IntakeForm = require('../models/IntakeForm');
 const { READY_STATUSES } = require('./adminStudentListService');
 const { normalizeApplicationIds } = require('../utils/applicationIds');
+const { aestDayStartUtc, aestDayEndUtc } = require('../utils/aestTime');
 
 // Non-terminal ("active") application statuses — same set the campaign path uses.
 const ACTIVE_STATUSES = [
@@ -96,23 +97,31 @@ async function buildFilter(audienceConfig = {}) {
   const sources = toArray(filters.sources);
   if (sources.length) filter['sourceAttribution.source'] = { $in: sources };
 
+  // Lead status = Application.color (Hot/Warm/Neutral/Cold/…), NOT `leadStatus`.
+  // 'cleared' is the UI's name for the empty colour, which toArray would otherwise
+  // strip along with genuine blanks — map it back to '' explicitly.
+  const leadStatuses = toArray(filters.leadStatuses).map((v) => (v === 'cleared' ? '' : v));
+  if (leadStatuses.length) {
+    filter.color = leadStatuses.includes('')
+      ? { $in: [...leadStatuses, null] } // legacy rows have no `color` at all
+      : { $in: leadStatuses };
+  }
+
   if (filters.callAttempts !== undefined && filters.callAttempts !== '' && filters.callAttempts !== null) {
     filter.contactAttempts = filters.callAttempts === '5+'
       ? { $gte: 5 }
       : Number(filters.callAttempts);
   }
 
-  // Date range on lead-creation date.
+  // Date range on lead-creation date. The picker hands us a Sydney civil date, so
+  // the boundaries must be Sydney day start/end — `setHours` would use the SERVER's
+  // timezone and silently shift the window 10 hours on a UTC host.
   if (filters.dateFrom || filters.dateTo) {
     const range = {};
-    if (filters.dateFrom) {
-      const d = new Date(filters.dateFrom);
-      if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); range.$gte = d; }
-    }
-    if (filters.dateTo) {
-      const d = new Date(filters.dateTo);
-      if (!isNaN(d.getTime())) { d.setHours(23, 59, 59, 999); range.$lte = d; }
-    }
+    const from = aestDayStartUtc(String(filters.dateFrom || '').slice(0, 10));
+    const to = aestDayEndUtc(String(filters.dateTo || '').slice(0, 10));
+    if (from) range.$gte = from;
+    if (to) range.$lte = to;
     if (Object.keys(range).length) filter.createdAt = range;
   }
 
