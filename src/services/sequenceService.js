@@ -69,22 +69,32 @@ async function emitProgress(sequenceId) {
  */
 async function applyStepOutcome(enrollmentId, stepDef, outcome, extra = {}) {
   const enr = await SequenceEnrollment.findById(enrollmentId);
-  if (!enr || enr.status !== 'active') return null;
+  if (!enr) return null;
   const step = enr.steps.find((s) => s.stepId === stepDef.stepId);
   if (!step) return null;
 
+  // The STEP outcome is always recorded, even if the enrollment went terminal
+  // mid-send (an open for an earlier step can land inside the SMTP window). This
+  // used to bail early, which left the step stuck on its `sending` claim forever —
+  // `handleSequenceOpen` only converts `pending` steps to `skipped`, so nothing
+  // else would ever resolve it.
   step.status = outcome; // 'sent' | 'failed' | 'bounced'
+  step.claimedAt = undefined;
   if (outcome === 'sent') { step.sentAt = new Date(); step.messageId = extra.messageId || null; }
   if (extra.failureReason) step.failureReason = String(extra.failureReason).slice(0, 300);
 
+  // Only an ACTIVE enrollment may transition; a terminal one must not be counted
+  // into a second bucket (that is what keeps opened/completed/bounced exclusive).
   let transition = null;
-  if (outcome === 'bounced') {
-    enr.status = 'bounced';
-    transition = 'bounced';
-  } else if (!enr.steps.some((s) => s.status === 'pending' || s.status === 'sending')) {
-    enr.status = 'completed';
-    enr.completedAt = new Date();
-    transition = 'completed';
+  if (enr.status === 'active') {
+    if (outcome === 'bounced') {
+      enr.status = 'bounced';
+      transition = 'bounced';
+    } else if (!enr.steps.some((s) => s.status === 'pending' || s.status === 'sending')) {
+      enr.status = 'completed';
+      enr.completedAt = new Date();
+      transition = 'completed';
+    }
   }
 
   enr.markModified('steps');
@@ -129,8 +139,10 @@ async function releaseStep(enrollmentId, stepId) {
  */
 async function reapStaleClaims() {
   const cutoff = new Date(Date.now() - STALE_CLAIM_MS);
+  // Deliberately NOT restricted to active enrollments — an orphaned claim on one
+  // that has since opened or bounced still needs clearing, and nothing else looks
+  // at those rows again.
   const stale = await SequenceEnrollment.find({
-    status: 'active',
     steps: { $elemMatch: { status: 'sending', claimedAt: { $lt: cutoff } } },
   }).select('_id steps').lean();
 
