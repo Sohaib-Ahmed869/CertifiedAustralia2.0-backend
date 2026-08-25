@@ -5,8 +5,9 @@ const Sequence = require('../models/Sequence');
 const SequenceEnrollment = require('../models/SequenceEnrollment');
 const SequenceRecipient = require('../models/SequenceRecipient');
 const EmailTemplate = require('../models/EmailTemplate');
-const audienceService = require('../services/sequenceAudienceService');
+const audienceService = require('../services/audienceService');
 const { makeToken } = require('../services/campaignTrackingService');
+const { normalizeApplicationIds } = require('../utils/applicationIds');
 const { emitSequenceProgress } = require('../socket');
 
 /* ═══════════════════════════════════════════════════════
@@ -26,6 +27,19 @@ function withDerivedStats(stats = {}) {
 function withDerived(seq) {
   if (!seq) return seq;
   return { ...seq, stats: withDerivedStats(seq.stats) };
+}
+
+const EMPTY_AUDIENCE = { target: 'all', filters: {}, excludeIds: [], includeApplicationIds: [] };
+
+/**
+ * `includeApplicationIds` is typed `[ObjectId]`, but the "Specific Recipients"
+ * picker sends display ids (APP95959) for rows that carry one. Resolve them here
+ * so the save doesn't die on a CastError before the audience is ever used.
+ */
+async function normalizeAudienceConfig(audienceConfig) {
+  const cfg = { ...EMPTY_AUDIENCE, ...(audienceConfig || {}) };
+  cfg.includeApplicationIds = await normalizeApplicationIds(cfg.includeApplicationIds);
+  return cfg;
 }
 
 async function generateSequenceId() {
@@ -172,6 +186,14 @@ const getSequenceById = asyncHandler(async (req, res) => {
   const sequence = await Sequence.findById(req.params.id)
     .populate('mailboxId', 'email displayName')
     .populate('createdBy', 'firstName lastName')
+    // Populated so the builder can rehydrate the "Specific Recipients" chips when a
+    // draft is reopened — with bare ids it rebuilt the audience as empty and the
+    // next save silently wiped the picked recipients.
+    .populate({
+      path: 'audienceConfig.includeApplicationIds',
+      select: 'applicationId studentId',
+      populate: { path: 'studentId', select: 'firstName lastName email' },
+    })
     .lean();
   if (!sequence) throw new AppError('Sequence not found', 404);
   res.status(200).json({ item: withDerived(sequence) });
@@ -222,7 +244,7 @@ const createSequence = asyncHandler(async (req, res) => {
     sequenceId,
     name,
     description: req.body.description || '',
-    audienceConfig: req.body.audienceConfig || { target: 'all', filters: {}, excludeIds: [], includeApplicationIds: [] },
+    audienceConfig: await normalizeAudienceConfig(req.body.audienceConfig),
     mailboxId: req.body.mailboxId || null,
     steps,
     status: 'draft',
@@ -241,7 +263,7 @@ const updateSequence = asyncHandler(async (req, res) => {
   const { name, description, audienceConfig, mailboxId } = req.body;
   if (name !== undefined) sequence.name = name;
   if (description !== undefined) sequence.description = description;
-  if (audienceConfig !== undefined) sequence.audienceConfig = audienceConfig;
+  if (audienceConfig !== undefined) sequence.audienceConfig = await normalizeAudienceConfig(audienceConfig);
   if (mailboxId !== undefined) sequence.mailboxId = mailboxId || null;
 
   if (req.body.steps !== undefined) {
@@ -278,7 +300,7 @@ const duplicateSequence = asyncHandler(async (req, res) => {
     sequenceId,
     name: `${source.name} (copy)`,
     description: source.description || '',
-    audienceConfig: source.audienceConfig || { target: 'all', filters: {}, excludeIds: [], includeApplicationIds: [] },
+    audienceConfig: await normalizeAudienceConfig(source.audienceConfig),
     mailboxId: source.mailboxId || null,
     steps,
     status: 'draft',

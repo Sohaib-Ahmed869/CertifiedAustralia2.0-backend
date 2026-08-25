@@ -1,18 +1,25 @@
 /**
- * Audience resolution for email sequences.
+ * Audience resolution for email sequences AND campaigns — ONE seam, so the two
+ * builders (which render the same audience UI) can never drift on what a preset
+ * or a filter means. `buildFilter` is the single translator from an
+ * `audienceConfig` to a Mongo filter on Application; `campaignSendService`
+ * delegates to it rather than keeping its own preset-only copy.
  *
- * Builds a Mongo filter on Application from an `audienceConfig` and returns the
- * deduped recipient list (one per student). Mirrors the campaign audience seam
- * but adds the advanced-filter shape used by the sequence builder
- * (industries[]/qualifications[]/statuses[]/sources[]/states[]/callAttempts/
- * date range/readyForAssessmentOnly/archived). Reuses READY_STATUSES from the
- * admin student list service to keep "ready for assessment" consistent.
+ * Supports the presets (all/active/paid/intake/leads/specific) plus the advanced
+ * filter shape both wizards send (industries[]/qualifications[]/statuses[]/
+ * sources[]/states[]/callAttempts/date range/readyForAssessmentOnly/archived).
+ * Reuses READY_STATUSES from the admin student list service to keep "ready for
+ * assessment" consistent.
+ *
+ * `resolveAudience`/`countAudience` here return the SEQUENCE recipient shape;
+ * campaigns build their own rows (different merge-tag keys) off the same filter.
  */
 const mongoose = require('mongoose');
 const Application = require('../models/Application');
 const ScreeningForm = require('../models/ScreeningForm');
 const IntakeForm = require('../models/IntakeForm');
 const { READY_STATUSES } = require('./adminStudentListService');
+const { normalizeApplicationIds } = require('../utils/applicationIds');
 
 // Non-terminal ("active") application statuses — same set the campaign path uses.
 const ACTIVE_STATUSES = [
@@ -46,9 +53,10 @@ async function buildFilter(audienceConfig = {}) {
   const target = audienceConfig.target || 'all';
   const filters = audienceConfig.filters || {};
 
-  // "Specific applications" — exact ids, ignore other constraints.
+  // "Specific applications" — exact ids, ignore other constraints. The picker can
+  // hand us display ids (APP95959) as well as _ids, so normalise before querying.
   if (target === 'specific') {
-    const ids = toArray(audienceConfig.includeApplicationIds).map(oid);
+    const ids = await normalizeApplicationIds(toArray(audienceConfig.includeApplicationIds));
     return { _id: { $in: ids } };
   }
 

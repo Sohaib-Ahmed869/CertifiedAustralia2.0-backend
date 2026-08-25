@@ -3,6 +3,7 @@ const createCrudController = require('./crudController');
 const service = require('../services/campaignService');
 const sendService = require('../services/campaignSendService');
 const bounceService = require('../services/campaignBounceService');
+const audienceService = require('../services/audienceService');
 const CampaignRecipient = require('../models/CampaignRecipient');
 
 const campaigns = createCrudController(service.campaigns);
@@ -16,6 +17,16 @@ module.exports = {
       createdBy: req.user._id,
     });
     res.status(201).json({ item: result });
+  }),
+
+  // Preview count for the wizard's audience step. Runs the SAME resolver the send
+  // uses (deduped one-per-student), so the estimate can't disagree with the send —
+  // it previously counted applications off the generic list endpoint and over-counted
+  // any student with more than one application.
+  getAudienceCount: asyncHandler(async (req, res) => {
+    const audienceConfig = req.body.audienceConfig || req.body || {};
+    const result = await audienceService.countAudience(audienceConfig);
+    res.status(200).json(result);
   }),
 
   send: asyncHandler(async (req, res) => {

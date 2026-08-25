@@ -391,4 +391,7 @@ async function adminExport(query = {}) {
   });
 }
 
-module.exports = { adminList, adminExport, resolveWindow, buildBaseFilter, INCOME_TYPES };
+// READY_STATUSES is exported because audienceService's "Ready for Assessment"
+// filter reads it — without the export it destructured to undefined and the
+// filter quietly matched nobody.
+module.exports = { adminList, adminExport, resolveWindow, buildBaseFilter, INCOME_TYPES, READY_STATUSES };

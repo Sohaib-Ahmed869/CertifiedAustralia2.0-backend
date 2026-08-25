@@ -1,6 +1,7 @@
 const Campaign = require('../models/Campaign');
 const AppError = require('../utils/AppError');
 const buildCrud = require('./commonCrud');
+const { normalizeApplicationIds } = require('../utils/applicationIds');
 
 const campaignCrud = buildCrud(Campaign, {
   populate: ['templateId', 'createdBy'],
@@ -16,11 +17,26 @@ const generateCampaignId = async () => {
   throw new AppError('Unable to generate campaign ID', 500);
 };
 
+/**
+ * Normalise an incoming audienceConfig:
+ *  - display ids (APP95959) from the recipient picker → Application _ids
+ *  - a top-level `filters` (the shape the campaign wizard sent before filters were
+ *    stored) folded into audienceConfig.filters, where buildFilter reads them.
+ */
+const normalizeAudienceConfig = async (data) => {
+  const cfg = { ...(data.audienceConfig || {}) };
+  cfg.includeApplicationIds = await normalizeApplicationIds(cfg.includeApplicationIds);
+  if (data.filters && !cfg.filters) cfg.filters = data.filters;
+  return cfg;
+};
+
 const createCampaign = async (data) => {
   const campaignId = await generateCampaignId();
+  const { filters, ...rest } = data; // `filters` lives inside audienceConfig
 
   const campaign = await Campaign.create({
-    ...data,
+    ...rest,
+    audienceConfig: await normalizeAudienceConfig(data),
     campaignId,
     status: 'draft',
   });

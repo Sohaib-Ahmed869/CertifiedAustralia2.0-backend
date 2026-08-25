@@ -34,10 +34,24 @@ const campaignSchema = new mongoose.Schema(
         enum: ['all', 'active', 'paid', 'intake', 'leads', 'specific'],
         default: 'all',
       },
+      // Advanced filters, same shape the sequence builder sends and the same
+      // audienceService.buildFilter reads (industries[]/qualifications[]/statuses[]/
+      // sources[]/states[]/callAttempts/dateFrom/dateTo/readyForAssessmentOnly/
+      // includeArchived/archivedOnly). Mixed, so the shape can grow in one place.
+      filters: { type: mongoose.Schema.Types.Mixed, default: {} },
       excludeIds: [
         {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'User',
+        },
+      ],
+      // Target 'specific' reads these. Declared explicitly because a strict schema
+      // silently DROPS an undeclared key — without it a "Specific Recipients"
+      // campaign saved an empty list and resolved to zero recipients.
+      includeApplicationIds: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Application',
         },
       ],
     },

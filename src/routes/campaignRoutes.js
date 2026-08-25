@@ -7,9 +7,10 @@ const router = express.Router();
 router.use(protect);
 router.use(authorize('Admin', 'CEOReportingManager'));
 
-// Stats + bounce check BEFORE /:id to avoid Express param collision
+// Stats + bounce check + audience preview BEFORE /:id to avoid Express param collision
 router.get('/stats', controller.getStats);
 router.post('/check-bounces', controller.checkBounces);
+router.post('/audience-count', controller.getAudienceCount);
 
 router.route('/')
   .get(controller.list)

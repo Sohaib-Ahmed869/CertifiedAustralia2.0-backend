@@ -5,18 +5,12 @@ const Application = require('../models/Application');
 const Mailbox = require('../models/Mailbox');
 const EmailTemplate = require('../models/EmailTemplate');
 const { interpolate } = require('./emailTemplateService');
+const { buildFilter } = require('./audienceService');
 const { makeToken, trackingPixel } = require('./campaignTrackingService');
 const { emitCampaignProgress, emitCampaignCompleted } = require('../socket');
 
 const BATCH_SIZE = 25;
 const BATCH_DELAY_MS = 1500;
-
-// Statuses that count as an "open"/active application (not completed/archived).
-const ACTIVE_STATUSES = [
-  'New', 'WaitingForPayment', 'StudentIntakeForm', 'UploadDocuments',
-  'DocumentsUploaded', 'StudentCompleted', 'SentToRTO', 'WaitingForVerification',
-  'ReadyForRTOPayment', 'RTOInvoiceUploaded',
-];
 
 // One worker per campaign at a time (guards against double-processing / re-entrancy).
 const processing = new Set();
@@ -29,28 +23,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
    AUDIENCE RESOLUTION (application-based → unique students)
    ═══════════════════════════════════════════════════════ */
 
-function audienceQuery(audienceConfig = {}) {
-  const target = audienceConfig.target || 'all';
-  const q = { status: { $ne: 'Archived' } };
-  switch (target) {
-    case 'active':   q.status = { $in: ACTIVE_STATUSES }; break;
-    case 'paid':     q.paymentCompleted = true; break;
-    case 'intake':   q.intakeFormSubmitted = true; break;
-    case 'leads':    q.status = 'New'; break;
-    case 'specific': {
-      const ids = audienceConfig.includeApplicationIds || [];
-      q._id = { $in: ids };
-      break;
-    }
-    case 'all':
-    default: break;
-  }
-  return q;
-}
-
 /** Resolve the audience to a deduped list of { leadId, applicationId, email, name, ... }. */
 async function resolveAudience(campaign) {
-  const query = audienceQuery(campaign.audienceConfig);
+  // Presets AND advanced filters both come from audienceService.buildFilter, the
+  // same translator the sequence builder uses — a campaign and a sequence with the
+  // same audience must never resolve to different people.
+  const query = await buildFilter(campaign.audienceConfig);
   const excludeIds = (campaign.audienceConfig?.excludeIds || []).map(String);
 
   const apps = await Application.find(query)
