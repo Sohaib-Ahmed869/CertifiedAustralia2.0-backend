@@ -18,9 +18,27 @@ const AppError = require('../utils/AppError');
 // Xero API base URLs
 // ---------------------------------------------------------------------------
 
+// Token exchange and revocation live on identity.xero.com, but the browser
+// consent endpoint does NOT — it is login.xero.com/identity/connect/authorize.
+// Using the identity host for authorize fails silently: a user with a live Xero
+// session is just redirected to their org homepage, with no error and no
+// consent screen, which reads like the Connect button doing nothing.
 const XERO_IDENTITY_URL = 'https://identity.xero.com';
+const XERO_LOGIN_URL = 'https://login.xero.com';
 const XERO_API_URL = 'https://api.xero.com/api.xro/2.0';
 const XERO_CONNECTIONS_URL = 'https://api.xero.com/connections';
+
+/**
+ * Currency stamped on every invoice, credit note and bill.
+ *
+ * The portal is AUD-only, so AUD is the default and production should never set
+ * this. It exists because Xero rejects any CurrencyCode the connected org has
+ * not enabled, and multi-currency is a paid add-on — so a non-AUD test org (a
+ * Xero demo company is USD/GBP depending on region) fails EVERY push with a
+ * validation error that looks nothing like a currency problem. Set XERO_CURRENCY
+ * to the test org's base currency to exercise the sync against it.
+ */
+const XERO_CURRENCY = (process.env.XERO_CURRENCY || 'AUD').trim().toUpperCase();
 
 // Payment types that generate ACCREC invoices (student pays CA)
 const ACCREC_TYPES = ['upfront', 'plan', 'manualMarkPaid'];
@@ -217,10 +235,24 @@ const getAuthUrl = (userId = null) => {
     throw new AppError('XERO_CLIENT_ID not configured', 500);
   }
 
+  // Granular scopes, NOT the legacy broad `accounting.transactions` — Xero apps
+  // created after 2 March 2026 are only issued granular ones, and asking for a
+  // scope the app does not hold fails the whole request with "Requested wrong
+  // apps scopes" rather than just dropping that scope.
+  //
+  // This list is exactly what the service calls, and nothing more:
+  //   accounting.invoices      PUT /Invoices (ACCREC + ACCPAY), PUT /CreditNotes,
+  //                            GET /Invoices for reconcile
+  //   accounting.contacts      invoice payloads embed a Contact, which auto-creates it
+  //   accounting.settings.read the chart of accounts (codes 200 / 310)
+  //
+  // Deliberately NOT requested: `accounting.payments` (the /Payments endpoint is
+  // never called — the `Payment` references in this file are the Mongoose model)
+  // and `app.connections` (/connections for tenant discovery works on a plain
+  // valid token). Both were tried and both make Xero reject the authorize call.
   const scopes = [
     'openid', 'profile', 'email', 'offline_access',
-    'accounting.transactions', 'accounting.contacts',
-    'accounting.settings.read',
+    'accounting.invoices', 'accounting.contacts', 'accounting.settings.read',
   ].join(' ');
 
   const params = new URLSearchParams({
@@ -231,7 +263,7 @@ const getAuthUrl = (userId = null) => {
     state: encodeState(userId),
   });
 
-  return `${XERO_IDENTITY_URL}/connect/authorize?${params.toString()}`;
+  return `${XERO_LOGIN_URL}/identity/connect/authorize?${params.toString()}`;
 };
 
 /** Pack the initiating user + a nonce into the OAuth `state` parameter. */
@@ -369,9 +401,21 @@ const syncInvoice = async (paymentId) => {
     accountCode = '200'; // Sales / Revenue
     description = `${qualName} — ${payment.type === 'plan' ? 'Installment payment' : 'Payment'} for ${appId}`;
   } else if (ACCPAY_TYPES.includes(payment.type)) {
-    invoiceType = 'ACCPAY';
-    accountCode = '310'; // Cost of Sales / RTO Fees
-    description = `RTO fee for ${appId} — ${qualName}`;
+    // NOT synced here, deliberately. This function builds its Contact from
+    // `payment.studentId`, which is right for ACCREC (the student owes CA) and
+    // wrong for a bill CA owes an RTO — and a Payment carries no rtoId, so a
+    // correct contact cannot be resolved from this path at all.
+    //
+    // RTO payables reach Xero through Finance → Batch Payments, which calls
+    // `syncRTOBill` with the row's RTO. Without this guard `syncAll` (and the
+    // nightly 10 PM cron behind it) silently raised ACCPAY bills against the
+    // STUDENT, overstating what each student was owed and understating the RTO
+    // liability — and stamped the Payment as synced, so the correct bill could
+    // then never be raised for it.
+    return {
+      skipped: true,
+      reason: 'RTO payables sync via Batch Payments (Push to Xero), not the general payment sync',
+    };
   } else if (CREDIT_NOTE_TYPES.includes(payment.type)) {
     // Handle refunds as credit notes
     return await syncCreditNote(payment, appId, qualName);
@@ -393,7 +437,7 @@ const syncInvoice = async (paymentId) => {
     DueDate: formatXeroDate(payment.createdAt),
     Reference: appId,
     Status: 'AUTHORISED',
-    CurrencyCode: 'AUD',
+    CurrencyCode: XERO_CURRENCY,
     LineAmountTypes: 'Inclusive',
   };
 
@@ -438,7 +482,7 @@ const syncCreditNote = async (payment, appId, qualName) => {
     Date: formatXeroDate(payment.createdAt),
     Reference: `REFUND-${appId}`,
     Status: 'AUTHORISED',
-    CurrencyCode: 'AUD',
+    CurrencyCode: XERO_CURRENCY,
     LineAmountTypes: 'Inclusive',
   };
 
@@ -678,7 +722,7 @@ const syncRTOBill = async ({
     DueDate: formatXeroDate(dueDate || date),
     Reference: reference || undefined,
     Status: 'AUTHORISED',
-    CurrencyCode: 'AUD',
+    CurrencyCode: XERO_CURRENCY,
     LineAmountTypes: 'Inclusive',
   };
   if (invoiceNumber) billData.InvoiceNumber = invoiceNumber;

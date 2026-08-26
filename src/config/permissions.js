@@ -55,6 +55,7 @@ const PERMISSION_KEYS = [
   'tab_calendar',
   'tab_rto_invoices',
   'tab_batch_payments',
+  'tab_finance_guide',
   'tab_settings_password',
   'tab_settings_calendar',
   'tab_settings_xero',
