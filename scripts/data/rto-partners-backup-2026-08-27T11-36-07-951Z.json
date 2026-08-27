@@ -1,0 +1,517 @@
+{
+  "createdAt": "2026-08-27T11:36:07.952Z",
+  "terms": [
+    "oceania",
+    "frontier",
+    "educube"
+  ],
+  "collection": "qualifications",
+  "field": "rtoCosts",
+  "note": "Original rtoCosts for every qualification touched by remove-rto-partners.js.",
+  "items": [
+    {
+      "_id": "6a6d197a7de4252b843dce2d",
+      "name": "AUR30620 Certificate III in Light Vehicle Mechanical Technology",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197a7de4252b843dce2f",
+      "name": "AUR31120 Certificate III in Heavy Commercial Vehicle Mechanical Technology",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 2050
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197a7de4252b843dce37",
+      "name": "AUR40226 Certificate IV in Automotive Mechanical Diagnosis",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1500
+        },
+        {
+          "rtoName": "Allskills",
+          "rtoCost": 2500
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce4f",
+      "name": "SHB30416 Certificate III in Hairdressing",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        },
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1000
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1000
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce55",
+      "name": "SHB40216 Certificate IV in Hairdressing",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1700
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197d7de4252b843dce57",
+      "name": "SHB50121 Diploma of Beauty Therapy",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        },
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1250
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1300
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197d7de4252b843dce61",
+      "name": "AHC30921 Certificate III in Landscape Construction",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1550
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197e7de4252b843dce6d",
+      "name": "CPC30220 Certificate III in Carpentry",
+      "rtoCosts": [
+        {
+          "rtoName": "enrolment@frontier.edu.au",
+          "rtoCost": 675
+        },
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 750
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 800
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197e7de4252b843dce6f",
+      "name": "CPC30320 Certificate III in Concreting",
+      "rtoCosts": [
+        {
+          "rtoName": "enrolment@frontier.edu.au",
+          "rtoCost": 675
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197e7de4252b843dce73",
+      "name": "CPC30620 Certificate III in Painting and Decorating",
+      "rtoCosts": [
+        {
+          "rtoName": "enrolment@frontier.edu.au",
+          "rtoCost": 675
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 800
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197f7de4252b843dce7b",
+      "name": "CPC31220 Certificate III in Wall and Ceiling Lining",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1400
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197f7de4252b843dce7d",
+      "name": "CPC31320 Certificate III in Wall and Floor Tiling",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 800
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197f7de4252b843dce7f",
+      "name": "CPC31420 Certificate III in Construction Waterproofing",
+      "rtoCosts": [
+        {
+          "rtoName": "enrolment@frontier.edu.au",
+          "rtoCost": 675
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19807de4252b843dce85",
+      "name": "CPC32420 Certificate III in Plumbing",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19807de4252b843dce87",
+      "name": "CPC32620 Certificate III in Roof Plumbing",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1400
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19807de4252b843dce89",
+      "name": "CPC33020 Certificate III in Bricklaying/Blocklaying",
+      "rtoCosts": [
+        {
+          "rtoName": "enrolment@frontier.edu.au",
+          "rtoCost": 675
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19807de4252b843dce8b",
+      "name": "CPC40120 Certificate IV in Building and Construction (Building)",
+      "rtoCosts": [
+        {
+          "rtoName": "enrolment@frontier.edu.au",
+          "rtoCost": 675
+        },
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 750
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 800
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19817de4252b843dce9f",
+      "name": "MEM31925 Certificate III in Engineering - Fabrication Trade",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19827de4252b843dcea5",
+      "name": "MSF30422 Certificate III in Glass and Glazing",
+      "rtoCosts": [
+        {
+          "rtoName": "enrolment@frontier.edu.au",
+          "rtoCost": 675
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19837de4252b843dceb9",
+      "name": "BSB40820 Certificate IV in Marketing and Communication",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19837de4252b843dcebd",
+      "name": "BSB50120 Diploma of Business",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19847de4252b843dcec9",
+      "name": "BSB60120 Advanced Diploma of Business",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19857de4252b843dced5",
+      "name": "BSB80320 Graduate Diploma of Strategic Leadership",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1500
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1000
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19857de4252b843dcedb",
+      "name": "CHC30121 Certificate III in Early Childhood Education and Care",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 750
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcedf",
+      "name": "CHC33021 Certificate III in Individual Support",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcee5",
+      "name": "CHC43015 Certificate IV in Ageing Support",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcee7",
+      "name": "CHC43121 Certificate IV in Disability Support",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcee9",
+      "name": "CHC43315 Certificate IV in Mental Health",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1000
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1400
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dceeb",
+      "name": "CHC50121 Diploma of Early Childhood Education and Care",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 751
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19877de4252b843dcef1",
+      "name": "CHC52021 Diploma of Community Services",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19887de4252b843dcf01",
+      "name": "FNS40222 Certificate IV in Accounting and Bookkeeping",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19887de4252b843dcf03",
+      "name": "FNS40821 Certificate IV in Finance and Mortgage Broking",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1250
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19887de4252b843dcf07",
+      "name": "FNS50322 Diploma of Finance and Mortgage Broking Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1750
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1400
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198a7de4252b843dcf21",
+      "name": "SIT30821 Certificate III in Commercial Cookery",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 550
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198a7de4252b843dcf27",
+      "name": "SIT40521 Certificate IV in Kitchen Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 550
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198b7de4252b843dcf2f",
+      "name": "SIT50422 Diploma of Hospitality Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 550
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198b7de4252b843dcf31",
+      "name": "SIT60322 Advanced Diploma of Hospitality Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 750
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198b7de4252b843dcf37",
+      "name": "ICT50220 Diploma of Information Technology",
+      "rtoCosts": [
+        {
+          "rtoName": "enrolment@frontier.edu.au",
+          "rtoCost": 675
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198c7de4252b843dcf45",
+      "name": "CPP41419 Certificate IV in Real Estate Practice",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1000
+        },
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1100
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198c7de4252b843dcf47",
+      "name": "CPP51122 Diploma of Property (Agency Management)",
+      "rtoCosts": [
+        {
+          "rtoName": "info@oceaniaservices.com",
+          "rtoCost": 1400
+        }
+      ]
+    }
+  ]
+}

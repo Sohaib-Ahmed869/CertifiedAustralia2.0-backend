@@ -17,12 +17,29 @@ const qualificationSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    description: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    // RTO partners for this qualification, one entry per partner. `rtoName` is the display
+    // name and `rtoEmail` the submission contact — both are needed when an application is
+    // packaged and emailed to the partner. They were a SINGLE field until Aug 2026, which
+    // held an email for legacy-imported rows (the pipe-separated `rto` column from the old
+    // catalog) and a plain name for anything added since; `scripts/split-rto-partner-contacts.js`
+    // separated them. Managed from Admin → Industries → Edit Qualification.
     rtoCosts: [
       {
         rtoName: {
           type: String,
           required: true,
           trim: true,
+        },
+        rtoEmail: {
+          type: String,
+          trim: true,
+          lowercase: true,
+          default: '',
         },
         rtoCost: {
           type: Number,

@@ -1,0 +1,516 @@
+{
+  "createdAt": "2026-08-27T11:43:56.741Z",
+  "collection": "qualifications",
+  "field": "rtoCosts",
+  "note": "Original rtoCosts before split-rto-partner-contacts.js.",
+  "items": [
+    {
+      "_id": "6a6d19797de4252b843dce2b",
+      "name": "AUR30320 Certificate III in Automotive Electrical Technology",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1500
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197a7de4252b843dce31",
+      "name": "AUR32120 Certificate III in Automotive Body Repair Technology",
+      "rtoCosts": [
+        {
+          "rtoName": "Allskills",
+          "rtoCost": 2500
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197a7de4252b843dce37",
+      "name": "AUR40226 Certificate IV in Automotive Mechanical Diagnosis",
+      "rtoCosts": [
+        {
+          "rtoName": "Allskills",
+          "rtoCost": 2500
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197b7de4252b843dce45",
+      "name": "SHB20121 Certificate II in Retail Cosmetics",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197b7de4252b843dce47",
+      "name": "SHB20216 Certificate II in Salon Assistant",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce49",
+      "name": "SHB30121 Certificate III in Beauty Services",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce4b",
+      "name": "SHB30221 Certificate III in Makeup",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce4d",
+      "name": "SHB30321 Certificate III in Nail Technology",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce4f",
+      "name": "SHB30416 Certificate III in Hairdressing",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        },
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1000
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce51",
+      "name": "SHB30516 Certificate III in Barbering",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce53",
+      "name": "SHB40121 Certificate IV in Beauty Therapy",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197c7de4252b843dce55",
+      "name": "SHB40216 Certificate IV in Hairdressing",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197d7de4252b843dce57",
+      "name": "SHB50121 Diploma of Beauty Therapy",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        },
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1250
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197d7de4252b843dce59",
+      "name": "SHB50216 Diploma of Salon Management",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197e7de4252b843dce67",
+      "name": "BSB50820 Diploma of Project Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 550
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197e7de4252b843dce6d",
+      "name": "CPC30220 Certificate III in Carpentry",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 750
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197f7de4252b843dce83",
+      "name": "CPC32320 Certificate III in Stonemasonry (Monumental/Installation)",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1800
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19807de4252b843dce8b",
+      "name": "CPC40120 Certificate IV in Building and Construction (Building)",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 750
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19827de4252b843dcead",
+      "name": "UEE32220 Certificate III in Air Conditioning and Refrigeration",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@allskillscollege.com.au",
+          "rtoCost": 6000
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19837de4252b843dceb1",
+      "name": "BSB30120 Certificate III in Business",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 500
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19837de4252b843dceb3",
+      "name": "BSB40120 Certificate IV in Business",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 500
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19837de4252b843dcebb",
+      "name": "BSB41419 Certificate IV in Work Health and Safety",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19847de4252b843dcec1",
+      "name": "BSB50420 Diploma of Leadership and Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 550
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19847de4252b843dcecb",
+      "name": "BSB60420 Advanced Diploma of Leadership and Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 600
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19857de4252b843dced1",
+      "name": "BSB80120 Graduate Diploma of Management (Learning)",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 800
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19857de4252b843dced5",
+      "name": "BSB80320 Graduate Diploma of Strategic Leadership",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1500
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19857de4252b843dcedb",
+      "name": "CHC30121 Certificate III in Early Childhood Education and Care",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 750
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcedf",
+      "name": "CHC33021 Certificate III in Individual Support",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcee3",
+      "name": "CHC42021 Certificate IV in Community Services",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcee5",
+      "name": "CHC43015 Certificate IV in Ageing Support",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcee7",
+      "name": "CHC43121 Certificate IV in Disability Support",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dcee9",
+      "name": "CHC43315 Certificate IV in Mental Health",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1000
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19867de4252b843dceeb",
+      "name": "CHC50121 Diploma of Early Childhood Education and Care",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 751
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19877de4252b843dcef1",
+      "name": "CHC52021 Diploma of Community Services",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 350
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19877de4252b843dcef3",
+      "name": "CHC53315 Diploma of Mental Health",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1500
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19877de4252b843dcefb",
+      "name": "UEE30820 Certificate III in Electrotechnology Electrician",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@allskillscollege.com.au",
+          "rtoCost": 10000
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19887de4252b843dcf03",
+      "name": "FNS40821 Certificate IV in Finance and Mortgage Broking",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1250
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19887de4252b843dcf07",
+      "name": "FNS50322 Diploma of Finance and Mortgage Broking Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1750
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19897de4252b843dcf11",
+      "name": "SIS30321 Certificate III in Fitness",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1300
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19897de4252b843dcf15",
+      "name": "SIS40221 Certificate IV in Fitness",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1300
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198a7de4252b843dcf1b",
+      "name": "FBP30521 Certificate III in Baking",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1450
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198a7de4252b843dcf21",
+      "name": "SIT30821 Certificate III in Commercial Cookery",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 550
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198a7de4252b843dcf23",
+      "name": "SIT31021 Certificate III in Patisserie",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1750
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198a7de4252b843dcf27",
+      "name": "SIT40521 Certificate IV in Kitchen Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 550
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198a7de4252b843dcf29",
+      "name": "SIT40721 Certificate IV in Patisserie",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1750
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198b7de4252b843dcf2f",
+      "name": "SIT50422 Diploma of Hospitality Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 550
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198b7de4252b843dcf31",
+      "name": "SIT60322 Advanced Diploma of Hospitality Management",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 750
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198c7de4252b843dcf3d",
+      "name": "CUA41220 Certificate IV in Screen and Media",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198c7de4252b843dcf3f",
+      "name": "CUA51020 Diploma of Screen and Media",
+      "rtoCosts": [
+        {
+          "rtoName": "admin@colourcosmetica.com",
+          "rtoCost": 1200
+        }
+      ]
+    },
+    {
+      "_id": "6a6d198c7de4252b843dcf45",
+      "name": "CPP41419 Certificate IV in Real Estate Practice",
+      "rtoCosts": [
+        {
+          "rtoName": "info@lumieresolutions.com.au",
+          "rtoCost": 1000
+        }
+      ]
+    }
+  ]
+}
