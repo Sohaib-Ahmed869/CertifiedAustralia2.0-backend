@@ -24,6 +24,7 @@ const callScorecardRoutes = require('./callScorecardRoutes');
 const callBurstRoutes = require('./callBurstRoutes');
 const twilioVoiceRoutes = require('./webhooks/twilioVoiceRoutes');
 const rtoInvoiceRoutes = require('./rtoInvoiceRoutes');
+const rtoPartnerRoutes = require('./rtoPartnerRoutes');
 const chatbotRoutes = require('./chatbotRoutes');
 const competencyBookingRoutes = require('./competencyBookingRoutes');
 const paymentBatchRoutes = require('./paymentBatchRoutes');
@@ -62,6 +63,7 @@ router.use('/calls', callBurstRoutes);
 // Public Twilio Voice webhooks (signature-validated in the controller)
 router.use('/webhooks/twilio', twilioVoiceRoutes);
 router.use('/rto-invoices', rtoInvoiceRoutes);
+router.use('/rto-partners', rtoPartnerRoutes);
 router.use('/chatbot', chatbotRoutes);
 router.use('/competency-bookings', competencyBookingRoutes);
 router.use('/payment-batches', paymentBatchRoutes);
