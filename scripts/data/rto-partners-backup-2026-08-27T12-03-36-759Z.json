@@ -1,0 +1,86 @@
+{
+  "createdAt": "2026-08-27T12:03:36.760Z",
+  "collection": "qualifications",
+  "field": "rtoCosts",
+  "note": "Original rtoCosts before add-alpha-rto-partner.js.",
+  "items": [
+    {
+      "_id": "6a6d197d7de4252b843dce61",
+      "name": "AHC30921 Certificate III in Landscape Construction",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d197e7de4252b843dce6d",
+      "name": "CPC30220 Certificate III in Carpentry",
+      "rtoCosts": [
+        {
+          "rtoName": "Lumiere Solutions",
+          "rtoCost": 750,
+          "rtoEmail": "info@lumieresolutions.com.au"
+        }
+      ]
+    },
+    {
+      "_id": "6a6d197e7de4252b843dce73",
+      "name": "CPC30620 Certificate III in Painting and Decorating",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d197f7de4252b843dce75",
+      "name": "CPC30820 Certificate III in Roof Tiling",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d197f7de4252b843dce79",
+      "name": "CPC31020 Certificate III in Solid Plastering",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d19807de4252b843dce85",
+      "name": "CPC32420 Certificate III in Plumbing",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d19807de4252b843dce87",
+      "name": "CPC32620 Certificate III in Roof Plumbing",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d19807de4252b843dce8b",
+      "name": "CPC40120 Certificate IV in Building and Construction (Building)",
+      "rtoCosts": [
+        {
+          "rtoName": "Lumiere Solutions",
+          "rtoCost": 750,
+          "rtoEmail": "info@lumieresolutions.com.au"
+        }
+      ]
+    },
+    {
+      "_id": "6a6d19807de4252b843dce8d",
+      "name": "CPC40920 Certificate IV in Plumbing and Services",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d19807de4252b843dce91",
+      "name": "CPC50220 Diploma of Building and Construction (Building)",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d19827de4252b843dcea3",
+      "name": "MSF30322 Certificate III in Cabinet Making and Timber Technology",
+      "rtoCosts": []
+    },
+    {
+      "_id": "6a6d19827de4252b843dcead",
+      "name": "UEE32220 Certificate III in Air Conditioning and Refrigeration",
+      "rtoCosts": [
+        {
+          "rtoName": "All Skills RTO",
+          "rtoCost": 6000,
+          "rtoEmail": "admin@allskillscollege.com.au"
+        }
+      ]
+    }
+  ]
+}

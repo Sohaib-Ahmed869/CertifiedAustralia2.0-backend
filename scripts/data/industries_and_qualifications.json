@@ -23,8 +23,8 @@
           "qualification": "AUR30620 Certificate III in Light Vehicle Mechanical Technology",
           "price": "4999",
           "parsedPrice": "5000",
-          "rtoCost": "1200",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "aes"
         },
         {
@@ -32,8 +32,8 @@
           "qualification": "AUR31120 Certificate III in Heavy Commercial Vehicle Mechanical Technology",
           "price": "4999",
           "parsedPrice": null,
-          "rtoCost": "2050",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "aes"
         },
         {
@@ -68,8 +68,8 @@
           "qualification": "AUR40226 Certificate IV in Automotive Mechanical Diagnosis",
           "price": "4999",
           "parsedPrice": "5000",
-          "rtoCost": "1,500 / 2,500",
-          "rto": "info@oceaniaservices.com | Allskills",
+          "rtoCost": "2,500",
+          "rto": "Allskills",
           "type": "educube"
         },
         {
@@ -246,8 +246,8 @@
           "qualification": "SHB30416 Certificate III in Hairdressing",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "1200 / 1000 / 1000",
-          "rto": "admin@colourcosmetica.com | info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "1200 / 1000",
+          "rto": "admin@colourcosmetica.com | info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -317,8 +317,8 @@
           "qualification": "SHB40216 Certificate IV in Hairdressing",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "1200 / 1700",
-          "rto": "admin@colourcosmetica.com | info@oceaniaservices.com",
+          "rtoCost": "1200",
+          "rto": "admin@colourcosmetica.com",
           "type": "educube",
           "attachedForms": [
             {
@@ -352,8 +352,8 @@
           "qualification": "SHB50121 Diploma of Beauty Therapy",
           "price": "3999",
           "parsedPrice": "4500",
-          "rtoCost": "1200 / 1250 / 1300",
-          "rto": "admin@colourcosmetica.com | info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "1200 / 1250",
+          "rto": "admin@colourcosmetica.com | info@lumieresolutions.com.au",
           "type": "aes",
           "attachedForms": [
             {
@@ -441,8 +441,8 @@
           "qualification": "AHC30921 Certificate III in Landscape Construction",
           "price": "4799",
           "parsedPrice": "4800",
-          "rtoCost": "1550",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -565,8 +565,8 @@
           "qualification": "CPC30220 Certificate III in Carpentry",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "675 / 750 / 800",
-          "rto": "enrolment@frontier.edu.au | info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "750",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes",
           "attachedForms": [
             {
@@ -640,8 +640,8 @@
           "qualification": "CPC30320 Certificate III in Concreting",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "675",
-          "rto": "enrolment@frontier.edu.au",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -692,8 +692,8 @@
           "qualification": "CPC30620 Certificate III in Painting and Decorating",
           "price": "3999",
           "parsedPrice": "4000",
-          "rtoCost": "675 / 800",
-          "rto": "enrolment@frontier.edu.au | info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -846,8 +846,8 @@
           "qualification": "CPC31220 Certificate III in Wall and Ceiling Lining",
           "price": "4999",
           "parsedPrice": "5000",
-          "rtoCost": "1400",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube"
         },
         {
@@ -855,8 +855,8 @@
           "qualification": "CPC31320 Certificate III in Wall and Floor Tiling",
           "price": "4999",
           "parsedPrice": "5000",
-          "rtoCost": "800",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -890,8 +890,8 @@
           "qualification": "CPC31420 Certificate III in Construction Waterproofing",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "675",
-          "rto": "enrolment@frontier.edu.au",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -987,8 +987,8 @@
           "qualification": "CPC32420 Certificate III in Plumbing",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "1200",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -1038,8 +1038,8 @@
           "qualification": "CPC32620 Certificate III in Roof Plumbing",
           "price": "4999",
           "parsedPrice": "5000",
-          "rtoCost": "1,400",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -1097,8 +1097,8 @@
           "qualification": "CPC33020 Certificate III in Bricklaying/Blocklaying",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "675",
-          "rto": "enrolment@frontier.edu.au",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -1156,8 +1156,8 @@
           "qualification": "CPC40120 Certificate IV in Building and Construction (Building)",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "675 / 750 / 800",
-          "rto": "enrolment@frontier.edu.au | info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "750",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes",
           "attachedForms": [
             {
@@ -1434,8 +1434,8 @@
           "qualification": "MEM31925 Certificate III in Engineering - Fabrication Trade",
           "price": "4299",
           "parsedPrice": "4300",
-          "rtoCost": "1,600",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "default",
           "attachedForms": [
             {
@@ -1538,8 +1538,8 @@
           "qualification": "MSF30422 Certificate III in Glass and Glazing",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "675",
-          "rto": "enrolment@frontier.edu.au",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube",
           "attachedForms": [
             {
@@ -1652,8 +1652,8 @@
           "qualification": "BSB40820 Certificate IV in Marketing and Communication",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "600",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "default"
         },
         {
@@ -1670,8 +1670,8 @@
           "qualification": "BSB50120 Diploma of Business",
           "price": "3999",
           "parsedPrice": "4000",
-          "rtoCost": "600",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube"
         },
         {
@@ -1750,8 +1750,8 @@
           "qualification": "BSB60120 Advanced Diploma of Business",
           "price": "3999",
           "parsedPrice": "4000",
-          "rtoCost": "600",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "aes"
         },
         {
@@ -1822,8 +1822,8 @@
           "qualification": "BSB80320 Graduate Diploma of Strategic Leadership",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "1500 / 1000",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "1500",
+          "rto": "info@lumieresolutions.com.au",
           "type": "educube"
         },
         {
@@ -1847,8 +1847,8 @@
           "qualification": "CHC30121 Certificate III in Early Childhood Education and Care",
           "price": "3999",
           "parsedPrice": "4000",
-          "rtoCost": "750 / 600",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "750",
+          "rto": "info@lumieresolutions.com.au",
           "type": "educube"
         },
         {
@@ -1866,7 +1866,7 @@
           "price": "3999",
           "parsedPrice": "4000",
           "rtoCost": "350",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -1893,7 +1893,7 @@
           "price": "3999",
           "parsedPrice": "4000",
           "rtoCost": "350",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -1902,7 +1902,7 @@
           "price": "3999",
           "parsedPrice": "4000",
           "rtoCost": "350",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -1910,8 +1910,8 @@
           "qualification": "CHC43315 Certificate IV in Mental Health",
           "price": "3999",
           "parsedPrice": "4000",
-          "rtoCost": "1000 / 1400",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "1000",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -1919,8 +1919,8 @@
           "qualification": "CHC50121 Diploma of Early Childhood Education and Care",
           "price": "3999",
           "parsedPrice": "4000",
-          "rtoCost": "751 / 600",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "751",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -1947,7 +1947,7 @@
           "price": "3999",
           "parsedPrice": "4000",
           "rtoCost": "350",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rto": "info@lumieresolutions.com.au",
           "type": "default"
         },
         {
@@ -2014,8 +2014,8 @@
           "qualification": "FNS40222 Certificate IV in Accounting and Bookkeeping",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "600",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "aes"
         },
         {
@@ -2023,8 +2023,8 @@
           "qualification": "FNS40821 Certificate IV in Finance and Mortgage Broking",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "1250 / 1200",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "1250",
+          "rto": "info@lumieresolutions.com.au",
           "type": "educube"
         },
         {
@@ -2041,8 +2041,8 @@
           "qualification": "FNS50322 Diploma of Finance and Mortgage Broking Management",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "1750 / 1400",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "1750",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -2155,8 +2155,8 @@
           "qualification": "SIT30821 Certificate III in Commercial Cookery",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "550 / 600",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "550",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -2182,8 +2182,8 @@
           "qualification": "SIT40521 Certificate IV in Kitchen Management",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "550 / 600",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "550",
+          "rto": "info@lumieresolutions.com.au",
           "type": "default",
           "attachedForms": [
             {
@@ -2236,8 +2236,8 @@
           "qualification": "SIT50422 Diploma of Hospitality Management",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "550 / 600",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "550",
+          "rto": "info@lumieresolutions.com.au",
           "type": "aes"
         },
         {
@@ -2245,8 +2245,8 @@
           "qualification": "SIT60322 Advanced Diploma of Hospitality Management",
           "price": "3999",
           "parsedPrice": "4000",
-          "rtoCost": "750 / 600",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "750",
+          "rto": "info@lumieresolutions.com.au",
           "type": "default"
         }
       ]
@@ -2270,8 +2270,8 @@
           "qualification": "ICT50220 Diploma of Information Technology",
           "price": "4499",
           "parsedPrice": "4500",
-          "rtoCost": "675",
-          "rto": "enrolment@frontier.edu.au",
+          "rtoCost": "",
+          "rto": "",
           "type": "educube"
         },
         {
@@ -2330,8 +2330,8 @@
           "qualification": "CPP41419 Certificate IV in Real Estate Practice",
           "price": "4999",
           "parsedPrice": "5000",
-          "rtoCost": "1,000 / 1,100",
-          "rto": "info@lumieresolutions.com.au | info@oceaniaservices.com",
+          "rtoCost": "1,000",
+          "rto": "info@lumieresolutions.com.au",
           "type": "default"
         },
         {
@@ -2339,8 +2339,8 @@
           "qualification": "CPP51122 Diploma of Property (Agency Management)",
           "price": "4999",
           "parsedPrice": "5000",
-          "rtoCost": "1,400",
-          "rto": "info@oceaniaservices.com",
+          "rtoCost": "",
+          "rto": "",
           "type": "aes"
         }
       ]
