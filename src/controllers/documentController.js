@@ -308,6 +308,12 @@ const listDocuments = asyncHandler(async (req, res) => {
     .sort({ uploadedAt: -1 })
     .lean();
 
+  // Never let a browser or intermediary serve a cached copy of this list — a
+  // stale response reads to the student as "my uploads didn't save".
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+
   res.status(200).json({ items: documents });
 });
 
