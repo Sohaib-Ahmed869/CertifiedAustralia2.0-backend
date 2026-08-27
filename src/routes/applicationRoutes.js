@@ -124,6 +124,10 @@ router.post('/:id/send-post-cert-form', controller.sendPostCertForm);
 router.post('/:id/send-ref-letter-template', controller.sendRefLetterTemplate);
 router.post('/:id/request-ref-letter-template', controller.requestRefLetterTemplate);
 
+// Employment details template email
+router.post('/:id/send-emp-letter-template', controller.sendEmpLetterTemplate);
+router.post('/:id/request-emp-letter-template', controller.requestEmpLetterTemplate);
+
 // Resend context-based application email
 router.post('/:id/resend-email', controller.resendEmail);
 

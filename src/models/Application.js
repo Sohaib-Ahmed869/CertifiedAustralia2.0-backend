@@ -435,6 +435,12 @@ const applicationSchema = new mongoose.Schema(
       default: false,
     },
     refLetterRequestedAt: Date,
+    // Employment letter (employment details) template request tracking
+    empLetterRequested: {
+      type: Boolean,
+      default: false,
+    },
+    empLetterRequestedAt: Date,
     // Contact tracking
     contactAttempts: {
       type: Number,

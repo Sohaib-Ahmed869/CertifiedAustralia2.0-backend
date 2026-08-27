@@ -64,6 +64,10 @@ const qualificationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'ReferenceLetterTemplate',
     },
+    employmentLetterTemplateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'EmploymentLetterTemplate',
+    },
     // Document requirements (default same for all, can be overridden per application)
     requiredDocuments: {
       type: [String],

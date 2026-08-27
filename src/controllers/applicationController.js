@@ -883,6 +883,189 @@ module.exports = {
     });
   }),
 
+  /* ── Send Employment Details Template email ── */
+  sendEmpLetterTemplate: asyncHandler(async (req, res) => {
+    const EmploymentLetterTemplate = require('../models/EmploymentLetterTemplate');
+
+    const app = await Application.findById(req.params.id)
+      .populate('studentId', 'firstName lastName email')
+      .populate('qualificationId', 'name code')
+      .lean();
+    if (!app) throw new AppError('Application not found', 404);
+
+    const student = app.studentId;
+    if (!student || !student.email) throw new AppError('Student has no email address', 400);
+    if (!app.qualificationId) throw new AppError('Application has no qualification assigned', 400);
+
+    const qualId = typeof app.qualificationId === 'object' ? app.qualificationId._id : app.qualificationId;
+    const template = await EmploymentLetterTemplate.findOne({ qualificationId: qualId }).lean();
+    if (!template) throw new AppError('No employment letter template for this qualification', 404);
+
+    // Download template file from Google Drive
+    const { buffer, fileName: driveFileName, mimeType } = await driveService.downloadFileBuffer(template.googleDriveFileId);
+
+    const firstName = student.firstName || 'Student';
+    const lastName = student.lastName || '';
+    const qualName = typeof app.qualificationId === 'object'
+      ? (app.qualificationId.name || '')
+      : '';
+    const baseUrl = process.env.APP_BASE_URL || 'https://portal.certifiedaustralia.com.au';
+
+    const { buildEmailHtml } = require('../services/emailService');
+    const content = `
+      <h2 style="font-size:20px;color:#1f2937;margin:0 0 16px;">Dear ${firstName} ${lastName},</h2>
+
+      <p>
+        As part of your RPL (Recognition of Prior Learning) application for
+        <strong>${qualName}</strong>, you are required to provide an
+        <strong>Employment Letter</strong> confirming your employment details
+        and the duties you perform in your role.
+      </p>
+
+      <div style="background-color:#f0faf4; border-left:4px solid #0a9d42; border-radius:8px; padding:16px 20px; margin:20px 0;">
+        <h3 style="margin:0 0 8px; font-size:15px; color:#1a5c35;">What is an Employment Letter?</h3>
+        <p style="margin:0; color:#333; font-size:14px; line-height:1.6;">
+          An employment letter is completed by your employer. It confirms your
+          position, start date, employment type and duration, along with the
+          general duties you carry out — the evidence your assessor needs to
+          match your day-to-day work against the qualification.
+        </p>
+      </div>
+
+      <h3 style="font-size:16px;color:#1f2937;margin:20px 0 12px;">Instructions:</h3>
+      <ol style="padding-left:20px; line-height:2; color:#333;">
+        <li>Open the attached template document.</li>
+        <li>Provide it to your employer or supervisor to complete.</li>
+        <li>Ask them to complete, sign, and date it on company letterhead if possible.</li>
+        <li>Upload the completed letter to your application portal under <strong>Documents</strong>.</li>
+      </ol>
+
+      <div style="background-color:#f0faf4; border:1px solid #d1e7dd; border-radius:8px; padding:16px 20px; margin:20px 0;">
+        <p style="margin:0; font-size:14px; color:#2e7d32;">
+          📎 <strong>Attached:</strong> ${template.fileName || driveFileName}
+        </p>
+      </div>
+
+      <p>
+        If you have any questions about this process or need assistance, please do not
+        hesitate to contact our team.
+      </p>
+
+      <p style="margin-top:24px;">Warm regards,<br/><strong>The Certified Australia Team</strong></p>
+    `;
+
+    const html = buildEmailHtml(content, {
+      ctaText: 'Go to My Application',
+      ctaUrl: `${baseUrl}/student`,
+      preheader: `Employment Details Template for ${qualName}`,
+    });
+
+    const result = await sendEmail({
+      to: student.email,
+      subject: `Employment Details Template — ${qualName}`,
+      html,
+      attachments: [{
+        filename: template.fileName || driveFileName,
+        content: buffer,
+        contentType: mimeType,
+      }],
+    });
+
+    if (!result.success) throw new AppError('Failed to send email', 500);
+
+    // Clear the employment letter request badge
+    await Application.findByIdAndUpdate(req.params.id, {
+      empLetterRequested: false,
+    });
+
+    res.status(200).json({ message: 'Employment letter template sent to student' });
+  }),
+
+  /* ── Student requests Employment Details Template ── */
+  requestEmpLetterTemplate: asyncHandler(async (req, res) => {
+    const EmploymentLetterTemplate = require('../models/EmploymentLetterTemplate');
+    const { notifyMany } = require('../services/notificationService');
+
+    const app = await Application.findById(req.params.id)
+      .populate('studentId', 'firstName lastName email')
+      .populate('qualificationId', 'name code')
+      .lean();
+    if (!app) throw new AppError('Application not found', 404);
+
+    const student = app.studentId;
+    if (!student) throw new AppError('Student not found', 400);
+
+    const qualName = typeof app.qualificationId === 'object' ? (app.qualificationId.name || '') : '';
+    const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+
+    // Mark the request on the application
+    await Application.findByIdAndUpdate(req.params.id, {
+      empLetterRequested: true,
+      empLetterRequestedAt: new Date(),
+    });
+
+    // Try to auto-send template if one exists for this qualification
+    const qualId = typeof app.qualificationId === 'object' ? app.qualificationId._id : app.qualificationId;
+    const template = qualId ? await EmploymentLetterTemplate.findOne({ qualificationId: qualId }).lean() : null;
+
+    if (template && student.email) {
+      // Auto-send the template directly to the student
+      try {
+        const { buffer, fileName: driveFileName, mimeType } = await driveService.downloadFileBuffer(template.googleDriveFileId);
+        const { buildEmailHtml } = require('../services/emailService');
+        const html = buildEmailHtml(`
+          <h2 style="font-size:20px;color:#1f2937;margin:0 0 16px;">Hi ${student.firstName || 'there'},</h2>
+          <p>You requested an employment details template for <strong>${qualName}</strong>. Please find the template attached.</p>
+          <ol style="padding-left:20px; line-height:2; color:#333;">
+            <li>Open the attached template document.</li>
+            <li>Provide it to your employer or supervisor.</li>
+            <li>Ask them to complete, sign, and date it.</li>
+            <li>Upload the completed letter to your portal under <strong>Documents</strong>.</li>
+          </ol>
+          <p>If you need help, contact us at <strong>info@certifiedaustralia.com.au</strong> or call <strong>1300 044 927</strong>.</p>
+          <p style="margin-top:16px;">Warm regards,<br/><strong>The Certified Australia Team</strong></p>
+        `, { ctaText: 'Upload Documents', ctaUrl: `${process.env.APP_BASE_URL || 'http://localhost:5173'}/student/documents`, preheader: `Employment Details Template for ${qualName}` });
+
+        await sendEmail({
+          to: student.email,
+          subject: `Employment Details Template — ${qualName}`,
+          html,
+          attachments: [{ filename: template.fileName || driveFileName, content: buffer, contentType: mimeType }],
+        });
+      } catch (err) {
+        console.error('[EmpLetterTemplate] Auto-send failed:', err.message);
+      }
+    }
+
+    // Notify admin team regardless (so they know the student requested it)
+    try {
+      const User = require('../models/User');
+      const adminUsers = await User.find({ role: { $in: ['Admin', 'CEOReportingManager'] }, isActive: { $ne: false } }).select('_id').lean();
+      const adminIds = adminUsers.map((u) => u._id);
+      const studentIdStr = typeof app.studentId === 'object' ? app.studentId._id : app.studentId;
+      const notifData = {
+        type: 'general',
+        title: 'Employment Letter Template Requested',
+        message: `${studentName} has requested an employment details template for ${qualName} (${app.applicationId}).${template ? ' Template was auto-sent.' : ' No template found — please send manually.'}`,
+        link: `/admin/students/${studentIdStr}`,
+        relatedId: app._id,
+      };
+      // Also notify the assigned agent if any
+      if (app.assignedAgentId) {
+        const agentId = typeof app.assignedAgentId === 'object' ? app.assignedAgentId._id : app.assignedAgentId;
+        if (!adminIds.some((id) => String(id) === String(agentId))) adminIds.push(agentId);
+      }
+      await notifyMany(adminIds, notifData);
+    } catch (err) {
+      console.error('[EmpLetterTemplate] Admin notification failed:', err.message);
+    }
+
+    res.status(200).json({
+      message: template ? 'Template sent to your email and admin has been notified.' : 'Admin team has been notified and will send the template to your email.',
+      autoSent: !!template,
+    });
+  }),
+
   /* ── Resend Context-Based Email ── */
   resendEmail: asyncHandler(async (req, res) => {
     const IntakeForm = require('../models/IntakeForm');

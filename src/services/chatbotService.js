@@ -27,7 +27,7 @@ const knowledgeCrud = buildCrud(KnowledgeBase, {});
 const INTENTS = [
   'NEXT_STEP', 'APP_STATUS', 'DOCS_NEEDED', 'DOCS_PENDING',
   'CERTIFICATE', 'PAYMENT', 'HUMAN_SUPPORT', 'REFERENCE_LETTER',
-  'USI', 'CANCELLATION', 'GENERAL',
+  'EMPLOYMENT_LETTER', 'USI', 'CANCELLATION', 'GENERAL',
 ];
 
 /**
@@ -44,6 +44,9 @@ const classifyIntent = async (message) => {
   // Document-related intents must come before NEXT_STEP to avoid "what do I need" matching NEXT_STEP
   if (/\b(what.*document|which.*document|document.*need|what.*upload|required.*document|checklist|evidence.*need|what.*do.*i.*need.*upload|what.*need.*submit)\b/i.test(message)) return 'DOCS_NEEDED';
   if (/\b(pending.*document|missing.*document|outstanding|incomplete|remaining.*upload|what.*uploaded|upload.*status|have.*i.*uploaded)\b/i.test(message)) return 'DOCS_PENDING';
+  // Employment letter must precede REFERENCE_LETTER — "letter from my employer"
+  // otherwise falls through to the (broader) referee wording.
+  if (/\b(employment.*letter|employment.*details.*template|employer.*letter|letter.*from.*(my.*)?employer)\b/i.test(message)) return 'EMPLOYMENT_LETTER';
   if (/\b(reference.*letter|referee|reference.*template|supporting.*template)\b/i.test(message)) return 'REFERENCE_LETTER';
   if (/\b(certificate|cert.*download|cert.*track|cert.*delivery|auspost|tracking|hard.*copy)\b/i.test(message)) return 'CERTIFICATE';
   if (/\b(pay|payment|plan|instalment|installment|invoice|receipt|refund|how.*much|cost|price|fee|balance|owe|remaining.*pay)\b/i.test(message)) return 'PAYMENT';
@@ -411,6 +414,10 @@ const handleDocsPending = (ctx) => {
 
 const handleReferenceLetter = () => {
   return "You can request a **reference letter template** from the admin team. Here's how:\n\n1. Go to your **Documents** page\n2. Find the **Reference One** or **Reference Two** upload section\n3. Click the **info icon** (ℹ️) next to the reference field name\n4. In the tooltip that appears, click **\"Request Template from Admin\"**\n5. The system will automatically email you the template for your qualification, and the admin team will also be notified\n\nYou'll need **two references** — these should be from employers or supervisors who can verify your work experience relevant to your qualification.\n\nIf you need further help, you can create a **support ticket** or contact us at **info@certifiedaustralia.com.au** or call **1300 044 927**.";
+};
+
+const handleEmploymentLetter = () => {
+  return "You can request an **employment details template** from the admin team. Here's how:\n\n1. Go to your **Documents** page\n2. Open the **Employment Details** section and find the **Employment Letter** upload field\n3. Click the **info icon** (ℹ️) next to the field name\n4. In the tooltip that appears, click **\"Request Template from Admin\"**\n5. The system will automatically email you the template for your qualification, and the admin team will also be notified\n\nThe template is completed and signed by your **employer** — it confirms your position, start date, employment type and duration, and the general duties you perform.\n\nIf you need further help, you can create a **support ticket** or contact us at **info@certifiedaustralia.com.au** or call **1300 044 927**.";
 };
 
 const handleHumanSupport = () => {
@@ -829,7 +836,7 @@ const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => 
   }
 
   // Step 3: Get application context for app-specific intents
-  const appSpecificIntents = ['NEXT_STEP', 'APP_STATUS', 'DOCS_NEEDED', 'DOCS_PENDING', 'CERTIFICATE', 'PAYMENT', 'REFERENCE_LETTER'];
+  const appSpecificIntents = ['NEXT_STEP', 'APP_STATUS', 'DOCS_NEEDED', 'DOCS_PENDING', 'CERTIFICATE', 'PAYMENT', 'REFERENCE_LETTER', 'EMPLOYMENT_LETTER'];
   let appContext = null;
 
   if (appSpecificIntents.includes(intent) && studentId) {
@@ -901,6 +908,27 @@ const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => 
     } catch (e) { /* non-fatal */ }
     return {
       answer: handleReferenceLetter() + templateInfo,
+      matched: true,
+      source: 'deterministic',
+      intent,
+    };
+  }
+
+  // Step 5b: Employment letter handler (context-aware — checks if template exists)
+  if (intent === 'EMPLOYMENT_LETTER') {
+    let templateInfo = '';
+    try {
+      const EmploymentLetterTemplate = require('../models/EmploymentLetterTemplate');
+      if (appContext?.qualificationId) {
+        const qualId = typeof appContext.qualificationId === 'object' ? appContext.qualificationId._id : appContext.qualificationId;
+        const template = await EmploymentLetterTemplate.findOne({ qualificationId: qualId }).lean();
+        if (template) {
+          templateInfo = `\n\n**Good news!** An employment details template is available for your qualification. Use the "Request Template from Admin" button in the Documents section, and it will be emailed to you automatically.`;
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+    return {
+      answer: handleEmploymentLetter() + templateInfo,
       matched: true,
       source: 'deterministic',
       intent,

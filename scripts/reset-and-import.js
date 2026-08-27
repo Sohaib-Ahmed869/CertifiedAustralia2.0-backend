@@ -71,6 +71,7 @@ const EmailTemplate = require('../src/models/EmailTemplate');
 const KnowledgeBase = require('../src/models/KnowledgeBase');
 const Checklist = require('../src/models/Checklist');
 const ReferenceLetterTemplate = require('../src/models/ReferenceLetterTemplate');
+const EmploymentLetterTemplate = require('../src/models/EmploymentLetterTemplate');
 const DynamicForm = require('../src/models/DynamicForm');
 const CalendarConnection = require('../src/models/CalendarConnection');
 const XeroConnection = require('../src/models/XeroConnection');
@@ -130,6 +131,7 @@ const CONFIG = [
   ['KnowledgeBase', KnowledgeBase],
   ['Checklists', Checklist],
   ['ReferenceLetterTemplates', ReferenceLetterTemplate],
+  ['EmploymentLetterTemplates', EmploymentLetterTemplate],
   ['DynamicForms', DynamicForm],
   ['CalendarConnections', CalendarConnection],
   ['XeroConnections', XeroConnection],

@@ -54,4 +54,17 @@ router.route('/reference-letter-templates/:id')
   .patch(requireStaff, controller.updateReferenceLetterTemplate)
   .delete(requireStaff, controller.deleteReferenceLetterTemplate);
 
+// Custom employment letter template endpoints — declared before /:id
+router.get('/employment-letter-templates/by-qualification/:qualificationId', protect, controller.getEmploymentTemplateByQualification);
+router.post('/employment-letter-templates/upload', requireStaff, upload.single('file'), controller.uploadEmploymentTemplate);
+
+router.route('/employment-letter-templates')
+  .get(protect, controller.employmentLetterTemplates.list)
+  .post(requireStaff, controller.createEmploymentLetterTemplate);
+
+router.route('/employment-letter-templates/:id')
+  .get(protect, controller.employmentLetterTemplates.getById)
+  .patch(requireStaff, controller.updateEmploymentLetterTemplate)
+  .delete(requireStaff, controller.deleteEmploymentLetterTemplate);
+
 module.exports = router;
