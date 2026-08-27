@@ -106,16 +106,16 @@ function aggregate(events) {
 
 /**
  * statusFor(agg, targets):
- *   On Track        ⟺ calls ≥ 100% AND answerRate ≥ 50% AND quality ≥ 100%
- *   Needs Attention ⟺ calls ≥ 80% (but not On Track)
- *   Off Track       ⟺ otherwise
+ *   On Track     ⟺ calls ≥ 100% AND answerRate ≥ 50% AND quality ≥ 100%
+ *   Within Reach ⟺ calls ≥ 80% (but not On Track)
+ *   Off Track    ⟺ otherwise
  */
 function statusFor(agg, targets) {
   const callsPct = targets.callsPerAgent > 0 ? agg.calls / targets.callsPerAgent : 0;
   const qualityPct = targets.qualityPerAgent > 0 ? agg.quality / targets.qualityPerAgent : 0;
   const answerRate = agg.answerRate / 100;
   if (callsPct >= 1 && answerRate >= 0.5 && qualityPct >= 1) return 'On Track';
-  if (callsPct >= 0.8) return 'Needs Attention';
+  if (callsPct >= 0.8) return 'Within Reach';
   return 'Off Track';
 }
 
