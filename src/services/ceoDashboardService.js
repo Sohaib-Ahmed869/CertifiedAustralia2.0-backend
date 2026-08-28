@@ -1768,6 +1768,17 @@ async function getLeadStatusTracking(query = {}) {
  * Qualification Tracking — per-qualification volume/paid/certified and
  * the best-fit agent per qualification (CEO "Qualification Tracking" tab).
  * Attribution: 'assigned' (assignedAgentId) or 'closed' (closedBy||assigned).
+ *
+ * AVERAGE PRICE PAID is revenue banked ÷ PAID applications — never ÷ total
+ * applications, or every qualification's average would read as a fraction of
+ * the real sale price simply because most enquiries never pay. Revenue is the
+ * completed upfront/plan/manualMarkPaid payments sitting against the
+ * applications in the window (a payment made later still belongs to the
+ * application that earned it, so payments are NOT re-filtered by date), which
+ * keeps the numerator on exactly the same definition of "paid" as the
+ * denominator — `paymentCompleted`/`partialPayment` agree with "has >= 1
+ * completed revenue payment". A part-paid student therefore pulls the average
+ * DOWN: this is money received to date, not the agreed contract price.
  * ────────────────────────────────────────────────────────────────── */
 async function getQualificationTracking(query = {}) {
   const dateFrom = getDateFrom(query.period, query);
@@ -1785,15 +1796,40 @@ async function getQualificationTracking(query = {}) {
     .populate('closedBy', 'firstName lastName')
     .lean();
 
+  // Revenue banked per application, for the average-price columns.
+  const revenueRows = apps.length
+    ? await Payment.aggregate([
+      {
+        $match: {
+          applicationId: { $in: apps.map((a) => a._id) },
+          status: 'completed',
+          type: { $in: REVENUE_PAYMENT_TYPES },
+          isTest: { $ne: true },
+          isArchived: { $ne: true },
+        },
+      },
+      { $group: { _id: '$applicationId', amount: { $sum: '$amount' } } },
+    ])
+    : [];
+  const revenueByApp = new Map(revenueRows.map((r) => [String(r._id), r.amount || 0]));
+
   const nameOf = (u) => (u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : '');
 
-  const blankMetrics = () => ({ total: 0, paid: 0, completed: 0, certified: 0 });
+  const blankMetrics = () => ({ total: 0, paid: 0, completed: 0, certified: 0, revenue: 0 });
   const bump = (bag, app) => {
     bag.total += 1;
     if (isPaidApp(app)) bag.paid += 1;
     if (COMPLETED_STATUSES.includes(app.status)) bag.completed += 1;
     if (app.certificateId) bag.certified += 1;
+    bag.revenue += revenueByApp.get(String(app._id)) || 0;
   };
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  /** Attach revenue/avgPrice to a metrics bag (rounded for transport). */
+  const withAvg = (bag) => ({
+    ...bag,
+    revenue: round2(bag.revenue),
+    avgPrice: bag.paid > 0 ? round2(bag.revenue / bag.paid) : 0,
+  });
 
   const qualMap = {};   // qualName → metrics
   const agentMap = {};  // agentName → { ...metrics, quals: { qualName: metrics } }
@@ -1821,18 +1857,22 @@ async function getQualificationTracking(query = {}) {
     bump(agentMap[agentName].quals[qualName], app);
   }
 
-  const qualifications = Object.values(qualMap).sort((a, b) => b.total - a.total);
+  const qualifications = Object.values(qualMap)
+    .map(withAvg)
+    .sort((a, b) => b.total - a.total);
 
   const agents = Object.values(agentMap)
     .map((a) => ({
+      ...withAvg({
+        total: a.total, paid: a.paid, completed: a.completed, certified: a.certified, revenue: a.revenue,
+      }),
       agent: a.agent,
-      total: a.total,
-      paid: a.paid,
-      completed: a.completed,
-      certified: a.certified,
-      qualifications: Object.values(a.quals).sort((x, y) => y.total - x.total),
+      qualifications: Object.values(a.quals).map(withAvg).sort((x, y) => y.total - x.total),
     }))
     .sort((a, b) => b.total - a.total);
+
+  const totalRevenue = round2(qualifications.reduce((s, q) => s + q.revenue, 0));
+  const totalPaid = qualifications.reduce((s, q) => s + q.paid, 0);
 
   // Best-fit agent per qualification — computed server-side (max paid, tiebreak certified).
   const bestFit = qualifications.map((q) => {
@@ -1844,21 +1884,30 @@ async function getQualificationTracking(query = {}) {
       if (!best
         || sub.paid > best.paid
         || (sub.paid === best.paid && sub.certified > best.certified)) {
-        best = { agent: a.agent, total: sub.total, paid: sub.paid, certified: sub.certified };
+        best = {
+          agent: a.agent, total: sub.total, paid: sub.paid, certified: sub.certified, avgPrice: sub.avgPrice,
+        };
       }
     }
     return {
       qualification: q.qualification,
       code: q.code,
       total: q.total,
+      avgPrice: q.avgPrice,
       bestAgent: best?.agent || null,
       bestAgentPaid: best?.paid || 0,
       bestAgentCertified: best?.certified || 0,
+      bestAgentAvgPrice: best?.avgPrice || 0,
     };
   });
 
   return {
     totalApplications,
+    totalRevenue,
+    // Blended average across every paying application in the window — NOT the
+    // mean of the per-qualification averages (that would weight a one-sale
+    // qualification the same as a fifty-sale one).
+    avgPrice: totalPaid > 0 ? round2(totalRevenue / totalPaid) : 0,
     qualifications,
     agents,
     bestFit,
