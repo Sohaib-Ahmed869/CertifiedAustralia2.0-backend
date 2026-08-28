@@ -53,6 +53,28 @@ const qualificationSchema = new mongoose.Schema(
         _id: false,
       },
     ],
+    // EXECUTIVE PRICE FLOOR — the least this qualification may be SOLD for.
+    // `caPrice` is the list price and discounts come off it; the discounted
+    // price may never land under this number, so the floor is really a cap on
+    // discounting: the most that can be taken off is `caPrice - priceFloor`.
+    //
+    // Set only from Executive Dashboard -> Pricing Controls
+    // (PUT /qualifications/:id/price-floor, Admin/CEO + `feature_set_price_floor`).
+    // The ordinary qualification PATCH the Industries page uses STRIPS this
+    // field — a floor writable by the people it restrains is not a restriction.
+    // `null` means unrestricted, which is every qualification's default.
+    priceFloor: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+    priceFloorSetBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    priceFloorSetAt: {
+      type: Date,
+    },
     // Category for conditional document requirements (CA-05)
     category: {
       type: String,

@@ -1248,6 +1248,17 @@ const addDiscount = async (applicationId, { amount, note, createdBy }) => {
   if (!application) throw new AppError('Application not found', 404);
   if (!amount || amount <= 0) throw new AppError('Discount amount must be greater than 0', 400);
 
+  // EXECUTIVE PRICE FLOOR. The qualification may carry a minimum sale price;
+  // this is the gate that stops an application being discounted under it. It is
+  // deliberately here rather than in the controller — every discount write path
+  // (student detail modal, the quick $500 button, any future bulk action) funnels
+  // through addDiscount, so one check covers them all. See priceFloorService.
+  const Qualification = require('../models/Qualification');
+  const qualification = await Qualification.findById(application.qualificationId)
+    .select('caPrice priceFloor')
+    .lean();
+  require('./priceFloorService').assertDiscountAllowed(qualification, application, amount);
+
   // Ensure discounts array exists (legacy documents may not have it)
   if (!application.discounts) application.discounts = [];
 

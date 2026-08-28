@@ -16,6 +16,7 @@ const PERMISSION_KEYS = [
   'tab_ceo_calltracking',
   'tab_ceo_agents',
   'tab_ceo_qualifications',
+  'tab_ceo_pricing',
   'tab_ceo_leadstatus',
   'tab_ceo_cashflow',
   'tab_ceo_liability',
@@ -78,6 +79,11 @@ const PERMISSION_KEYS = [
   'feature_manage_users',
   'feature_manage_rbac',
   'feature_manage_qualifications',
+  // Sets the minimum sale price of a qualification (the discount cap).
+  // Separate from feature_manage_qualifications and feature_apply_discount on
+  // purpose — those are what the floor restrains, so holding either must not
+  // confer the power to move it.
+  'feature_set_price_floor',
   'feature_manage_industries',
   'feature_manage_email_templates',
   'feature_view_financials',
@@ -99,6 +105,11 @@ const ROLE_DEFAULTS = {
     });
     // Admin doesn't get CEO dashboard by default
     perms.tab_ceo_dashboard = false;
+    // The price floor is an EXECUTIVE control over the discounts and catalog
+    // prices Admins themselves set, so it is off for Admin by default — an Admin
+    // who could move the floor is not restricted by it. Grant it per user in
+    // User Management when the client wants a particular admin to hold it.
+    perms.feature_set_price_floor = false;
     // Admin doesn't need agent-specific tabs
     perms.tab_contacts = false;
     perms.tab_register_customer = false;

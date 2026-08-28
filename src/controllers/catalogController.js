@@ -9,6 +9,7 @@ const Qualification = require('../models/Qualification');
 const ReferenceLetterTemplate = require('../models/ReferenceLetterTemplate');
 const EmploymentLetterTemplate = require('../models/EmploymentLetterTemplate');
 const driveService = require('../services/googleDriveService');
+const { sanitizeFloor, assertCaPriceAllowed } = require('../services/priceFloorService');
 
 const cleanupFile = (filePath) => {
   fs.unlink(filePath, () => {});
@@ -134,6 +135,62 @@ const empLetterHandlers = buildTemplateHandlers({
   qualificationField: 'employmentLetterTemplateId',
 });
 
+/* ── Qualification price floor ────────────────────────────────────
+ * Qualification writes go through the generic CRUD factory, so the floor rule
+ * is enforced in these two thin wrappers around it — the ONE gate every catalog
+ * edit passes. Both strip `priceFloor` (and its audit fields) from the payload:
+ * a floor writable by the request it constrains would not be a restriction at
+ * all. It is set only by setPriceFloor below (Admin/CEO + feature_set_price_floor).
+ *
+ * `updateQualification` also refuses a `caPrice` under the floor — otherwise
+ * the discount cap would be sidestepped by simply re-pricing the catalog.
+ */
+const qualificationCrud = createCrudController(services.qualifications);
+
+const stripFloorFields = (body) => {
+  delete body.priceFloor;
+  delete body.priceFloorSetBy;
+  delete body.priceFloorSetAt;
+};
+
+const createQualification = asyncHandler(async (req, res, next) => {
+  stripFloorFields(req.body);
+  return qualificationCrud.create(req, res, next);
+});
+
+const updateQualification = asyncHandler(async (req, res, next) => {
+  stripFloorFields(req.body);
+  if (req.body.caPrice !== undefined) {
+    const existing = await Qualification.findById(req.params.id)
+      .select('caPrice priceFloor')
+      .lean();
+    assertCaPriceAllowed(existing, req.body.caPrice);
+  }
+  return qualificationCrud.update(req, res, next);
+});
+
+const setPriceFloor = asyncHandler(async (req, res) => {
+  const qualification = await Qualification.findById(req.params.id);
+  if (!qualification) {
+    throw new AppError('Qualification not found', 404);
+  }
+  const floor = sanitizeFloor(req.body?.priceFloor);
+  // A floor above the current list price would make the qualification
+  // unsellable at its own price, so it is refused rather than silently stored.
+  if (floor !== null && Number(qualification.caPrice || 0) < floor) {
+    throw new AppError(
+      `The floor cannot be above this qualification's price of $${Number(qualification.caPrice || 0).toLocaleString('en-AU')}. Raise the price first, or set a lower floor.`,
+      400,
+    );
+  }
+  qualification.priceFloor = floor;
+  qualification.priceFloorSetBy = floor === null ? undefined : req.user?._id;
+  qualification.priceFloorSetAt = floor === null ? undefined : new Date();
+  qualification.updatedAt = new Date();
+  await qualification.save();
+  res.json({ item: qualification });
+});
+
 module.exports = {
   industries: createCrudController(services.industries),
   qualifications: createCrudController(services.qualifications),
@@ -143,8 +200,9 @@ module.exports = {
   createIndustry: createCrudController(services.industries).create,
   updateIndustry: createCrudController(services.industries).update,
   deleteIndustry: createCrudController(services.industries).remove,
-  createQualification: createCrudController(services.qualifications).create,
-  updateQualification: createCrudController(services.qualifications).update,
+  createQualification,
+  updateQualification,
+  setPriceFloor,
   deleteQualification: createCrudController(services.qualifications).remove,
   createChecklist: createCrudController(services.checklists).create,
   updateChecklist: createCrudController(services.checklists).update,

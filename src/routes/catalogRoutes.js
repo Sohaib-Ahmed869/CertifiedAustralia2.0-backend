@@ -2,6 +2,7 @@ const express = require('express');
 const controller = require('../controllers/catalogController');
 const upload = require('../middleware/upload');
 const { protect, authorize } = require('../middleware/auth');
+const requirePermission = require('../middleware/requirePermission');
 
 const router = express.Router();
 
@@ -22,6 +23,19 @@ router.route('/industries/:id')
 router.route('/qualifications')
   .get(controller.qualifications.list)
   .post(requireStaff, controller.createQualification);
+
+// Executive price floor — a narrower gate than requireStaff on purpose: the
+// whole point is that the staff who price and discount from the Industries page
+// and the student detail page cannot move the floor those edits are checked
+// against. Declared before /qualifications/:id, per the house rule on literal
+// sub-paths.
+router.put(
+  '/qualifications/:id/price-floor',
+  protect,
+  authorize('Admin', 'CEOReportingManager'),
+  requirePermission('feature_set_price_floor'),
+  controller.setPriceFloor,
+);
 
 router.route('/qualifications/:id')
   .get(controller.qualifications.getById)
