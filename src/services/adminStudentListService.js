@@ -110,7 +110,13 @@ async function buildBaseFilter(query) {
   }
 
   if (query.assignedAgentId) filter.assignedAgentId = oid(query.assignedAgentId);
-  if (query.color) filter.color = query.color;
+  // Lead status (color). The sentinel 'none' means "never classified" — that is
+  // the cleared value ('') AND legacy rows that carry no color field at all.
+  if (query.color === 'none') {
+    filter.color = { $in: ['', null] };
+  } else if (query.color) {
+    filter.color = query.color;
+  }
   if (query.industryId) filter.industryId = oid(query.industryId);
   if (query.closedBy) filter.closedBy = oid(query.closedBy);
   if (query.source) filter['sourceAttribution.source'] = query.source;
