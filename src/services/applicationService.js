@@ -1616,12 +1616,10 @@ const getStats = async (query = {}) => {
   twelveMonthsAgo.setDate(1);
   twelveMonthsAgo.setHours(0, 0, 0, 0);
 
-  const PAID_STATUSES = [
-    'StudentIntakeForm', 'UploadDocuments', 'DocumentsUploaded',
-    'StudentCompleted', 'SentToRTO', 'WaitingForVerification',
-    'ReadyForRTOPayment', 'RTOInvoiceUploaded',
-    'CertificateGenerated', 'CertificateIssued',
-  ];
+  // "Paid" = money actually received (the model's explicit completion flags),
+  // NOT "advanced past the payment stage" — an admin can move a student forward
+  // without a payment. Same rule as ceoDashboardService.PAID_MATCH.
+  const PAID_EXPR = { $or: [{ $eq: ['$paymentCompleted', true] }, { $eq: ['$partialPayment', true] }] };
 
   const [
     byStatus, byAgent, totalCount, unassignedCount,
@@ -1686,7 +1684,7 @@ const getStats = async (query = {}) => {
           $group: {
             _id: {
               date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-              isPaid: { $cond: [{ $in: ['$status', PAID_STATUSES] }, true, false] },
+              isPaid: { $cond: [PAID_EXPR, true, false] },
             },
             count: { $sum: 1 },
           },
@@ -1802,8 +1800,18 @@ const getStats = async (query = {}) => {
     });
   }
 
+  // Money-based paid count for the KPI cards. The dashboard used to derive this
+  // client-side by summing the byStatus map over the old PAID_STATUSES list,
+  // which counted applications advanced past the payment stage with nothing
+  // banked. Same rule as the isPaid split on dailyData above.
+  const paidCount = await Application.countDocuments({
+    ...periodMatch,
+    $or: [{ paymentCompleted: true }, { partialPayment: true }],
+  });
+
   return {
     total: totalCount,
+    paidCount,
     unassigned: unassignedCount,
     thisMonth: thisMonthCount,
     studentCount,

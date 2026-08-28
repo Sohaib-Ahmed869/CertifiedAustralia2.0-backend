@@ -10,23 +10,39 @@ const marketingSpendCrud = buildCrud(MarketingSpend, {
   populate: ['createdBy'],
 });
 
-const PAID_STATUSES = [
-  'StudentIntakeForm',
-  'UploadDocuments',
-  'DocumentsUploaded',
-  'StudentCompleted',
-  'SentToRTO',
-  'WaitingForVerification',
-  'ReadyForRTOPayment',
-  'RTOInvoiceUploaded',
-  'CertificateGenerated',
-  'CertificateIssued',
-];
-
 const COMPLETED_STATUSES = [
   'CertificateGenerated',
   'CertificateIssued',
 ];
+
+/**
+ * "PAID" MEANS MONEY RECEIVED — never "advanced past the payment stage".
+ *
+ * Every metric here used to infer paid from status (anything at or after
+ * `StudentIntakeForm`). Admins routinely move a student forward without a
+ * payment, so that counted applications that had banked nothing: at the time
+ * this was reported (Aug 2026) 31 of 155 applications read as paid while only
+ * 19 had money against them — which is how a qualification nobody had paid for
+ * showed a paid application on the CEO Qualifications tab.
+ *
+ * `paymentCompleted` (fully paid) and `partialPayment` (at least one payment)
+ * are the model's explicit completion flags, maintained by paymentService. They
+ * were verified against the Payment collection to agree EXACTLY with "has >= 1
+ * completed upfront/plan/manualMarkPaid payment" — no drift in either
+ * direction — so they are the cheap, index-friendly form of the same truth.
+ * A partial counts: a deposit is money in the door.
+ *
+ * Use `PAID_MATCH` in a find/countDocuments/$match filter, `PAID_EXPR` inside an
+ * aggregation expression ($cond/$expr), `paidMatchOn('app')` after a $lookup,
+ * and `isPaidApp(doc)` when tallying in JS. Note PAID_MATCH carries an `$or`, so
+ * never spread it into a filter that already has one.
+ */
+const PAID_MATCH = { $or: [{ paymentCompleted: true }, { partialPayment: true }] };
+const PAID_EXPR = { $or: [{ $eq: ['$paymentCompleted', true] }, { $eq: ['$partialPayment', true] }] };
+const paidMatchOn = (prefix) => ({
+  $or: [{ [`${prefix}.paymentCompleted`]: true }, { [`${prefix}.partialPayment`]: true }],
+});
+const isPaidApp = (app) => !!(app && (app.paymentCompleted || app.partialPayment));
 
 const REVENUE_PAYMENT_TYPES = ['upfront', 'plan', 'manualMarkPaid'];
 
@@ -204,7 +220,7 @@ async function getOverview(query = {}) {
   // Core stats
   const [totalLeads, paidApps, completedApps, certificateCount] = await Promise.all([
     Application.countDocuments(filter),
-    Application.countDocuments({ ...filter, status: { $in: PAID_STATUSES } }),
+    Application.countDocuments({ ...filter, ...PAID_MATCH }),
     Application.countDocuments({ ...filter, status: { $in: COMPLETED_STATUSES } }),
     Certificate.countDocuments(filter),
   ]);
@@ -245,7 +261,7 @@ async function getOverview(query = {}) {
       },
     },
     { $unwind: '$app' },
-    { $match: { 'app.status': { $in: PAID_STATUSES } } },
+    { $match: paidMatchOn('app') },
     {
       $group: {
         _id: null,
@@ -267,7 +283,7 @@ async function getOverview(query = {}) {
       const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
       const [leads, paid] = await Promise.all([
         Application.countDocuments(wFilter),
-        Application.countDocuments({ ...wFilter, status: { $in: PAID_STATUSES } }),
+        Application.countDocuments({ ...wFilter, ...PAID_MATCH }),
       ]);
       return { week: w.week, label: w.label, leads, paid };
     })
@@ -471,7 +487,7 @@ async function getOverview(query = {}) {
       const endStr = toDateStr(new Date(weekEnd.getTime() - 24 * 60 * 60 * 1000)); // inclusive last day
       const [leads, paid, calls] = await Promise.all([
         Application.countDocuments(wFilter),
-        Application.countDocuments({ ...wFilter, status: { $in: PAID_STATUSES } }),
+        Application.countDocuments({ ...wFilter, ...PAID_MATCH }),
         CallEvent.countDocuments({ date: { $gte: startStr, $lte: endStr }, direction: { $ne: 'incoming' } }),
       ]);
       return { week: w.week, label: w.label, leads, paid, calls };
@@ -509,7 +525,7 @@ async function getLeads(query = {}) {
 
   const [totalLeads, paidCount] = await Promise.all([
     Application.countDocuments(filter),
-    Application.countDocuments({ ...filter, status: { $in: PAID_STATUSES } }),
+    Application.countDocuments({ ...filter, ...PAID_MATCH }),
   ]);
 
   const revenueAgg = await Payment.aggregate([
@@ -584,7 +600,7 @@ async function getLeads(query = {}) {
       const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
       const [leads, paid] = await Promise.all([
         Application.countDocuments(wFilter),
-        Application.countDocuments({ ...wFilter, status: { $in: PAID_STATUSES } }),
+        Application.countDocuments({ ...wFilter, ...PAID_MATCH }),
       ]);
       return { week: w.week, label: w.label, leads, paid };
     })
@@ -725,7 +741,7 @@ async function getAgentPerformance(query = {}) {
       const agentFilter = { ...filter, assignedAgentId: agent._id };
       const [assigned, paid, completed] = await Promise.all([
         Application.countDocuments(agentFilter),
-        Application.countDocuments({ ...agentFilter, status: { $in: PAID_STATUSES } }),
+        Application.countDocuments({ ...agentFilter, ...PAID_MATCH }),
         Application.countDocuments({ ...agentFilter, status: { $in: COMPLETED_STATUSES } }),
       ]);
 
@@ -868,7 +884,7 @@ async function getMarketing(query = {}) {
         _id: '$marketingSource',
         leads: { $sum: 1 },
         paid: {
-          $sum: { $cond: [{ $in: ['$status', PAID_STATUSES] }, 1, 0] },
+          $sum: { $cond: [PAID_EXPR, 1, 0] },
         },
       },
     },
@@ -1028,6 +1044,8 @@ async function getMarketing(query = {}) {
     {
       $project: {
         applicationId: 1, status: 1, createdAt: 1, marketingSource: 1, collected: 1, discountTotal: 1,
+        // Carried through so the row's `paid` flag reads money received, not stage reached.
+        paymentCompleted: 1, partialPayment: 1,
         price: { $ifNull: ['$qual.caPrice', 0] },
         studentName: { $trim: { input: { $concat: [{ $ifNull: ['$student.firstName', ''] }, ' ', { $ifNull: ['$student.lastName', ''] }] } } },
         agentName: { $trim: { input: { $concat: [{ $ifNull: ['$agent.firstName', ''] }, ' ', { $ifNull: ['$agent.lastName', ''] }] } } },
@@ -1044,7 +1062,7 @@ async function getMarketing(query = {}) {
       source: a.marketingSource,
       date: a.createdAt,
       agent: a.agentName || '—',
-      paid: PAID_STATUSES.includes(a.status),
+      paid: isPaidApp(a),
       price: round2(a.price),
       discount: round2(a.discountTotal),
       revenue,
@@ -1445,7 +1463,7 @@ async function getWeeklyScorecard(query = {}) {
 
   // Proceeded by source (paid applications this week by source)
   const proceededBySourceAgg = await Application.aggregate([
-    { $match: { ...wFilter, status: { $in: PAID_STATUSES } } },
+    { $match: { ...wFilter, ...PAID_MATCH } },
     { $lookup: { from: 'users', localField: 'studentId', foreignField: '_id', as: 'student' } },
     { $unwind: '$student' },
     { $addFields: { src: { $ifNull: ['$sourceAttribution.source', { $ifNull: ['$student.sourceAttribution.source', 'direct'] }] } } },
@@ -1456,8 +1474,8 @@ async function getWeeklyScorecard(query = {}) {
 
   // Applications Paid
   const [appsPaid, prevAppsPaid] = await Promise.all([
-    Application.countDocuments({ ...wFilter, status: { $in: PAID_STATUSES } }),
-    Application.countDocuments({ ...prevFilter, status: { $in: PAID_STATUSES } }),
+    Application.countDocuments({ ...wFilter, ...PAID_MATCH }),
+    Application.countDocuments({ ...prevFilter, ...PAID_MATCH }),
   ]);
 
   // Applications Completed (student completed all obligations)
@@ -1499,7 +1517,7 @@ async function getWeeklyScorecard(query = {}) {
 
       const [assigned, paid, completed] = await Promise.all([
         Application.countDocuments(agentFilter),
-        Application.countDocuments({ ...agentFilter, status: { $in: PAID_STATUSES } }),
+        Application.countDocuments({ ...agentFilter, ...PAID_MATCH }),
         Application.countDocuments({ ...agentFilter, status: { $in: COMPLETED_STATUSES } }),
       ]);
 
@@ -1534,7 +1552,7 @@ async function getWeeklyScorecard(query = {}) {
   );
 
   // Forecast revenue (new leads × avg conversion × avg revenue per paid app)
-  const allTimePaid = await Application.countDocuments({ isTest: { $ne: true }, isArchived: { $ne: true }, status: { $in: PAID_STATUSES } });
+  const allTimePaid = await Application.countDocuments({ isTest: { $ne: true }, isArchived: { $ne: true }, ...PAID_MATCH });
   const allTimeTotal = await Application.countDocuments({ isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' } });
   const avgConvRate = allTimeTotal > 0 ? allTimePaid / allTimeTotal : 0;
 
@@ -1761,7 +1779,7 @@ async function getQualificationTracking(query = {}) {
     ...filter,
     applicationId: { $ne: 'RECONCILIATION' },
   })
-    .select('qualificationId assignedAgentId closedBy status certificateId')
+    .select('qualificationId assignedAgentId closedBy status certificateId paymentCompleted partialPayment')
     .populate('qualificationId', 'name code')
     .populate('assignedAgentId', 'firstName lastName')
     .populate('closedBy', 'firstName lastName')
@@ -1772,7 +1790,7 @@ async function getQualificationTracking(query = {}) {
   const blankMetrics = () => ({ total: 0, paid: 0, completed: 0, certified: 0 });
   const bump = (bag, app) => {
     bag.total += 1;
-    if (PAID_STATUSES.includes(app.status)) bag.paid += 1;
+    if (isPaidApp(app)) bag.paid += 1;
     if (COMPLETED_STATUSES.includes(app.status)) bag.completed += 1;
     if (app.certificateId) bag.certified += 1;
   };

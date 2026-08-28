@@ -20,12 +20,11 @@ const getMonthStart = (date = new Date()) => {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 };
 
-const PAID_STATUSES = [
-  'StudentIntakeForm', 'UploadDocuments', 'DocumentsUploaded',
-  'StudentCompleted', 'SentToRTO', 'WaitingForVerification',
-  'ReadyForRTOPayment', 'RTOInvoiceUploaded',
-  'CertificateGenerated', 'CertificateIssued',
-];
+// "Paid" = money actually received on the application, not "advanced past the
+// payment stage" — an admin can move a student forward without a payment, and
+// counting those inflated every conversion figure. Mirrors the same rule in
+// ceoDashboardService (see the PAID_MATCH comment there); partials count.
+const PAID_MATCH = { $or: [{ paymentCompleted: true }, { partialPayment: true }] };
 
 // ---------------------------------------------------------------------------
 // CRUD
@@ -158,7 +157,7 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
     // Paid apps in period
     const paid = await Application.countDocuments({
       assignedAgentId: agent._id,
-      status: { $in: PAID_STATUSES },
+      ...PAID_MATCH,
       updatedAt: { $gte: periodStart, $lt: periodEnd },
       isTest: { $ne: true }, isArchived: { $ne: true },
     });
@@ -324,7 +323,7 @@ const getMyPerformance = async (agentId) => {
   // Paid this month
   const paidThisMonth = await Application.countDocuments({
     assignedAgentId: agentObjId,
-    status: { $in: PAID_STATUSES },
+    ...PAID_MATCH,
     updatedAt: { $gte: monthStart, $lt: monthEnd },
     isTest: { $ne: true }, isArchived: { $ne: true },
   });
