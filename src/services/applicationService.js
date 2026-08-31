@@ -55,6 +55,28 @@ const shouldMarkSentToRTO = (currentStatus) => {
   return rank !== -1 && rank < SENT_TO_RTO_RANK;
 };
 
+const STUDENT_INTAKE_RANK = STATUS_ORDER.indexOf('StudentIntakeForm');
+
+/**
+ * Should a completed payment advance this application to `StudentIntakeForm`?
+ *
+ * Only from a stage BEFORE it. Payment is not always an early event: a payment
+ * plan runs for months while the student fills the intake form, uploads
+ * documents and the RTO assesses, so the final installment routinely lands on an
+ * application already sitting at `DocumentsUploaded` or beyond. Writing the
+ * status unconditionally dragged those back to the intake stage — erasing the
+ * student's visible progress and appending a backwards transition to
+ * `statusHistory`, which the Timeline tab renders as per-stage dates.
+ *
+ * Same contract as shouldMarkSentToRTO: 'Archived' and unknown/legacy statuses
+ * are left untouched.
+ */
+const shouldMarkPaymentIntake = (currentStatus) => {
+  if (currentStatus === 'Archived') return false;
+  const rank = STATUS_ORDER.indexOf(currentStatus);
+  return rank !== -1 && rank < STUDENT_INTAKE_RANK;
+};
+
 /**
  * Check if the student has completed their 3 obligations and advance status.
  * Then, if RTO is also assigned, start the 21-day KPI timer.
@@ -2111,6 +2133,7 @@ module.exports = {
   sendToRTOPortal,
   sendRTOSubmission,
   shouldMarkSentToRTO,
+  shouldMarkPaymentIntake,
   updateStatus,
   restoreFromArchive,
   createIntakeForm,

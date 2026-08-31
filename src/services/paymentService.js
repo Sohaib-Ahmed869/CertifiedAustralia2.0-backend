@@ -5,7 +5,7 @@ const { createSquarePayment } = require('./squareService');
 const Payment = require('../models/Payment');
 const PaymentPlan = require('../models/PaymentPlan');
 const Application = require('../models/Application');
-const { tryAutoStartTimer } = require('./applicationService');
+const { tryAutoStartTimer, shouldMarkPaymentIntake } = require('./applicationService');
 const appEmails = require('./applicationEmailService');
 
 const paymentCrud = buildCrud(Payment, {
@@ -139,31 +139,45 @@ const createPaymentRecord = async (data) => {
       application.paymentIds = application.paymentIds || [];
       application.paymentIds.push(payment._id);
 
-      if (payment.type === 'upfront' || payment.type === 'manualMarkPaid') {
-        // Full payment in one go
-        application.paymentCompleted = true;
-        application.status = 'StudentIntakeForm';
-      } else if (payment.type === 'plan') {
-        // Plan installment — allocate to plan installments
-        application.partialPayment = true;
+      /* Money in. Whether it settles installments is decided by WHETHER A PLAN
+         EXISTS, not by the payment type — `type` records how the money arrived
+         (upfront = paid in full, plan = an installment charge, manualMarkPaid =
+         taken off-portal) and has to stay accurate for reporting and for the
+         Payment History column, so it must not double as a control switch.
+         Keying off the type meant a manual payment against a live plan settled
+         no installment, left every row Pending, and flagged the whole
+         application paymentCompleted regardless of how small it was. */
+      if (['upfront', 'plan', 'manualMarkPaid'].includes(payment.type)) {
+        let activePlan = null;
 
-        // Auto-allocate to the payment plan if one exists
         if (application.paymentPlanId) {
           try {
             const planDoc = await PaymentPlan.findById(application.paymentPlanId);
             if (planDoc && planDoc.status !== 'cancelled') {
               await allocateToPlan(planDoc, payment._id, payment.amount);
               await planDoc.save();
-
-              // If plan is now completed, mark application as fully paid
-              if (planDoc.status === 'completed') {
-                application.paymentCompleted = true;
-                application.status = 'StudentIntakeForm';
-              }
+              activePlan = planDoc;
             }
           } catch (err) {
             console.error('[PaymentService] Failed to allocate to plan:', err.message);
           }
+        }
+
+        if (activePlan) {
+          // The plan is the authority on "is this paid off?" — one installment,
+          // however it was collected, must never close out the application.
+          application.partialPayment = true;
+          if (activePlan.status === 'completed') application.paymentCompleted = true;
+        } else if (payment.type === 'plan') {
+          application.partialPayment = true;
+        } else {
+          application.paymentCompleted = true;
+        }
+
+        // Guarded: a final installment can land long after the student has moved
+        // past intake. See shouldMarkPaymentIntake.
+        if (application.paymentCompleted && shouldMarkPaymentIntake(application.status)) {
+          application.status = 'StudentIntakeForm';
         }
       }
 
@@ -180,9 +194,11 @@ const createPaymentRecord = async (data) => {
   if (freshPayment.status === 'completed') {
     const student = freshPayment.studentId;
     const application = freshPayment.applicationId;
+    // Reflects what the money actually did, not what the type implies: a manual
+    // payment against a live plan settles one installment, it doesn't close the sale.
     const isFullPayment =
-      freshPayment.type === 'upfront' ||
-      freshPayment.type === 'manualMarkPaid';
+      (freshPayment.type === 'upfront' || freshPayment.type === 'manualMarkPaid') &&
+      freshPayment.applicationId?.paymentCompleted === true;
 
     if (student?.email && application?.applicationId) {
       if (freshPayment.type === 'manualMarkPaid') {
