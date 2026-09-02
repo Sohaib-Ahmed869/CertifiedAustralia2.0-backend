@@ -445,6 +445,7 @@ const STALE_LEAD_DAYS = 3; // New applications with no contact
 const INCOMPLETE_INTAKE_DAYS = 7; // Paid but intake not complete
 const PENDING_DOCUMENTS_DAYS = 5; // Intake done but documents not submitted
 const FOLLOW_UP_REMINDER_HOURS = 1; // Remind agent 1 hour before scheduled follow-up
+const RESUBMISSION_REMINDER_DAYS = 3; // Days a resubmission request may sit unanswered before we chase
 
 /**
  * Send reminders for stale/incomplete applications.
@@ -614,19 +615,44 @@ const sendApplicationReminders = async () => {
     }
 
     // ── 5. Resubmission pending — student hasn't resubmitted ────────────
+    // This chases an ACTUAL admin-raised resubmission request. It must never
+    // key off status/updatedAt alone: every application sitting in
+    // UploadDocuments would then be told an admin had flagged their documents,
+    // which is a lie and (with nothing bumping updatedAt) repeats every day.
     const resubCutoff = new Date(now);
-    resubCutoff.setDate(resubCutoff.getDate() - 3); // 3 days since resubmission request
+    resubCutoff.setDate(resubCutoff.getDate() - RESUBMISSION_REMINDER_DAYS);
 
     const resubApps = await Application.find({
-      status: 'UploadDocuments',
-      updatedAt: { $lt: resubCutoff },
+      status: { $nin: ['Archived', 'CertificateIssued', 'CertificateGenerated'] },
+      isTest: { $ne: true },
+      resubmissionRequests: {
+        $elemMatch: {
+          status: 'pending',
+          requestedAt: { $lt: resubCutoff },
+          // Re-chase at most once per RESUBMISSION_REMINDER_DAYS window.
+          $or: [{ lastReminderAt: { $exists: false } }, { lastReminderAt: { $lt: resubCutoff } }],
+        },
+      },
     })
       .populate('studentId', 'firstName lastName email')
       .lean();
 
+    let resubReminded = 0;
+
     for (const app of resubApps) {
       const student = app.studentId;
       if (!student?.email) continue;
+
+      // Only the requests that are genuinely due — an application can carry
+      // several, and a fresh one must not ride along on an old one.
+      const dueRequests = (app.resubmissionRequests || []).filter(
+        (r) =>
+          r.status === 'pending' &&
+          r.requestedAt &&
+          new Date(r.requestedAt) < resubCutoff &&
+          (!r.lastReminderAt || new Date(r.lastReminderAt) < resubCutoff)
+      );
+      if (!dueRequests.length) continue;
 
       await Notification.create({
         userId: student._id,
@@ -646,6 +672,19 @@ const sendApplicationReminders = async () => {
       await sendEmail({ to: student.email, subject: 'Resubmission Required - Certified Australia', html: buildEmail(resubBody, 'Please address the feedback on your application') })
         .catch((err) => console.error('[Scheduler] Resubmission reminder email error:', err.message));
 
+      // Stamp the requests we just chased so tomorrow's run skips them.
+      // timestamps:false — this is scheduler bookkeeping, not application
+      // activity, and bumping updatedAt would move the other reminder windows.
+      await Application.updateOne(
+        { _id: app._id },
+        { $set: { 'resubmissionRequests.$[req].lastReminderAt': now } },
+        {
+          arrayFilters: [{ 'req._id': { $in: dueRequests.map((r) => r._id) } }],
+          timestamps: false,
+        }
+      ).catch((err) => console.error('[Scheduler] Resubmission reminder stamp error:', err.message));
+
+      resubReminded++;
       sent++;
     }
 
@@ -657,7 +696,7 @@ const sendApplicationReminders = async () => {
         incompleteIntakes: incompleteIntakes.length,
         pendingDocuments: pendingDocs.length,
         upcomingFollowUps: appsWithFollowUps.length,
-        pendingResubmissions: resubApps.length,
+        pendingResubmissions: resubReminded,
       },
     };
   } catch (err) {

@@ -267,6 +267,9 @@ const applicationSchema = new mongoose.Schema(
           default: 'pending',
         },
         resolvedAt: Date,
+        // Last time the scheduler chased the student about THIS request.
+        // Guards against re-sending the same reminder on every daily run.
+        lastReminderAt: Date,
       },
     ],
     // Gated additional document requests (CA-08)
