@@ -77,6 +77,7 @@ const SOURCE_PLATFORMS = [
   { key: 'vip',            name: 'VIP Line' },
   { key: 'gabby',          name: "Gabby's Line" },
   { key: 'rsg',            name: 'Rehman Sheriff Group' },
+  { key: 'edm_campaign_floor_pricing', name: 'EDM — Floor Pricing' },
 ];
 
 /**
@@ -106,6 +107,7 @@ const SPEND_KEY_TO_SOURCE = {
   gabby: 'gabby',
   gabby_line: 'gabby',
   rsg: 'rsg',
+  edm_campaign_floor_pricing: 'edm_campaign_floor_pricing',
 };
 
 /**

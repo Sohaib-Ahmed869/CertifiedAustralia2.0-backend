@@ -26,6 +26,7 @@ const marketingSpendSchema = new mongoose.Schema(
         'gabby',
         'gabby_line',
         'rsg',
+        'edm_campaign_floor_pricing',
       ],
     },
     amount: {
