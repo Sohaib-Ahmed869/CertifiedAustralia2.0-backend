@@ -15,6 +15,7 @@ router.route('/:id')
   .patch(controller.update)
   .delete(controller.remove);
 
+router.post('/:id/duplicate', controller.duplicate);
 router.post('/:id/send', controller.sendTemplate);
 router.post('/:id/send-bulk', controller.sendBulk);
 

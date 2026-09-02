@@ -7,6 +7,11 @@ const crud = createCrudController(service.templates);
 module.exports = {
   ...crud,
 
+  duplicate: asyncHandler(async (req, res) => {
+    const result = await service.duplicateTemplate(req.params.id);
+    res.status(201).json({ item: result });
+  }),
+
   sendTemplate: asyncHandler(async (req, res) => {
     const { email, variables } = req.body;
     const result = await service.sendTemplate(req.params.id, email, variables);

@@ -37,6 +37,56 @@ const interpolate = (text, variables = {}) =>
   );
 
 /**
+ * Copy an existing template so staff can tweak a word or two without rebuilding it.
+ *
+ * The whole body (including the `<!-- EMAIL_BUILDER_DATA: -->` block payload the
+ * builder round-trips) is copied verbatim, so the copy opens in the drag-and-drop
+ * editor exactly as the original does.
+ *
+ * `EmailTemplate.name` is deliberately not unique, so the numbering below is a
+ * courtesy, not a constraint — it just stops a list of six identical "(Copy)"
+ * rows. Copying a copy re-uses the original base name rather than stacking
+ * suffixes ("Welcome (Copy) (Copy)").
+ */
+const COPY_SUFFIX_RE = /\s*\(Copy(?:\s+\d+)?\)$/i;
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const nextCopyName = async (originalName) => {
+  const base = String(originalName || '').replace(COPY_SUFFIX_RE, '').trim() || 'Untitled Template';
+  const siblings = await EmailTemplate
+    .find({ name: new RegExp(`^${escapeRegex(base)}\\s*\\(Copy(\\s+\\d+)?\\)$`, 'i') })
+    .select('name')
+    .lean();
+
+  const taken = new Set(siblings.map((t) => String(t.name).trim().toLowerCase()));
+  let candidate = `${base} (Copy)`;
+  let n = 2;
+  while (taken.has(candidate.toLowerCase())) {
+    candidate = `${base} (Copy ${n})`;
+    n += 1;
+  }
+  return candidate;
+};
+
+/**
+ * @param {string} templateId
+ * @returns {Promise<object>} the newly created template
+ */
+const duplicateTemplate = async (templateId) => {
+  const source = await EmailTemplate.findById(templateId).lean();
+  if (!source) throw new AppError('Email template not found', 404);
+
+  return EmailTemplate.create({
+    name: await nextCopyName(source.name),
+    subject: source.subject,
+    body: source.body,
+    category: source.category,
+    variables: [...(source.variables || [])],
+    active: source.active !== false,
+  });
+};
+
+/**
  * Fetch a template by ID, interpolate variables, and send to a single recipient.
  *
  * @param {string} templateId  - Mongoose ObjectId
@@ -103,6 +153,7 @@ const sendBulk = async (templateId, recipients = []) => {
 
 module.exports = {
   templates,
+  duplicateTemplate,
   sendTemplate,
   sendBulk,
   interpolate,
