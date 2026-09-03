@@ -55,9 +55,39 @@ const campaignSchema = new mongoose.Schema(
         },
       ],
     },
+    /**
+     * Mailbox to send from. Declared because the wizard has always offered a
+     * "Send From Mailbox" picker whose value a strict schema silently DROPPED —
+     * every campaign actually went out from whichever active mailbox was least
+     * used. Optional: left unset, `pickMailbox` picks as before.
+     */
+    mailboxId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Mailbox',
+    },
+    /**
+     * Absolute UTC instant to start sending at.
+     *
+     * The wizard has offered "Schedule Send" since it shipped, but the field was
+     * never on this schema (so it was dropped) and no cron ever looked for one —
+     * the confirm dialog said "It will be scheduled for …" while the very next
+     * line sent the campaign immediately. Stored UTC; the frontend converts an
+     * AEST wall-clock through `utils/aestTime.aestWallToUtcISO`, exactly like a
+     * sequence step's `sendAt`.
+     */
+    scheduledAt: {
+      type: Date,
+    },
+    // Who scheduled it, for the audit line on the detail page.
+    scheduledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
     status: {
       type: String,
-      enum: ['draft', 'sending', 'paused', 'sent', 'partially_failed', 'failed', 'cancelled'],
+      // `scheduled` sits between draft and sending: queued for a future instant,
+      // still cancellable. The due-campaign cron is the only thing that moves it on.
+      enum: ['draft', 'scheduled', 'sending', 'paused', 'sent', 'partially_failed', 'failed', 'cancelled'],
       default: 'draft',
     },
     stats: {
@@ -116,6 +146,8 @@ const campaignSchema = new mongoose.Schema(
 );
 
 campaignSchema.index({ status: 1 });
+// The due-campaign cron's only query: scheduled rows whose instant has passed.
+campaignSchema.index({ status: 1, scheduledAt: 1 });
 campaignSchema.index({ createdBy: 1 });
 campaignSchema.index({ campaignId: 1 }, { unique: true });
 

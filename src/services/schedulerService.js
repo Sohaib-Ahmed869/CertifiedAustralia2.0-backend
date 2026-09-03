@@ -762,6 +762,7 @@ let appReminderJob = null;
 let xeroSyncJob = null;
 let rtoTimerJob = null;
 let campaignBounceJob = null;
+let campaignScheduleJob = null;
 let sequenceTickJob = null;
 let batchReconcileJob = null;
 
@@ -883,6 +884,21 @@ const startScheduler = () => {
     }
   });
 
+  // Scheduled-campaign dispatch — every minute.
+  //
+  // Deliberately finer than the 5-minute sequence tick: a sequence step is one of
+  // several over days, but a campaign is a single announced send, so "goes out at
+  // 11:30" should mean 11:30, not up to 11:35. The query is indexed
+  // (status + scheduledAt) and returns nothing on almost every pass.
+  campaignScheduleJob = cron.schedule('* * * * *', async () => {
+    try {
+      const campaignService = require('./campaignService');
+      await campaignService.runDueCampaigns();
+    } catch (err) {
+      console.error('[Scheduler] Scheduled campaign dispatch error:', err.message);
+    }
+  });
+
   // Email-sequence (drip) tick — every 5 minutes, unless disabled.
   if (process.env.SEQUENCE_SCHEDULER_ENABLED !== 'false') {
     sequenceTickJob = cron.schedule('*/5 * * * *', async () => {
@@ -903,6 +919,16 @@ const startScheduler = () => {
       await sendService.recoverInterrupted();
     } catch (err) {
       console.error('[Scheduler] Campaign send recovery error:', err.message);
+    }
+    // Anything whose send time passed while the process was down. Without this a
+    // campaign scheduled for 11:30 during a deploy sits `scheduled` forever — the
+    // cron only ever fires forward from now.
+    try {
+      const campaignService = require('./campaignService');
+      const { started } = await campaignService.runDueCampaigns();
+      if (started) console.log(`[Scheduler] Boot sweep started ${started} overdue campaign(s)`);
+    } catch (err) {
+      console.error('[Scheduler] Overdue campaign sweep error:', err.message);
     }
     setTimeout(async () => {
       try {
@@ -933,6 +959,7 @@ const startScheduler = () => {
   console.log('  - Follow-up call checks: every 2 hours (7AM–7PM)');
   console.log('  - Xero sync + reconciliation: daily at 10:00 PM');
   console.log('  - Campaign bounce polling: every 5 minutes');
+  console.log('  - Scheduled campaign dispatch: every minute');
   console.log('  - RTO batch queue reconcile: daily at 1:30 AM');
 };
 
@@ -944,6 +971,7 @@ const stopScheduler = () => {
   if (appReminderJob) appReminderJob.stop();
   if (xeroSyncJob) xeroSyncJob.stop();
   if (campaignBounceJob) campaignBounceJob.stop();
+  if (campaignScheduleJob) campaignScheduleJob.stop();
   if (sequenceTickJob) sequenceTickJob.stop();
   if (batchReconcileJob) batchReconcileJob.stop();
   console.log('[Scheduler] All schedulers stopped');

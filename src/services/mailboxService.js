@@ -98,11 +98,61 @@ const verify = async (id) => {
     .lean();
 };
 
+/**
+ * Disconnect = DEACTIVATE, never delete.
+ *
+ * `email` is uniquely indexed, so a hard delete would throw away the quota counters
+ * and the mailboxId references on every CampaignRecipient/SequenceRecipient already
+ * sent through it. Deactivating stops sending immediately — `campaignSendService
+ * .pickMailbox` filters on `isActive: true` and `sequenceService` refuses a step
+ * whose mailbox is inactive — while leaving the row reconnectable.
+ */
 const disconnect = async (id) => {
   const mailbox = await Mailbox.findById(id);
   if (!mailbox) throw new AppError('Mailbox not found', 404);
 
   mailbox.isActive = false;
+  await mailbox.save();
+
+  // Drop the cached POOLED transport too. The senders re-check `isActive` before
+  // every pick so nothing more goes out, but without this the pool keeps an
+  // authenticated SMTP connection open to a mailbox the admin has disconnected,
+  // until the process restarts.
+  resetTransport(mailbox._id);
+
+  return Mailbox.findById(mailbox._id)
+    .populate('createdBy')
+    .lean();
+};
+
+/**
+ * Bring a disconnected mailbox back.
+ *
+ * Re-probes SMTP rather than trusting the old `healthStatus`: an app password can be
+ * revoked while the mailbox sits disconnected, and silently reactivating a dead one
+ * would resume campaigns that then fail per-recipient with no clue why — the exact
+ * failure mode `probeSmtp` was introduced to end.
+ */
+const reconnect = async (id) => {
+  const mailbox = await Mailbox.findById(id);
+  if (!mailbox) throw new AppError('Mailbox not found', 404);
+  if (mailbox.isActive) return Mailbox.findById(mailbox._id).populate('createdBy').lean();
+
+  resetTransport(mailbox._id);
+  const probe = await probeSmtp(mailbox);
+  if (!probe.ok) {
+    throw new AppError(
+      probe.authFailed
+        ? `Could not sign in to ${mailbox.email}: ${probe.error}. Update the app password, then reconnect.`
+        : `Could not reach the mail server for ${mailbox.email}: ${probe.error}. The mailbox is still disconnected — try again.`,
+      400,
+    );
+  }
+
+  mailbox.isActive = true;
+  mailbox.healthStatus = 'healthy';
+  mailbox.cooldownUntil = null;
+  mailbox.lastVerifiedAt = new Date();
   await mailbox.save();
 
   return Mailbox.findById(mailbox._id)
@@ -137,5 +187,6 @@ module.exports = {
   connect,
   verify,
   disconnect,
+  reconnect,
   updateConfig,
 };

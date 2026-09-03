@@ -135,13 +135,30 @@ function resetTransport(mailboxId) {
 }
 
 /** An active, healthy mailbox not in cooldown — or null. */
-async function pickMailbox() {
+/**
+ * Choose a mailbox to send from.
+ *
+ * `preferredId` honours the campaign's own "Send From Mailbox" choice — the wizard
+ * has always offered that picker but the value was dropped by the schema, so every
+ * campaign went out from whichever active mailbox was least used. If the preferred
+ * one is inactive, unhealthy or parked in cooldown we fall back to the pool rather
+ * than stalling the send: the admin picked a FROM address, not a hard requirement,
+ * and a paused campaign is worse than one sent from the sibling address.
+ */
+async function pickMailbox(preferredId) {
   const now = new Date();
-  return Mailbox.findOne({
+  const available = {
     isActive: true,
     healthStatus: { $ne: 'unhealthy' },
     $or: [{ cooldownUntil: null }, { cooldownUntil: { $exists: false } }, { cooldownUntil: { $lte: now } }],
-  }).sort({ 'usage.sentToday': 1 });
+  };
+
+  if (preferredId) {
+    const preferred = await Mailbox.findOne({ ...available, _id: preferredId });
+    if (preferred) return preferred;
+  }
+
+  return Mailbox.findOne(available).sort({ 'usage.sentToday': 1 });
 }
 
 /**
@@ -351,7 +368,7 @@ async function processCampaign(campaignId) {
       const batch = await CampaignRecipient.find({ campaignId, status: 'queued' }).limit(BATCH_SIZE);
       if (batch.length === 0) break;
 
-      const mailbox = await pickMailbox();
+      const mailbox = await pickMailbox(campaign.mailboxId);
       if (!mailbox) {
         await pauseWithError(campaignId, 'No active mailbox available to send from. Connect a mailbox and resume.');
         return;

@@ -25,6 +25,11 @@ module.exports = {
     res.status(200).json({ item: result });
   }),
 
+  reconnect: asyncHandler(async (req, res) => {
+    const result = await service.reconnect(req.params.id);
+    res.status(200).json({ item: result });
+  }),
+
   updateConfig: asyncHandler(async (req, res) => {
     const result = await service.updateConfig(req.params.id, req.body);
     res.status(200).json({ item: result });

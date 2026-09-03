@@ -23,6 +23,8 @@ router.route('/:id')
 
 router.get('/:id/recipients', controller.getRecipients);
 router.post('/:id/send', controller.send);
+router.post('/:id/schedule', controller.schedule);
+router.post('/:id/cancel-schedule', controller.cancelSchedule);
 router.post('/:id/pause', controller.pause);
 router.post('/:id/resume', controller.resume);
 router.post('/:id/check-bounces', controller.checkBounces);

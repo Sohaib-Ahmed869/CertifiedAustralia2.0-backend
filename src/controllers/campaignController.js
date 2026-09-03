@@ -35,6 +35,18 @@ module.exports = {
     res.status(200).json({ item: result });
   }),
 
+  // Queue for a future instant. `scheduledAt` is UTC — the wizard converts the
+  // admin's AEST wall-clock before posting, same as a sequence step.
+  schedule: asyncHandler(async (req, res) => {
+    const result = await service.schedule(req.params.id, req.body.scheduledAt, req.user?._id);
+    res.status(200).json({ item: result });
+  }),
+
+  cancelSchedule: asyncHandler(async (req, res) => {
+    const result = await service.cancelSchedule(req.params.id);
+    res.status(200).json({ item: result });
+  }),
+
   pause: asyncHandler(async (req, res) => {
     const result = await service.pause(req.params.id);
     res.status(200).json({ item: result });
