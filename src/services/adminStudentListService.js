@@ -21,11 +21,19 @@ const Application = require('../models/Application');
 const Payment = require('../models/Payment');
 const ScreeningForm = require('../models/ScreeningForm');
 const User = require('../models/User');
+const Qualification = require('../models/Qualification');
 
 // Cast to ObjectId when valid — the forecast aggregation's $match does NOT auto-cast
 // string ids the way Model.find() does, so id filters must be real ObjectIds.
 function oid(v) {
   return mongoose.isValidObjectId(v) ? new mongoose.Types.ObjectId(v) : v;
+}
+
+// The search box feeds straight into $regex, so a term carrying regex syntax is
+// a real hazard: "+61..." threw (nothing to repeat) and "(NSW)" quietly matched
+// on a capture group instead of the literal text. Search is a literal contains.
+function escapeRegex(v) {
+  return String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // Real student income — mirrors the "money in" payment types. Excludes discount
@@ -118,6 +126,7 @@ async function buildBaseFilter(query) {
     filter.color = query.color;
   }
   if (query.industryId) filter.industryId = oid(query.industryId);
+  if (query.qualificationId) filter.qualificationId = oid(query.qualificationId);
   if (query.closedBy) filter.closedBy = oid(query.closedBy);
   if (query.source) filter['sourceAttribution.source'] = query.source;
 
@@ -144,15 +153,26 @@ async function buildBaseFilter(query) {
     filter._id = { $in: forms.map((f) => f.applicationId) };
   }
 
-  // Free-text search — appId + student name/email.
-  if (query.search) {
-    const regex = { $regex: query.search, $options: 'i' };
-    const users = await User.find({
-      $or: [{ firstName: regex }, { lastName: regex }, { email: regex }],
-    }).select('_id').lean();
+  // Free-text search — appId + student name/email/phone + QUALIFICATION.
+  //
+  // Both the student and the qualification live on OTHER collections, so each is
+  // resolved to a set of ids first and matched by reference. The qualification arm
+  // is what the search placeholder has always promised and never did: `name` on
+  // Qualification carries the code and the title in one string ("AHC30722
+  // Certificate III in Horticulture"), so one regex covers both "AHC30722" and
+  // "horticulture". Phone is on the same User lookup and was equally advertised.
+  if (query.search && String(query.search).trim()) {
+    const regex = { $regex: escapeRegex(String(query.search).trim()), $options: 'i' };
+    const [users, quals] = await Promise.all([
+      User.find({
+        $or: [{ firstName: regex }, { lastName: regex }, { email: regex }, { phone: regex }],
+      }).select('_id').lean(),
+      Qualification.find({ name: regex }).select('_id').lean(),
+    ]);
     filter.$or = [
       { applicationId: regex },
       { studentId: { $in: users.map((u) => u._id) } },
+      { qualificationId: { $in: quals.map((q) => q._id) } },
     ];
   }
 

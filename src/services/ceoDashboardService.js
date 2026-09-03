@@ -5,6 +5,7 @@ const Certificate = require('../models/Certificate');
 const MarketingSpend = require('../models/MarketingSpend');
 const CallEvent = require('../models/CallEvent');
 const buildCrud = require('./commonCrud');
+const marketingSourceService = require('./marketingSourceService');
 
 const marketingSpendCrud = buildCrud(MarketingSpend, {
   populate: ['createdBy'],
@@ -60,55 +61,18 @@ const COLOR_SOURCE_MAP = {
 };
 
 /**
- * Canonical marketing source platforms (matches ?source= query param keys).
+ * Marketing source platforms and the legacy-spend-key rollup both used to be
+ * hardcoded arrays here — two of the ten declarations that had to be edited in
+ * lockstep to add one tracking link. They now come from the MarketingSource
+ * collection (`marketingSourceService`), which is editable from the Marketing
+ * Links page, seeded with exactly the rows these constants used to hold, and
+ * cached in-process so the extra read costs nothing per aggregation.
+ *
+ * Both helpers deliberately include INACTIVE sources: retiring a link must not
+ * retroactively remove its leads, spend or revenue from a past period.
  */
-const SOURCE_PLATFORMS = [
-  { key: 'tiktok',         name: 'TikTok' },
-  { key: 'facebook',       name: 'Facebook' },
-  { key: 'facebook_ads',   name: 'Facebook Ads' },
-  { key: 'instagram',      name: 'Instagram' },
-  { key: 'instagram_ads',  name: 'Instagram Ads' },
-  { key: 'linkedin',       name: 'LinkedIn' },
-  { key: 'google',         name: 'Google' },
-  { key: 'linktree',       name: 'Linktree' },
-  { key: 'seo',            name: 'SEO / Organic Search' },
-  { key: 'print',          name: 'Print / QR' },
-  { key: 'mainline',       name: 'Mainline' },
-  { key: 'vip',            name: 'VIP Line' },
-  { key: 'gabby',          name: "Gabby's Line" },
-  { key: 'rsg',            name: 'Rehman Sheriff Group' },
-  { key: 'edm_campaign_floor_pricing', name: 'EDM — Floor Pricing' },
-];
-
-/**
- * Map legacy MarketingSpend platform keys to canonical source keys.
- * Allows spend logged under either the old or new key to be attributed correctly.
- */
-const SPEND_KEY_TO_SOURCE = {
-  tiktok: 'tiktok',
-  // Legacy meta keys → map to facebook for backwards compatibility
-  meta: 'facebook',
-  meta_paid: 'facebook',
-  meta_ads: 'facebook_ads',
-  // New separate keys
-  facebook: 'facebook',
-  facebook_ads: 'facebook_ads',
-  instagram: 'instagram',
-  instagram_ads: 'instagram_ads',
-  linkedin: 'linkedin',
-  google: 'google',
-  linktree: 'linktree',
-  seo: 'seo',
-  print: 'print',
-  print_qr: 'print',
-  mainline: 'mainline',
-  vip: 'vip',
-  vip_line: 'vip',
-  gabby: 'gabby',
-  gabby_line: 'gabby',
-  rsg: 'rsg',
-  edm_campaign_floor_pricing: 'edm_campaign_floor_pricing',
-};
+const getSourcePlatforms = () => marketingSourceService.listPlatforms();
+const getSpendKeyMap = () => marketingSourceService.getSpendKeyMap();
 
 /**
  * Compute a dateFrom based on the period query parameter.
@@ -848,17 +812,18 @@ async function getMarketing(query = {}) {
     },
   ]);
 
-  // Roll up spend into canonical source keys using SPEND_KEY_TO_SOURCE
+  // Roll up spend into canonical source keys via each source's declared aliases
+  const [sourcePlatforms, spendKeyMap] = await Promise.all([getSourcePlatforms(), getSpendKeyMap()]);
   const spendBySource = {};
   spendAgg.forEach((s) => {
-    const sourceKey = SPEND_KEY_TO_SOURCE[s._id] || s._id;
+    const sourceKey = spendKeyMap[s._id] || s._id;
     spendBySource[sourceKey] = (spendBySource[sourceKey] || 0) + s.spend;
   });
   const totalSpend = Object.values(spendBySource).reduce((sum, v) => sum + v, 0);
 
   // ── 2. Leads & paid count per source ──
   // First try Application.sourceAttribution.source (new field), fall back to Student lookup for legacy data
-  const sourceKeys = SOURCE_PLATFORMS.map((p) => p.key);
+  const sourceKeys = sourcePlatforms.map((p) => p.key);
   // Include unattributed "Direct" leads alongside the paid platforms.
   const leadSourceKeys = [...sourceKeys, 'direct'];
 
@@ -953,7 +918,7 @@ async function getMarketing(query = {}) {
   const totalRevenueFromAds = sourceKeys.reduce((sum, k) => sum + (revenueMap[k] || 0), 0);
   const overallROAS = totalSpend > 0 ? Math.round((totalRevenueFromAds / totalSpend) * 100) / 100 : 0;
 
-  const platforms = SOURCE_PLATFORMS.map((p) => {
+  const platforms = sourcePlatforms.map((p) => {
     const spend = spendBySource[p.key] || 0;
     const leads = leadsMap[p.key] || 0;
     const paid = paidMap[p.key] || 0;
@@ -1115,8 +1080,10 @@ function mondayToWeekKey(date) {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
-// Editable ad-spend platforms (canonical keys — all present in the MarketingSpend enum).
-const SPEND_EDIT_PLATFORMS = SOURCE_PLATFORMS.map((p) => p.key);
+// Editable ad-spend platforms — the ACTIVE canonical keys. A retired source drops out
+// of the editor but is added back below for any week that already has money against it,
+// or that week's spend would silently vanish from the cockpit.
+const getSpendEditPlatforms = () => marketingSourceService.listSpendPlatforms();
 
 /**
  * Weekly ad-spend history — one row per ISO week (gaps filled), with per-platform
@@ -1138,13 +1105,16 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
     .sort({ weekOf: 1, updatedAt: 1 })
     .lean();
 
+  const spendKeyMap = await getSpendKeyMap();
   const weekMap = {};
+  const seenPlatforms = new Set();
   docs.forEach((doc) => {
     const monday = new Date(doc.weekOf);
     monday.setHours(0, 0, 0, 0);
     const weekKey = mondayToWeekKey(monday);
     if (!weekMap[weekKey]) weekMap[weekKey] = { weekKey, weekOf: monday, total: 0, platforms: {} };
-    const canonical = SPEND_KEY_TO_SOURCE[doc.platform] || doc.platform;
+    const canonical = spendKeyMap[doc.platform] || doc.platform;
+    seenPlatforms.add(canonical);
     const bucket = weekMap[weekKey].platforms[canonical] || { amount: 0, notes: '' };
     bucket.amount += doc.amount || 0;
     if (doc.notes) bucket.notes = doc.notes; // docs sorted asc by updatedAt → keep latest
@@ -1161,7 +1131,12 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
     weeksArr.push(weekMap[wk] || { weekKey: wk, weekOf: m, total: 0, platforms: {} });
   }
 
-  return { weeks: weeksArr, platforms: SPEND_EDIT_PLATFORMS };
+  // Active keys first (editor order), then any retired key that still holds spend in
+  // the loaded window so its column keeps rendering.
+  const editable = await getSpendEditPlatforms();
+  const platforms = [...editable, ...[...seenPlatforms].filter((k) => !editable.includes(k))];
+
+  return { weeks: weeksArr, platforms };
 }
 
 /**
@@ -1169,6 +1144,9 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
  * amount <= 0 clears the cell. Guarantees one record per (week, platform).
  */
 async function upsertMarketingSpend({ weekKey, platform, amount, notes, userId }) {
+  // The MarketingSpend enum used to reject an unknown key at the schema layer; it had
+  // to go so runtime-added sources could be saved, so the gate lives here now.
+  await marketingSourceService.assertValidSpendPlatform(platform);
   const monday = getWeekStartFromLabel(weekKey);
   const amt = Number(amount) || 0;
   if (amt <= 0) {
@@ -1452,7 +1430,7 @@ async function getWeeklyScorecard(query = {}) {
   ]);
 
   // Leads by source (marketing attribution)
-  const sourceKeys = SOURCE_PLATFORMS.map((p) => p.key);
+  const sourceKeys = (await getSourcePlatforms()).map((p) => p.key);
   const leadsBySourceAgg = await Application.aggregate([
     { $match: wFilter },
     { $lookup: { from: 'users', localField: 'studentId', foreignField: '_id', as: 'student' } },

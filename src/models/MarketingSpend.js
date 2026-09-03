@@ -2,32 +2,21 @@ const mongoose = require('mongoose');
 
 const marketingSpendSchema = new mongoose.Schema(
   {
+    /**
+     * A marketing source key (or one of its legacy aliases — see MarketingSource).
+     *
+     * This carried a hardcoded enum until the source registry moved to the
+     * MarketingSource collection: a key added at runtime can never be in a compiled
+     * enum, so the cockpit would have offered a row whose save failed Mongoose
+     * validation. The gate did not disappear with it — `marketingSourceService
+     * .assertValidSpendPlatform` runs on the one write path (`upsertMarketingSpend`),
+     * because an unvalidated key holds money no platform card ever reads.
+     */
     platform: {
       type: String,
       required: true,
-      enum: [
-        'tiktok',
-        'meta',
-        'meta_paid',
-        'meta_ads',
-        'facebook',
-        'facebook_ads',
-        'instagram',
-        'instagram_ads',
-        'linkedin',
-        'google',
-        'linktree',
-        'seo',
-        'print',
-        'print_qr',
-        'mainline',
-        'vip',
-        'vip_line',
-        'gabby',
-        'gabby_line',
-        'rsg',
-        'edm_campaign_floor_pricing',
-      ],
+      trim: true,
+      lowercase: true,
     },
     amount: {
       type: Number,
