@@ -287,6 +287,15 @@ const deleteDocument = asyncHandler(async (req, res) => {
   const document = await Document.findById(docId);
   if (!document) throw new AppError('Document not found', 404);
 
+  // The router's `:id` guard only proves the caller may touch THIS application —
+  // it says nothing about `:docId`, which was looked up by id alone. Without
+  // this check a student could pass their own application id and delete any
+  // document in the system. 404 rather than 403: a caller with no business
+  // here shouldn't learn whether the id exists.
+  if (String(document.applicationId) !== String(appId)) {
+    throw new AppError('Document not found', 404);
+  }
+
   if (document.googleDriveFileId) {
     await driveService.deleteFile(document.googleDriveFileId).catch(() => {});
   }
@@ -296,6 +305,34 @@ const deleteDocument = asyncHandler(async (req, res) => {
   await Application.findByIdAndUpdate(appId, {
     $pull: { documentIds: docId },
   });
+
+  // The file may also hang off an additional-document request. Leaving the id
+  // there makes that request render a tile for a file that no longer exists.
+  await Application.updateOne(
+    { _id: appId, 'additionalDocRequests.documentIds': docId },
+    { $pull: { 'additionalDocRequests.$.documentIds': docId } }
+  );
+
+  // Staff deleting a student's upload is an on-behalf correction, and the file
+  // is gone from both Mongo and Drive — the note is the only trace left of it.
+  // A student tidying up their own uploads is routine and isn't logged.
+  if (req.user && req.user.role !== 'Student') {
+    try {
+      await Application.findByIdAndUpdate(appId, {
+        $push: {
+          notes: {
+            content: `Document "${document.fileName || document.fieldName || 'file'}"${document.fieldName ? ` (${document.fieldName})` : ''} was deleted on the student's behalf.`,
+            addedBy: req.user._id,
+            authorRole: req.user.role,
+            authorName: `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim(),
+            visibility: 'admin',
+          },
+        },
+      });
+    } catch (err) {
+      console.error('[Documents] Failed to write deletion note:', err.message);
+    }
+  }
 
   res.status(200).json({ message: 'Document deleted' });
 });

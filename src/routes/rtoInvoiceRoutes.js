@@ -14,6 +14,29 @@ const router = express.Router();
 router.use(protect);
 router.use(authorize('Admin', 'CEOReportingManager'));
 
+/**
+ * Push an attached file to Drive and return the fields the invoice stores for
+ * it. Shared by create and replace so both paths land the file the same way.
+ * Always unlinks the temp file, even when Drive is unavailable.
+ */
+const storeUploadedFile = async (file) => {
+  try {
+    if (!googleDriveService) return { originalFileName: file.originalname };
+    const result = await googleDriveService.uploadFileFromDisk({
+      filePath: file.path,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+    });
+    return {
+      originalFileName: file.originalname,
+      originalFileUrl: result.webViewLink,
+      googleDriveFileId: result.id,
+    };
+  } finally {
+    fs.unlink(file.path, () => {});
+  }
+};
+
 // Parse an uploaded invoice file and return extracted fields (DEXT-style).
 // Does NOT persist anything — the frontend uses this to pre-fill the upload form,
 // then the user reviews and submits POST / with the same file as usual.
@@ -47,28 +70,38 @@ router.post('/', upload.single('file'), asyncHandler(async (req, res) => {
   const data = { ...req.body, uploadedBy: req.user._id };
 
   // Handle file upload to Google Drive if a file was attached
-  if (req.file && googleDriveService) {
-    try {
-      const result = await googleDriveService.uploadFileFromDisk({
-        filePath: req.file.path,
-        fileName: req.file.originalname,
-        mimeType: req.file.mimetype,
-      });
-      data.originalFileName = req.file.originalname;
-      data.originalFileUrl = result.webViewLink;
-      data.googleDriveFileId = result.id;
-    } finally {
-      // Clean up temp file
-      fs.unlink(req.file.path, () => {});
-    }
-  } else if (req.file) {
-    // No Google Drive configured — store file name only
-    data.originalFileName = req.file.originalname;
-    fs.unlink(req.file.path, () => {});
+  if (req.file) {
+    Object.assign(data, await storeUploadedFile(req.file));
   }
 
   const item = await rtoInvoiceService.createInvoice(data);
   res.status(201).json({ item });
+}));
+
+// Correct an invoice uploaded in error: edit its details and/or replace the
+// attached file. Keeps the invoice record, its batch row and the application's
+// state intact — use DELETE when the invoice should not exist at all.
+router.patch('/:id', upload.single('file'), asyncHandler(async (req, res) => {
+  // Two ways a replacement file arrives: attached here (finance page), or
+  // already uploaded through the documents pipeline and passed by reference
+  // (student detail page, which files the invoice under the student's docs too).
+  let file = null;
+  if (req.file) {
+    file = await storeUploadedFile(req.file);
+  } else if (req.body.googleDriveFileId || req.body.originalFileUrl) {
+    file = {
+      originalFileName: req.body.originalFileName,
+      originalFileUrl: req.body.originalFileUrl,
+      googleDriveFileId: req.body.googleDriveFileId,
+      documentId: req.body.documentId,
+    };
+  }
+
+  const item = await rtoInvoiceService.update(req.params.id, req.body, {
+    file,
+    actor: req.user,
+  });
+  res.json({ item });
 }));
 
 // Verify invoice (confirm extracted data + map to application)
@@ -107,9 +140,14 @@ router.post('/:id/auto-map', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
-// Delete invoice
+// Remove an invoice uploaded in error. Unwinds the whole upload: unqueues it
+// from its batch week, reverts the application's status, restarts the 21-day
+// timer, reverses the auto-created RTO payable and deletes the file.
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const result = await rtoInvoiceService.remove(req.params.id);
+  const result = await rtoInvoiceService.remove(req.params.id, {
+    reason: req.body?.reason,
+    actor: req.user,
+  });
   res.json(result);
 }));
 

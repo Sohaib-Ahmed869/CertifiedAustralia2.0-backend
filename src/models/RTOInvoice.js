@@ -39,6 +39,27 @@ const rtoInvoiceSchema = new mongoose.Schema({
   originalFileName: String,
   originalFileUrl: String,
   googleDriveFileId: String,
+  // The Document row holding the same file, when the invoice was uploaded from
+  // the student detail page (which uploads through the documents pipeline).
+  // Replacing or removing the invoice has to take that row with it, or the
+  // student's Documents tab keeps a link to a file that no longer exists.
+  documentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Document',
+  },
+  // Audit trail for "wrong file uploaded" corrections. The file itself is
+  // deleted from Drive on replace — this keeps the record that it happened.
+  replacedFiles: [
+    {
+      originalFileName: String,
+      googleDriveFileId: String,
+      replacedAt: { type: Date, default: Date.now },
+      replacedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    },
+  ],
   // Data extracted from the uploaded file
   extractedData: {
     raw: String,

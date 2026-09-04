@@ -598,12 +598,15 @@ const getStats = async (query = {}) => {
       },
     ]),
 
-    // RTO payables (rtoPayable or rtoPayment that are not completed, range-scoped)
+    // RTO payables still outstanding (rtoPayable/rtoPayment, range-scoped).
+    // `reversed` is excluded alongside `completed`: a payable voided by a batch
+    // reversal or by removing the invoice that raised it is no longer owed, and
+    // counting it here overstates what CA has to pay out.
     Payment.aggregate([
       {
         $match: {
           type: { $in: ['rtoPayable', 'rtoPayment'] },
-          status: { $ne: 'completed' },
+          status: { $nin: ['completed', 'reversed'] },
           ...rangeMatch,
         },
       },
