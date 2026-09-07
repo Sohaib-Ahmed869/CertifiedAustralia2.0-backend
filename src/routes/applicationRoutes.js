@@ -60,6 +60,9 @@ router.route('/:id')
 router.patch('/:id/assign-agent', controller.assignAgent);
 router.patch('/:id/test', authorize(...STAFF_ROLES), controller.setTestFlag);
 router.patch('/:id/source', controller.updateSource);
+// Correcting the student's self-reported "How did you hear about us?" answer is
+// a staff action — the student answered it once at sign-up and can't edit it.
+router.patch('/:id/hear-about', authorize(...STAFF_ROLES), controller.updateHearAbout);
 router.patch('/:id/lead-status', controller.updateLeadStatus);
 router.patch('/:id/assign-rto', controller.assignRTO);
 router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);

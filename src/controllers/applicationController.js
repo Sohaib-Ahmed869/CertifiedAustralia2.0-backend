@@ -66,6 +66,10 @@ module.exports = {
     const result = await service.updateSource(req.params.id, req.body.source);
     res.status(200).json({ item: result });
   }),
+  updateHearAbout: asyncHandler(async (req, res) => {
+    const result = await service.updateHearAbout(req.params.id, req.body.howDidYouHear);
+    res.status(200).json({ item: result });
+  }),
   updateLeadStatus: asyncHandler(async (req, res) => {
     const userName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email;
     const result = await service.updateLeadStatus(req.params.id, req.body.color, {

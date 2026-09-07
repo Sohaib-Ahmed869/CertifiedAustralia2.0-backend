@@ -28,6 +28,7 @@ const PERMISSION_KEYS = [
   'tab_qualifications',
   'tab_tasks',
   'tab_tickets',
+  'tab_chatbot_history',
   'tab_email_templates',
   'tab_campaigns',
   'tab_sequences',
@@ -139,6 +140,7 @@ const ROLE_DEFAULTS = {
     tab_qualifications: false,
     tab_tasks: true,
     tab_tickets: false,
+    tab_chatbot_history: false,
     tab_email_templates: false,
     tab_campaigns: false,
     tab_mailbox_config: false,
@@ -208,6 +210,7 @@ const ROLE_DEFAULTS = {
     tab_qualifications: false,
     tab_tasks: false,
     tab_tickets: true,
+    tab_chatbot_history: false,
     tab_email_templates: false,
     tab_campaigns: false,
     tab_mailbox_config: false,
@@ -273,6 +276,9 @@ const ROLE_DEFAULTS = {
     tab_qualifications: false,
     tab_tasks: false,
     tab_tickets: true,
+    // Support answers the escalations, so the transcripts behind them are
+    // directly useful — on by default for this role.
+    tab_chatbot_history: true,
     tab_email_templates: false,
     tab_campaigns: false,
     tab_mailbox_config: false,

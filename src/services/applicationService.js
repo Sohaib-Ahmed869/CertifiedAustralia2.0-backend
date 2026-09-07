@@ -4,6 +4,7 @@ const buildCrud = require('./commonCrud');
 const Application = require('../models/Application');
 const IntakeForm = require('../models/IntakeForm');
 const ScreeningForm = require('../models/ScreeningForm');
+const { HEAR_ABOUT_OPTIONS } = require('../models/ScreeningForm');
 const Document = require('../models/Document');
 const Certificate = require('../models/Certificate');
 const Payment = require('../models/Payment');
@@ -218,6 +219,43 @@ const updateSource = async (applicationId, source) => {
     .lean();
   if (!application) throw new AppError('Application not found', 404);
   return application;
+};
+
+/**
+ * Correct the student's self-reported "How did you hear about us?" answer.
+ *
+ * It lives on the ScreeningForm (captured once at sign-up), not the Application
+ * — so this resolves the linked form and writes there, then hands back the
+ * populated application the student-detail page already renders from.
+ *
+ * Deliberately NOT `sourceAttribution.source`: that is the campaign tag carried
+ * on the register URL and is edited via `updateSource`. The two disagree
+ * routinely and correcting one must never silently rewrite the other.
+ */
+const updateHearAbout = async (applicationId, value) => {
+  const next = (value ?? '').toString().trim();
+  if (!HEAR_ABOUT_OPTIONS.includes(next)) {
+    throw new AppError('Invalid "How did you hear about us?" option', 400);
+  }
+
+  const application = await Application.findById(applicationId).select('screeningFormId');
+  if (!application) throw new AppError('Application not found', 404);
+  if (!application.screeningFormId) {
+    throw new AppError('This application has no screening form to update', 404);
+  }
+
+  const updated = await ScreeningForm.findByIdAndUpdate(
+    application.screeningFormId,
+    { howDidYouHear: next, updatedAt: new Date() },
+    { new: true, runValidators: true }
+  );
+  if (!updated) throw new AppError('Screening form not found', 404);
+
+  // `refreshApplication` omits screeningFormId from its populate list, and the
+  // caller needs the corrected answer back on the application it re-renders.
+  return Application.findById(applicationId)
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId screeningFormId')
+    .lean();
 };
 
 const LEAD_COLORS = ['red', 'orange', 'purple', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''];
@@ -2128,6 +2166,7 @@ module.exports = {
   assignRTO,
   setTestFlag,
   updateSource,
+  updateHearAbout,
   updateLeadStatus,
   markPaymentProceeded,
   sendToRTOPortal,

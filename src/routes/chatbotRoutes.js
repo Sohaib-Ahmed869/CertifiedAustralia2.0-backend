@@ -5,6 +5,10 @@ const chatbotService = require('../services/chatbotService');
 
 const router = express.Router();
 
+// Anyone who can open a student record can read that student's bot history.
+// Which of them SEES the screens is gated separately by `tab_chatbot_history`.
+const HISTORY_ROLES = ['Admin', 'CEOReportingManager', 'Agent', 'Marketing', 'Support'];
+
 router.use(protect);
 
 // Student chatbot endpoint
@@ -14,6 +18,8 @@ router.post('/ask', asyncHandler(async (req, res) => {
     message: req.body.message,
     applicationId: req.body.applicationId || null,
     chatHistory: req.body.chatHistory || [],
+    // Session handle — absent on the first turn, echoed back by the widget after.
+    conversationId: req.body.conversationId || null,
   });
   res.json(result);
 }));
@@ -27,9 +33,29 @@ router.post('/escalate', asyncHandler(async (req, res) => {
     applicationId: req.body.applicationId || null,
     category: req.body.category,
     priority: req.body.priority,
+    conversationId: req.body.conversationId || null,
   });
   res.status(201).json({ item: ticket });
 }));
+
+/* ── Conversation history (staff) ────────────────────────────────────────── */
+// Declared before /knowledge/:id so neither path can shadow the other.
+
+router.get('/conversations',
+  authorize(...HISTORY_ROLES),
+  asyncHandler(async (req, res) => {
+    const result = await chatbotService.listConversations(req.query);
+    res.json(result);
+  })
+);
+
+router.get('/conversations/:id',
+  authorize(...HISTORY_ROLES),
+  asyncHandler(async (req, res) => {
+    const item = await chatbotService.getConversation(req.params.id);
+    res.json({ item });
+  })
+);
 
 // Knowledge base CRUD (admin only)
 router.get('/knowledge',

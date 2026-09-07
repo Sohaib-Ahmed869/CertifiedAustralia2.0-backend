@@ -6,6 +6,7 @@ const Notification = require('../models/Notification');
 const { createSquarePayment } = require('./squareService');
 const { sendTemplatedEmail, buildEmail, sendEmail, heading2, greeting, paragraph, detailsTable, successCard, warningCard, infoCard, buttonGroup, signOff } = require('./emailService');
 const appEmails = require('./applicationEmailService');
+const { shouldMarkPaymentIntake } = require('./applicationService');
 const crypto = require('crypto');
 
 // ---------------------------------------------------------------------------
@@ -179,11 +180,33 @@ const processAutoDebit = async (plan, installment, amount) => {
     }
     await plan.save();
 
-    // Link payment to application
+    /* Link payment to application AND flag it as paid.
+       `partialPayment` / `paymentCompleted` are the application's explicit
+       money-received flags, and every "has this application paid?" check in the
+       portal reads them — the student list's payment column, the all-time
+       conversion figures, the CEO qualification rollup. This path used to push
+       the payment id and stop there, so a student whose FIRST money arrived by
+       direct debit stayed flagged unpaid forever, no matter how many
+       installments cleared.
+       The installment allocation and plan totals are already settled above, so
+       this deliberately does NOT go through paymentService.allocateToPlan —
+       it only mirrors the flag rules that createPaymentRecord applies: the plan
+       is the authority on "paid off", one installment never closes out an
+       application. */
     const application = await Application.findById(plan.applicationId);
     if (application) {
       application.paymentIds = application.paymentIds || [];
       application.paymentIds.push(payment._id);
+
+      application.partialPayment = true;
+      if (plan.status === 'completed') application.paymentCompleted = true;
+
+      // Guarded: a final installment can land long after the student has moved
+      // past intake. See shouldMarkPaymentIntake.
+      if (application.paymentCompleted && shouldMarkPaymentIntake(application.status)) {
+        application.status = 'StudentIntakeForm';
+      }
+
       await application.save();
     }
 

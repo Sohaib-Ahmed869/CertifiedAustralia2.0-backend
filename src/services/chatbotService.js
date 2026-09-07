@@ -15,8 +15,11 @@ const PaymentPlan = require('../models/PaymentPlan');
 const Checklist = require('../models/Checklist');
 const Student = require('../models/Student');
 const IntakeForm = require('../models/IntakeForm');
+const ChatbotConversation = require('../models/ChatbotConversation');
+const User = require('../models/User');
 const ticketService = require('./ticketService');
 const buildCrud = require('./commonCrud');
+const AppError = require('../utils/AppError');
 
 const knowledgeCrud = buildCrud(KnowledgeBase, {});
 
@@ -756,7 +759,10 @@ const generateLLMAnswer = async (message, chatHistory, kbEntries, appContext) =>
 
 const KB_DIRECT_THRESHOLD = 0.55; // High-confidence KB matches bypass intent routing
 
-const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => {
+// The answering pipeline itself. Wrapped by `getAnswer` below, which is the
+// exported entry point — this function has a dozen early returns, so recording
+// the turn at each of them would be a dozen chances to forget one.
+const resolveAnswer = async ({ studentId, message, applicationId, chatHistory }) => {
   if (!message || message.trim().length < 3) {
     return { answer: "Could you tell me more about what you need help with?", matched: false };
   }
@@ -973,6 +979,94 @@ const getAnswer = async ({ studentId, message, applicationId, chatHistory }) => 
 };
 
 // ---------------------------------------------------------------------------
+// Conversation persistence
+// ---------------------------------------------------------------------------
+
+// One document per sitting. Past this many messages the turn rolls into a fresh
+// conversation instead of growing the array forever — a single doc has a hard
+// 16 MB ceiling, and hitting it would silently stop the logging.
+const CONVERSATION_MESSAGE_CAP = 400;
+
+/**
+ * Append one student question + the bot's reply to the student's conversation.
+ *
+ * Returns the conversation, whose `_id` the caller hands back to the widget so
+ * the next turn lands in the same document. A missing/foreign/full
+ * `conversationId` starts a new conversation rather than dropping the turn.
+ */
+const recordTurn = async ({ conversationId, studentId, applicationId, message, result }) => {
+  if (!studentId) return null;
+
+  const now = new Date();
+  const turn = [
+    { role: 'student', content: message || '', at: now },
+    {
+      role: 'bot',
+      content: result?.answer || '',
+      source: result?.source,
+      intent: result?.intent,
+      // `matched` is absent on some handler returns; only an explicit `false`
+      // means "the bot had no answer".
+      matched: result?.matched !== false,
+      suggestedEscalation: !!result?.suggestEscalation,
+      // One ms apart so a sort by timestamp can never put the reply first.
+      at: new Date(now.getTime() + 1),
+    },
+  ];
+  const counters = {
+    messageCount: 2,
+    studentMessageCount: 1,
+    unansweredCount: result?.matched === false ? 1 : 0,
+  };
+
+  if (conversationId) {
+    // Scoped by studentId: a conversation id is client-supplied, so this is what
+    // stops one student appending to another's transcript.
+    const existing = await ChatbotConversation.findOneAndUpdate(
+      { _id: conversationId, studentId, messageCount: { $lt: CONVERSATION_MESSAGE_CAP } },
+      {
+        $push: { messages: { $each: turn } },
+        $inc: counters,
+        $set: {
+          lastMessageAt: now,
+          // Only ever fill in the application — never clear one already resolved.
+          ...(applicationId ? { applicationId } : {}),
+        },
+      },
+      { new: true }
+    ).select('_id');
+    if (existing) return existing;
+  }
+
+  return ChatbotConversation.create({
+    studentId,
+    applicationId: applicationId || null,
+    messages: turn,
+    firstQuestion: (message || '').trim().slice(0, 300),
+    lastMessageAt: now,
+    ...counters,
+  });
+};
+
+/**
+ * Answer the student, then record the turn.
+ *
+ * Persistence is best-effort on purpose: a logging failure must never cost the
+ * student their answer, so it is caught and the reply goes out regardless (just
+ * without a `conversationId`, which starts a new document next turn).
+ */
+const getAnswer = async ({ studentId, message, applicationId, chatHistory, conversationId }) => {
+  const result = await resolveAnswer({ studentId, message, applicationId, chatHistory });
+
+  let conversation = null;
+  try {
+    conversation = await recordTurn({ conversationId, studentId, applicationId, message, result });
+  } catch { /* transcript logging is non-fatal */ }
+
+  return conversation ? { ...result, conversationId: String(conversation._id) } : result;
+};
+
+// ---------------------------------------------------------------------------
 // Escalation
 // ---------------------------------------------------------------------------
 
@@ -1000,7 +1094,7 @@ const normaliseTranscript = (chatTranscript) => (chatTranscript || []).map((line
 const TICKET_CATEGORIES = ['intake_form', 'documents', 'payments', 'technical', 'rto_support', 'general', 'other'];
 const TICKET_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
-const escalateToTicket = async ({ studentId, chatTranscript, subject, applicationId, category, priority }) => {
+const escalateToTicket = async ({ studentId, chatTranscript, subject, applicationId, category, priority, conversationId }) => {
   const transcript = normaliseTranscript(chatTranscript);
 
   // The student's last question is what support actually needs to answer — use
@@ -1026,7 +1120,121 @@ const escalateToTicket = async ({ studentId, chatTranscript, subject, applicatio
     chatbotTranscript: transcript,
   });
 
+  // Link the live conversation to the ticket. The ticket's own transcript is a
+  // frozen snapshot taken at this moment; the conversation keeps growing if the
+  // student carries on chatting, so both are worth having.
+  if (conversationId) {
+    try {
+      await ChatbotConversation.updateOne(
+        { _id: conversationId, studentId },
+        { $set: { escalated: true, ticketId: ticket._id } }
+      );
+    } catch { /* non-fatal — the ticket is what matters here */ }
+  }
+
   return ticket;
+};
+
+// ---------------------------------------------------------------------------
+// Conversation history (staff read APIs)
+// ---------------------------------------------------------------------------
+
+/**
+ * Paginated conversation list for the staff history screens.
+ *
+ * The `messages` array is projected down to its last entry — the list only needs
+ * a preview, and shipping full transcripts for 20 conversations would dwarf the
+ * rest of the payload. `stats` is aggregated over the WHOLE filtered set, not
+ * the loaded page, so paging can't silently redefine "unanswered".
+ */
+const listConversations = async (query = {}) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+
+  const filter = {};
+  if (query.studentId) filter.studentId = query.studentId;
+  if (query.applicationId) filter.applicationId = query.applicationId;
+  if (query.escalated === 'true') filter.escalated = true;
+  if (query.escalated === 'false') filter.escalated = false;
+  // Conversations containing at least one question the bot couldn't answer —
+  // the knowledge-base gap list.
+  if (query.unanswered === 'true') filter.unansweredCount = { $gt: 0 };
+
+  if (query.dateFrom || query.dateTo) {
+    const range = {};
+    if (query.dateFrom) {
+      const d = new Date(query.dateFrom);
+      if (!Number.isNaN(d.getTime())) range.$gte = d;
+    }
+    if (query.dateTo) {
+      const d = new Date(query.dateTo);
+      if (!Number.isNaN(d.getTime())) { d.setHours(23, 59, 59, 999); range.$lte = d; }
+    }
+    if (Object.keys(range).length) filter.lastMessageAt = range;
+  }
+
+  // Free-text search spans the student (name/email) and the conversation's own
+  // text, so "certificate" and "jane@" both work in the one box.
+  if (query.search && String(query.search).trim()) {
+    const regex = { $regex: String(query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    const students = await User.find({
+      $or: [{ firstName: regex }, { lastName: regex }, { email: regex }],
+    }).select('_id').lean();
+    filter.$or = [
+      { firstQuestion: regex },
+      { 'messages.content': regex },
+      ...(students.length ? [{ studentId: { $in: students.map((s) => s._id) } }] : []),
+    ];
+  }
+
+  const [items, total, stats] = await Promise.all([
+    ChatbotConversation.find(filter, { messages: { $slice: -1 } })
+      .populate('studentId', 'firstName lastName email')
+      .populate('applicationId', 'applicationId status')
+      .populate('ticketId', 'ticketId title status')
+      .sort('-lastMessageAt')
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    ChatbotConversation.countDocuments(filter),
+    ChatbotConversation.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          conversations: { $sum: 1 },
+          students: { $addToSet: '$studentId' },
+          messages: { $sum: '$messageCount' },
+          escalated: { $sum: { $cond: ['$escalated', 1, 0] } },
+          unanswered: { $sum: { $cond: [{ $gt: ['$unansweredCount', 0] }, 1, 0] } },
+        },
+      },
+    ]),
+  ]);
+
+  const agg = stats[0] || {};
+
+  return {
+    items: items.map(({ messages, ...rest }) => ({ ...rest, lastMessage: messages?.[0] || null })),
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    stats: {
+      conversations: agg.conversations || 0,
+      students: (agg.students || []).length,
+      messages: agg.messages || 0,
+      escalated: agg.escalated || 0,
+      unanswered: agg.unanswered || 0,
+    },
+  };
+};
+
+const getConversation = async (id) => {
+  const item = await ChatbotConversation.findById(id)
+    .populate('studentId', 'firstName lastName email phone')
+    .populate('applicationId', 'applicationId status')
+    .populate('ticketId', 'ticketId title status')
+    .lean();
+  if (!item) throw new AppError('Conversation not found', 404);
+  return item;
 };
 
 // ---------------------------------------------------------------------------
@@ -1037,6 +1245,8 @@ module.exports = {
   knowledge: knowledgeCrud,
   getAnswer,
   escalateToTicket,
+  listConversations,
+  getConversation,
   generateKBEmbedding,
   generateAllEmbeddings,
 };

@@ -47,6 +47,80 @@ const isPaidApp = (app) => !!(app && (app.paymentCompleted || app.partialPayment
 
 const REVENUE_PAYMENT_TYPES = ['upfront', 'plan', 'manualMarkPaid'];
 
+/**
+ * "APPLICATIONS PAID IN A PERIOD" MEANS MONEY LANDED IN THAT PERIOD — the
+ * application's signup date is irrelevant.
+ *
+ * `PAID_MATCH` above answers "has this application EVER paid?", which is the
+ * right question for an all-time or per-application check. It is the WRONG
+ * question for a period metric, because the only date available to bucket on is
+ * then `Application.createdAt`. Every weekly/period paid count here used to do
+ * exactly that, so "Applications Paid this week" silently meant "signed up this
+ * week AND has paid at some point since". A lead who registered a fortnight ago
+ * and paid on Tuesday was credited back to the week they registered and was
+ * missing from this week's card — which is how a week with 8 payers read as 3
+ * (reported Sep 2026).
+ *
+ * These helpers bucket on the PAYMENT instead. Rules the client set:
+ *  - Any application that received money in the window counts, whenever it
+ *    signed up.
+ *  - It counts ONCE per window however many installments landed in it, and
+ *    counts again in a later window if it pays again — a payment-plan student
+ *    paying monthly is an application that received money every month.
+ *
+ * Scope is deliberately IDENTICAL to the Revenue Collected aggregation (same
+ * `status: 'completed'`, same `REVENUE_PAYMENT_TYPES`, same denormalised
+ * `isTest`/`isArchived` flags that `Payment`'s pre-save hook copies off the
+ * application), so the count and the dollars sitting next to it on a card can
+ * never disagree about who is in scope.
+ *
+ * `Payment.createdAt` IS the payment instant — the model has no `paidAt` — and
+ * the admin "Mark as Paid" screen deliberately backdates it to the day the money
+ * actually arrived. Bucketing here preserves that on purpose.
+ */
+const PAID_PAYMENT_MATCH = {
+  isTest: { $ne: true },
+  isArchived: { $ne: true },
+  status: 'completed',
+  type: { $in: REVENUE_PAYMENT_TYPES },
+};
+
+/**
+ * Build the `createdAt` range for a payment window, or null for all-time.
+ * Mirrors `dateFilter`'s inclusive `$lte` for period queries; week windows pass
+ * their own half-open `{ $gte, $lt }` instead.
+ */
+function paymentDateRange(dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return null;
+  const range = {};
+  if (dateFrom) range.$gte = dateFrom;
+  if (dateTo) range.$lte = dateTo;
+  return range;
+}
+
+/** Distinct application ids that received money inside the window. */
+async function paidApplicationIds(createdAtRange) {
+  const match = { ...PAID_PAYMENT_MATCH, applicationId: { $ne: null } };
+  if (createdAtRange) match.createdAt = createdAtRange;
+  const rows = await Payment.aggregate([
+    { $match: match },
+    { $group: { _id: '$applicationId' } },
+  ]);
+  return rows.map((r) => r._id);
+}
+
+/** How many distinct applications received money inside the window. */
+async function paidApplicationCount(createdAtRange) {
+  const match = { ...PAID_PAYMENT_MATCH, applicationId: { $ne: null } };
+  if (createdAtRange) match.createdAt = createdAtRange;
+  const rows = await Payment.aggregate([
+    { $match: match },
+    { $group: { _id: '$applicationId' } },
+    { $count: 'count' },
+  ]);
+  return rows[0]?.count || 0;
+}
+
 const COLOR_SOURCE_MAP = {
   red: 'Hot Lead',
   orange: 'Warm Lead',
@@ -127,50 +201,126 @@ function dateFilter(dateFrom, dateTo) {
   return { ...base, createdAt: filter };
 }
 
-/**
- * Get ISO week label (e.g. '2026-W24') from a Date.
- */
-function getISOWeekLabel(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const week1 = new Date(d.getFullYear(), 0, 4);
-  const weekNum = 1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
-  return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+/* ──────────────────────────────────────────────────────────────────
+ * SYDNEY CIVIL-CALENDAR BOUNDARIES.
+ *
+ * Every week and month on this dashboard is an AUSTRALIAN calendar period —
+ * the business week the client reviews on a Monday morning. All of this used
+ * to be computed with local getters (`new Date(y, 0, 4)`, `setHours(0,0,0,0)`,
+ * `getDay()`), which only produce Sydney boundaries if the process happens to
+ * run in Sydney. On the UTC hosts this deploys to, "the week" actually ran
+ * Monday 10:00 → Monday 10:00 AEST, so ten hours of every Monday's leads,
+ * payments and calls were reported against the PREVIOUS week.
+ *
+ * The rule here: a civil date is carried as a UTC-midnight `Date` used purely
+ * as a (y, m, d) triple — never as an instant — and is converted to a real
+ * instant only at the boundary, via `aestWallToUtc`. That two-step is what
+ * makes the arithmetic DST-safe: a Sydney week is 167 or 169 hours across an
+ * AEST/AEDT switch, so `weekStart + 7 * 86400000` lands an hour inside the
+ * neighbouring week twice a year. Use `addWeeks`/`addDays`, not millisecond
+ * arithmetic, to walk a window.
+ *
+ * Mirrors `utils/aestTime.js`, which owns the DST-aware conversion itself.
+ * ────────────────────────────────────────────────────────────────── */
+
+const { AEST_TZ, aestDateKey, aestWallToUtc } = require('../utils/aestTime');
+
+/** The Sydney civil date an instant falls on, as a UTC-midnight Date. */
+function civilOf(date) {
+  const [y, m, d] = aestDateKey(date).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+/** A civil date (UTC-midnight Date) → the instant Sydney midnight begins. */
+function civilToInstant(civil) {
+  return aestWallToUtc(civil.getUTCFullYear(), civil.getUTCMonth() + 1, civil.getUTCDate(), 0, 0, 0, 0);
+}
+
+/** Shift a civil date by whole days. Pure calendar arithmetic, no DST involved. */
+function addCivilDays(civil, days) {
+  const out = new Date(civil);
+  out.setUTCDate(out.getUTCDate() + days);
+  return out;
+}
+
+/** Monday of the Sydney week an instant falls in, as a civil date. */
+function civilWeekStart(date) {
+  const civil = civilOf(date);
+  return addCivilDays(civil, -((civil.getUTCDay() + 6) % 7));
+}
+
+/** Instant at which the Sydney week containing `date` begins (Mon 00:00). */
+function weekStartInstant(date) {
+  return civilToInstant(civilWeekStart(date));
+}
+
+/** `n` Sydney weeks after a week-start instant. DST-safe — never `+ 7 * 86400000`. */
+function addWeeks(weekStartUtc, n) {
+  return civilToInstant(addCivilDays(civilOf(weekStartUtc), n * 7));
+}
+
+/** `n` Sydney days after an instant, snapped to that day's midnight. */
+function addDays(instant, n) {
+  return civilToInstant(addCivilDays(civilOf(instant), n));
+}
+
+/** Instant at which a Sydney month begins (1st, 00:00). `month` is 1-based. */
+function monthStartInstant(year, month) {
+  return aestWallToUtc(year, month, 1, 0, 0, 0, 0);
 }
 
 /**
- * Get month label (e.g. 'Jan 2026') from a Date.
+ * Get ISO week label (e.g. '2026-W24') for the SYDNEY week an instant falls in.
+ */
+function getISOWeekLabel(date) {
+  // Thursday of this ISO week decides the year the week is numbered in.
+  const thursday = addCivilDays(civilOf(date), 3 - ((civilOf(date).getUTCDay() + 6) % 7));
+  const week1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
+  const weekNum = 1 + Math.round(
+    ((thursday - week1) / 86400000 - 3 + ((week1.getUTCDay() + 6) % 7)) / 7
+  );
+  return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+/** Sydney month key ('2026-09') for an instant. */
+function getMonthKey(date) {
+  return aestDateKey(date).slice(0, 7);
+}
+
+/**
+ * Get month label (e.g. 'Jan 2026') for the SYDNEY month an instant falls in.
  */
 function getMonthLabel(date) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[date.getMonth()]} ${date.getFullYear()}`;
+  const civil = civilOf(date);
+  return `${months[civil.getUTCMonth()]} ${civil.getUTCFullYear()}`;
 }
 
 /**
- * Generate an array of the last N weeks as { week, label } objects.
+ * Generate an array of the last N Sydney weeks as { week, label } objects.
  */
 function getLastNWeeks(n) {
   const weeks = [];
-  const now = new Date();
-  for (let i = n - 1; i >= 0; i -= 1) {
-    const d = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
-    const label = getISOWeekLabel(d);
+  let civil = civilWeekStart(new Date());
+  civil = addCivilDays(civil, -(n - 1) * 7);
+  for (let i = 0; i < n; i += 1) {
+    const label = getISOWeekLabel(civilToInstant(civil));
     weeks.push({ week: label, label });
+    civil = addCivilDays(civil, 7);
   }
   return weeks;
 }
 
 /**
- * Generate an array of the last N months as { month, label } objects.
+ * Generate an array of the last N Sydney months as { month, label } objects.
  */
 function getLastNMonths(n) {
   const months = [];
-  const now = new Date();
+  const civil = civilOf(new Date());
   for (let i = n - 1; i >= 0; i -= 1) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    months.push({ month: key, label: getMonthLabel(d) });
+    const d = new Date(Date.UTC(civil.getUTCFullYear(), civil.getUTCMonth() - i, 1));
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    months.push({ month: key, label: getMonthLabel(civilToInstant(d)) });
   }
   return months;
 }
@@ -183,9 +333,13 @@ async function getOverview(query = {}) {
   const dateTo = getDateTo(query);
   const filter = dateFilter(dateFrom, dateTo);
 
-  // Core stats
-  const [totalLeads, paidApps, completedApps, certificateCount] = await Promise.all([
+  // Core stats. `paidApps` is money banked in the period; `cohortPaidApps` is how
+  // many leads CREATED in the period have since converted — the funnel and the
+  // conversion rate need the cohort, or a period where older leads pay can show
+  // more paid applications than it had leads.
+  const [totalLeads, paidApps, cohortPaidApps, completedApps, certificateCount] = await Promise.all([
     Application.countDocuments(filter),
+    paidApplicationCount(paymentDateRange(dateFrom, dateTo)),
     Application.countDocuments({ ...filter, ...PAID_MATCH }),
     Application.countDocuments({ ...filter, status: { $in: COMPLETED_STATUSES } }),
     Certificate.countDocuments(filter),
@@ -238,50 +392,57 @@ async function getOverview(query = {}) {
   const paidRevenue = paidRevenueAgg[0]?.paidRevenue || 0;
 
   const avgPerApp = paidApps > 0 ? Math.round(totalRevenue / paidApps) : 0;
-  const conversionRate = totalLeads > 0 ? Math.round((paidApps / totalLeads) * 10000) / 100 : 0;
+  const conversionRate = totalLeads > 0 ? Math.round((cohortPaidApps / totalLeads) * 10000) / 100 : 0;
 
   // Weekly leads vs paid (last 8 weeks)
   const weekBuckets = getLastNWeeks(8);
   const weeklyLeadsVsPaid = await Promise.all(
     weekBuckets.map(async (w) => {
       const weekStart = getWeekStartFromLabel(w.week);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const weekEnd = addWeeks(weekStart, 1);
       const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
       const [leads, paid] = await Promise.all([
         Application.countDocuments(wFilter),
-        Application.countDocuments({ ...wFilter, ...PAID_MATCH }),
+        paidApplicationCount({ $gte: weekStart, $lt: weekEnd }),
       ]);
       return { week: w.week, label: w.label, leads, paid };
     })
   );
 
-  // Pipeline funnel
+  // Pipeline funnel — a COHORT view (what became of the leads created in this
+  // period), so its stages nest and its ratios stay ≤ 100%. The headline "Paid
+  // Applications" KPI above is deliberately the other thing: money banked in the
+  // period, irrespective of signup date.
   const pipelineFunnel = {
     totalLeads,
-    paid: paidApps,
+    paid: cohortPaidApps,
     completed: completedApps,
     certified: certificateCount,
-    leadToPaid: totalLeads > 0 ? Math.round((paidApps / totalLeads) * 10000) / 100 : 0,
-    paidToDone: paidApps > 0 ? Math.round((completedApps / paidApps) * 10000) / 100 : 0,
+    leadToPaid: totalLeads > 0 ? Math.round((cohortPaidApps / totalLeads) * 10000) / 100 : 0,
+    paidToDone: cohortPaidApps > 0 ? Math.round((completedApps / cohortPaidApps) * 10000) / 100 : 0,
     certRate: completedApps > 0 ? Math.round((certificateCount / completedApps) * 10000) / 100 : 0,
   };
 
-  // Revenue trend (last 12 months)
+  // Revenue trend (last 12 Sydney months)
   const monthBuckets = getLastNMonths(12);
+  const civilToday = civilOf(new Date());
+  const trendFrom = monthStartInstant(civilToday.getUTCFullYear(), civilToday.getUTCMonth() - 10);
   const revenueByMonth = await Payment.aggregate([
     {
       $match: {
         isTest: { $ne: true }, isArchived: { $ne: true },
         status: 'completed',
         type: { $in: REVENUE_PAYMENT_TYPES },
-        createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth() - 11, 1) },
+        createdAt: { $gte: trendFrom },
       },
     },
     {
+      // Bucket in Sydney, or a payment taken late on the last night of a month
+      // is reported in the following one.
       $group: {
         _id: {
-          year: { $year: '$createdAt' },
-          month: { $month: '$createdAt' },
+          year: { $year: { date: '$createdAt', timezone: AEST_TZ } },
+          month: { $month: { date: '$createdAt', timezone: AEST_TZ } },
         },
         revenue: { $sum: '$amount' },
       },
@@ -421,7 +582,7 @@ async function getOverview(query = {}) {
   const weeklyPaidRevenue = await Promise.all(
     weekBuckets.map(async (w) => {
       const weekStart = getWeekStartFromLabel(w.week);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const weekEnd = addWeeks(weekStart, 1);
       const agg = await Payment.aggregate([
         {
           $match: {
@@ -441,19 +602,20 @@ async function getOverview(query = {}) {
   // visualise how top-of-funnel calling drives leads → paid conversions.
   // CallEvent.date is an AEST 'YYYY-MM-DD' string, so we match on a date-string
   // range; calls = outbound only (mirrors the Call Scorecard's "calls" metric).
-  const toDateStr = (d) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // `aestDateKey`, not local getters — CallEvent.date is a SYDNEY civil date, so
+  // formatting the window with the server's calendar shifted the range by a day.
+  const toDateStr = (d) => aestDateKey(d);
   const funnelWeeks = getLastNWeeks(5);
   const funnelTrend = await Promise.all(
     funnelWeeks.map(async (w) => {
       const weekStart = getWeekStartFromLabel(w.week);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const weekEnd = addWeeks(weekStart, 1);
       const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
       const startStr = toDateStr(weekStart);
-      const endStr = toDateStr(new Date(weekEnd.getTime() - 24 * 60 * 60 * 1000)); // inclusive last day
+      const endStr = toDateStr(addDays(weekEnd, -1)); // inclusive last day
       const [leads, paid, calls] = await Promise.all([
         Application.countDocuments(wFilter),
-        Application.countDocuments({ ...wFilter, ...PAID_MATCH }),
+        paidApplicationCount({ $gte: weekStart, $lt: weekEnd }),
         CallEvent.countDocuments({ date: { $gte: startStr, $lte: endStr }, direction: { $ne: 'incoming' } }),
       ]);
       return { week: w.week, label: w.label, leads, paid, calls };
@@ -489,8 +651,12 @@ async function getLeads(query = {}) {
   const dateTo = getDateTo(query);
   const filter = dateFilter(dateFrom, dateTo);
 
-  const [totalLeads, paidCount] = await Promise.all([
+  // `paidCount` = applications that banked money in the period (whenever they
+  // signed up); `cohortPaidCount` = leads created in the period that have since
+  // converted, which is what the lead-conversion percentage has to divide by.
+  const [totalLeads, paidCount, cohortPaidCount] = await Promise.all([
     Application.countDocuments(filter),
+    paidApplicationCount(paymentDateRange(dateFrom, dateTo)),
     Application.countDocuments({ ...filter, ...PAID_MATCH }),
   ]);
 
@@ -505,7 +671,7 @@ async function getLeads(query = {}) {
     { $group: { _id: null, revenue: { $sum: '$amount' } } },
   ]);
   const revenue = revenueAgg[0]?.revenue || 0;
-  const conversionPct = totalLeads > 0 ? Math.round((paidCount / totalLeads) * 10000) / 100 : 0;
+  const conversionPct = totalLeads > 0 ? Math.round((cohortPaidCount / totalLeads) * 10000) / 100 : 0;
   const avgPerApp = paidCount > 0 ? Math.round(revenue / paidCount) : 0;
 
   // New leads per week (last 8 weeks)
@@ -513,7 +679,7 @@ async function getLeads(query = {}) {
   const newLeadsPerWeek = await Promise.all(
     weekBuckets.map(async (w) => {
       const weekStart = getWeekStartFromLabel(w.week);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const weekEnd = addWeeks(weekStart, 1);
       const count = await Application.countDocuments({
         isTest: { $ne: true }, isArchived: { $ne: true },
         status: { $ne: 'Archived' },
@@ -562,11 +728,11 @@ async function getLeads(query = {}) {
   const leadsVsPaidWeekly = await Promise.all(
     weekBuckets.map(async (w) => {
       const weekStart = getWeekStartFromLabel(w.week);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const weekEnd = addWeeks(weekStart, 1);
       const wFilter = { isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' }, createdAt: { $gte: weekStart, $lt: weekEnd } };
       const [leads, paid] = await Promise.all([
         Application.countDocuments(wFilter),
-        Application.countDocuments({ ...wFilter, ...PAID_MATCH }),
+        paidApplicationCount({ $gte: weekStart, $lt: weekEnd }),
       ]);
       return { week: w.week, label: w.label, leads, paid };
     })
@@ -701,14 +867,24 @@ async function getAgentPerformance(query = {}) {
   // All agents (anyone flagged as a sales agent, regardless of role)
   const agents = await User.find({ isSalesAgent: true, status: 'active' }).select('firstName lastName').lean();
 
+  // Applications that banked money in this period, resolved once and reused per
+  // agent — same basis as the per-agent revenue aggregation below, so an agent's
+  // "paid" and "revenue" columns always describe the same set of deals.
+  const periodPaidIds = await paidApplicationIds(paymentDateRange(dateFrom, dateTo));
+
   // Per-agent stats
   const details = await Promise.all(
     agents.map(async (agent) => {
       const agentFilter = { ...filter, assignedAgentId: agent._id };
-      const [assigned, paid, completed] = await Promise.all([
+      // `paid` counts deals that banked money in the period; `cohortPaid` counts
+      // how many of the leads ASSIGNED in the period have since converted. The
+      // conversion rate has to use the cohort — dividing payment activity by new
+      // assignments lets an agent closing older leads read well over 100%.
+      const [assigned, paid, completed, cohortPaid] = await Promise.all([
         Application.countDocuments(agentFilter),
-        Application.countDocuments({ ...agentFilter, ...PAID_MATCH }),
+        Application.countDocuments({ _id: { $in: periodPaidIds }, assignedAgentId: agent._id }),
         Application.countDocuments({ ...agentFilter, status: { $in: COMPLETED_STATUSES } }),
+        Application.countDocuments({ ...agentFilter, ...PAID_MATCH }),
       ]);
 
       // Revenue for this agent
@@ -741,7 +917,7 @@ async function getAgentPerformance(query = {}) {
       ]);
       const calls = callAgg[0]?.calls || 0;
 
-      const conversionPct = assigned > 0 ? Math.round((paid / assigned) * 10000) / 100 : 0;
+      const conversionPct = assigned > 0 ? Math.round((cohortPaid / assigned) * 10000) / 100 : 0;
 
       return {
         agentName: `${agent.firstName} ${agent.lastName}`,
@@ -751,16 +927,18 @@ async function getAgentPerformance(query = {}) {
         revenue,
         conversionPct,
         calls,
+        cohortPaid,
       };
     })
   );
 
   const totalAssigned = details.reduce((sum, d) => sum + d.assigned, 0);
   const totalPaid = details.reduce((sum, d) => sum + d.paid, 0);
+  const totalCohortPaid = details.reduce((sum, d) => sum + d.cohortPaid, 0);
   const totalRevenue = details.reduce((sum, d) => sum + d.revenue, 0);
   const totalCalls = details.reduce((sum, d) => sum + d.calls, 0);
   const agentCount = agents.length;
-  const conversionPct = totalAssigned > 0 ? Math.round((totalPaid / totalAssigned) * 10000) / 100 : 0;
+  const conversionPct = totalAssigned > 0 ? Math.round((totalCohortPaid / totalAssigned) * 10000) / 100 : 0;
 
   // Revenue by agent (for chart)
   const revenueByAgent = details
@@ -1058,26 +1236,20 @@ async function getMarketing(query = {}) {
 }
 
 /**
- * Helper: Get week start date from ISO week label (e.g. '2026-W24')
+ * ISO week label (e.g. '2026-W24') → the instant that SYDNEY week begins
+ * (Monday 00:00 Australia/Sydney). Inverse of `getISOWeekLabel`.
  */
 function getWeekStartFromLabel(weekLabel) {
-  const [year, weekNum] = weekLabel.split('-W').map(Number);
-  const jan4 = new Date(year, 0, 4);
-  const dayOfWeek = jan4.getDay() || 7;
-  const monday = new Date(jan4);
-  monday.setDate(jan4.getDate() - dayOfWeek + 1 + (weekNum - 1) * 7);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
+  const [year, weekNum] = String(weekLabel).split('-W').map(Number);
+  // Jan 4 is always in ISO week 1, so its Monday anchors the year.
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const monday = addCivilDays(jan4, -((jan4.getUTCDay() + 6) % 7) + (weekNum - 1) * 7);
+  return civilToInstant(monday);
 }
 
-/** Monday Date → ISO week key like '2026-W29'. */
+/** Monday instant → ISO week key like '2026-W29'. */
 function mondayToWeekKey(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  return getISOWeekLabel(date);
 }
 
 // Editable ad-spend platforms — the ACTIVE canonical keys. A retired source drops out
@@ -1092,14 +1264,9 @@ const getSpendEditPlatforms = () => marketingSourceService.listSpendPlatforms();
 async function getMarketingSpendHistory({ weeks = 12 } = {}) {
   const n = Math.min(Math.max(Number(weeks) || 12, 1), 52);
 
-  // Monday of the current week
-  const now = new Date();
-  const day = now.getDay() || 7;
-  const currentMonday = new Date(now);
-  currentMonday.setDate(now.getDate() - day + 1);
-  currentMonday.setHours(0, 0, 0, 0);
-  const earliest = new Date(currentMonday);
-  earliest.setDate(currentMonday.getDate() - (n - 1) * 7);
+  // Monday of the current Sydney week
+  const currentMonday = weekStartInstant(new Date());
+  const earliest = addWeeks(currentMonday, -(n - 1));
 
   const docs = await MarketingSpend.find({ weekOf: { $gte: earliest } })
     .sort({ weekOf: 1, updatedAt: 1 })
@@ -1109,8 +1276,10 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
   const weekMap = {};
   const seenPlatforms = new Set();
   docs.forEach((doc) => {
-    const monday = new Date(doc.weekOf);
-    monday.setHours(0, 0, 0, 0);
+    // `weekOf` is bucketed by the SYDNEY week it lands in, not compared for
+    // equality — rows written before the boundaries moved to Sydney are stored
+    // at the host's local midnight and still belong to this same Monday.
+    const monday = weekStartInstant(doc.weekOf);
     const weekKey = mondayToWeekKey(monday);
     if (!weekMap[weekKey]) weekMap[weekKey] = { weekKey, weekOf: monday, total: 0, platforms: {} };
     const canonical = spendKeyMap[doc.platform] || doc.platform;
@@ -1125,8 +1294,7 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
   // Fill every week in the window so the trend chart is continuous.
   const weeksArr = [];
   for (let i = n - 1; i >= 0; i -= 1) {
-    const m = new Date(currentMonday);
-    m.setDate(currentMonday.getDate() - i * 7);
+    const m = addWeeks(currentMonday, -i);
     const wk = mondayToWeekKey(m);
     weeksArr.push(weekMap[wk] || { weekKey: wk, weekOf: m, total: 0, platforms: {} });
   }
@@ -1140,6 +1308,22 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
 }
 
 /**
+ * The stored `weekOf` for an ad-spend cell, plus the range that identifies it.
+ *
+ * Writes match on the RANGE, not on the exact instant. `weekOf` used to be the
+ * host's local midnight; it is now Sydney's, so an equality match would miss
+ * every row written before that change and silently insert a duplicate
+ * alongside it — and `getMarketingSpendHistory` sums the rows in a week, so the
+ * cockpit would have shown the old and new figure added together. Matching the
+ * week window instead adopts the existing row and rewrites it in place, which
+ * is why no backfill is needed.
+ */
+function spendWeekTarget(weekKey) {
+  const monday = getWeekStartFromLabel(weekKey);
+  return { monday, range: { $gte: monday, $lt: addWeeks(monday, 1) } };
+}
+
+/**
  * Upsert a single (week, platform) ad-spend cell with optional notes.
  * amount <= 0 clears the cell. Guarantees one record per (week, platform).
  */
@@ -1147,15 +1331,18 @@ async function upsertMarketingSpend({ weekKey, platform, amount, notes, userId }
   // The MarketingSpend enum used to reject an unknown key at the schema layer; it had
   // to go so runtime-added sources could be saved, so the gate lives here now.
   await marketingSourceService.assertValidSpendPlatform(platform);
-  const monday = getWeekStartFromLabel(weekKey);
+  const { monday, range } = spendWeekTarget(weekKey);
   const amt = Number(amount) || 0;
   if (amt <= 0) {
-    await MarketingSpend.deleteMany({ platform, weekOf: monday });
+    await MarketingSpend.deleteMany({ platform, weekOf: range });
     return { deleted: true, platform, weekKey };
   }
   const doc = await MarketingSpend.findOneAndUpdate(
-    { platform, weekOf: monday },
-    { $set: { amount: amt, notes: notes || '', updatedAt: new Date() }, $setOnInsert: { createdBy: userId } },
+    { platform, weekOf: range },
+    {
+      $set: { amount: amt, notes: notes || '', updatedAt: new Date() },
+      $setOnInsert: { createdBy: userId, weekOf: monday },
+    },
     { new: true, upsert: true, runValidators: true },
   );
   return { item: doc };
@@ -1163,8 +1350,8 @@ async function upsertMarketingSpend({ weekKey, platform, amount, notes, userId }
 
 /** Delete an ad-spend cell for a (week, platform). */
 async function deleteMarketingSpend({ weekKey, platform }) {
-  const monday = getWeekStartFromLabel(weekKey);
-  const res = await MarketingSpend.deleteMany({ platform, weekOf: monday });
+  const { range } = spendWeekTarget(weekKey);
+  const res = await MarketingSpend.deleteMany({ platform, weekOf: range });
   return { deleted: res.deletedCount };
 }
 
@@ -1291,17 +1478,15 @@ async function getSupplierLiability(query = {}) {
   const pendingItems = liabilityItems.filter((i) => i.status === 'pending');
   const forecastedItems = liabilityItems.filter((i) => i.status === 'forecasted');
 
-  // This week's liability (items with deadline this week)
-  const weekStart = new Date(now);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
-  weekStart.setHours(0, 0, 0, 0);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
+  // This week's liability (items with deadline this week), Sydney Mon → Sun.
+  // The old local-calendar version also mis-derived Monday: `getDate() -
+  // getDay() + 1` returns NEXT Monday when run on a Sunday.
+  const weekStart = weekStartInstant(now);
+  const weekEnd = addWeeks(weekStart, 1); // exclusive
   const thisWeekItems = liabilityItems.filter(
     (i) => i.rtoCompletionDeadline &&
       new Date(i.rtoCompletionDeadline) >= weekStart &&
-      new Date(i.rtoCompletionDeadline) <= weekEnd
+      new Date(i.rtoCompletionDeadline) < weekEnd
   );
   const thisWeekLiability = thisWeekItems.reduce((s, i) => s + i.amountOwed, 0);
 
@@ -1378,26 +1563,21 @@ async function getWeeklyScorecard(query = {}) {
     if (query.monthKey && /^\d{4}-\d{2}$/.test(query.monthKey)) {
       [y, m] = query.monthKey.split('-').map(Number);
     } else {
-      const now = new Date();
-      y = now.getFullYear();
-      m = now.getMonth() + 1;
+      const civilNow = civilOf(new Date());
+      y = civilNow.getUTCFullYear();
+      m = civilNow.getUTCMonth() + 1;
     }
-    weekStart = new Date(y, m - 1, 1);
-    weekStart.setHours(0, 0, 0, 0);
-    weekEnd = new Date(y, m, 1); // first day of next month
-    prevStart = new Date(y, m - 2, 1);
+    // Sydney month boundaries. `monthStartInstant` normalises the 13th/0th month.
+    weekStart = monthStartInstant(y, m);
+    weekEnd = monthStartInstant(y, m + 1); // first day of next month
+    prevStart = monthStartInstant(y, m - 1);
     prevEnd = new Date(weekStart);
   } else {
-    if (query.weekKey) {
-      weekStart = getWeekStartFromLabel(query.weekKey);
-    } else {
-      const now = new Date();
-      weekStart = new Date(now);
-      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
-      weekStart.setHours(0, 0, 0, 0);
-    }
-    weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
-    prevStart = new Date(weekStart.getTime() - 7 * 86400000);
+    weekStart = query.weekKey
+      ? getWeekStartFromLabel(query.weekKey)
+      : weekStartInstant(new Date());
+    weekEnd = addWeeks(weekStart, 1);
+    prevStart = addWeeks(weekStart, -1);
     prevEnd = new Date(weekStart);
   }
 
@@ -1441,9 +1621,19 @@ async function getWeeklyScorecard(query = {}) {
   const leadsBySource = {};
   leadsBySourceAgg.forEach((r) => { leadsBySource[r._id] = r.count; });
 
+  // Applications Paid — applications that RECEIVED MONEY this period, whenever
+  // they signed up. Resolved as ids so the by-source chart and the per-agent
+  // column below split exactly this set and always sum back to the card.
+  const [paidIds, prevPaidIds] = await Promise.all([
+    paidApplicationIds({ $gte: weekStart, $lt: weekEnd }),
+    paidApplicationIds({ $gte: prevStart, $lt: prevEnd }),
+  ]);
+  const appsPaid = paidIds.length;
+  const prevAppsPaid = prevPaidIds.length;
+
   // Proceeded by source (paid applications this week by source)
   const proceededBySourceAgg = await Application.aggregate([
-    { $match: { ...wFilter, ...PAID_MATCH } },
+    { $match: { _id: { $in: paidIds } } },
     { $lookup: { from: 'users', localField: 'studentId', foreignField: '_id', as: 'student' } },
     { $unwind: '$student' },
     { $addFields: { src: { $ifNull: ['$sourceAttribution.source', { $ifNull: ['$student.sourceAttribution.source', 'direct'] }] } } },
@@ -1451,12 +1641,6 @@ async function getWeeklyScorecard(query = {}) {
   ]);
   const proceededBySource = {};
   proceededBySourceAgg.forEach((r) => { proceededBySource[r._id] = r.count; });
-
-  // Applications Paid
-  const [appsPaid, prevAppsPaid] = await Promise.all([
-    Application.countDocuments({ ...wFilter, ...PAID_MATCH }),
-    Application.countDocuments({ ...prevFilter, ...PAID_MATCH }),
-  ]);
 
   // Applications Completed (student completed all obligations)
   const [appsCompleted, prevAppsCompleted] = await Promise.all([
@@ -1482,7 +1666,7 @@ async function getWeeklyScorecard(query = {}) {
   // shared with the daily Call Scorecard), not the Application contact counters.
   const callScorecardService = require('./callScorecardService');
   const weekFromStr = callScorecardService.dateStrAEST(weekStart);
-  const weekToStr = callScorecardService.dateStrAEST(new Date(weekEnd.getTime() - 86400000));
+  const weekToStr = callScorecardService.dateStrAEST(addDays(weekEnd, -1));
   const weekCallEvents = await callScorecardService.queryEvents({ from: weekFromStr, to: weekToStr });
   const callEventsByAgent = {};
   weekCallEvents.forEach((e) => {
@@ -1495,16 +1679,20 @@ async function getWeeklyScorecard(query = {}) {
     staffAll.map(async (agent) => {
       const agentFilter = { ...wFilter, assignedAgentId: agent._id };
 
-      const [assigned, paid, completed] = await Promise.all([
+      // See getAgentPerformance: `paid` is money banked this period, `cohortPaid`
+      // is how many of this period's new assignments have converted. Conversion
+      // must divide by the cohort or it can exceed 100%.
+      const [assigned, paid, completed, cohortPaid] = await Promise.all([
         Application.countDocuments(agentFilter),
-        Application.countDocuments({ ...agentFilter, ...PAID_MATCH }),
+        Application.countDocuments({ _id: { $in: paidIds }, assignedAgentId: agent._id }),
         Application.countDocuments({ ...agentFilter, status: { $in: COMPLETED_STATUSES } }),
+        Application.countDocuments({ ...agentFilter, ...PAID_MATCH }),
       ]);
 
       const callAgg = callScorecardService.aggregate(callEventsByAgent[String(agent._id)] || []);
       const totalCalls = callAgg.calls;
       const quality = callAgg.quality;
-      const conversionPct = assigned > 0 ? Math.round((paid / assigned) * 100) : 0;
+      const conversionPct = assigned > 0 ? Math.round((cohortPaid / assigned) * 100) : 0;
 
       // Revenue from this agent's applications
       const agentRevenueAgg = await Payment.aggregate([
@@ -1629,14 +1817,11 @@ const LEAD_LABEL = LEAD_STATUS_META.reduce((m, s) => { m[s.value] = s.label; ret
 
 function bucketKey(date, granularity) {
   const d = new Date(date);
-  if (granularity === 'monthly') {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  }
-  if (granularity === 'weekly') {
-    return getISOWeekLabel(d);
-  }
-  // daily
-  return d.toISOString().slice(0, 10);
+  if (granularity === 'monthly') return getMonthKey(d);
+  if (granularity === 'weekly') return getISOWeekLabel(d);
+  // daily — the Sydney civil date, not the UTC one (`toISOString().slice(0,10)`
+  // put every evening transition on the following day).
+  return aestDateKey(d);
 }
 
 async function getLeadStatusTracking(query = {}) {

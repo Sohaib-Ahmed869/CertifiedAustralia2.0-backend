@@ -101,6 +101,11 @@ paymentSchema.index({ xeroSyncStatus: 1 });
 paymentSchema.index({ applicationId: 1, status: 1 });
 paymentSchema.index({ isTest: 1 });
 paymentSchema.index({ isArchived: 1 });
+// Every period metric on the CEO dashboard — revenue collected AND, since the
+// paid-applications counts moved off the application's signup date, "applications
+// paid this week" — matches on exactly this shape. The weekly charts run it once
+// per bucket (8 weeks on Overview), so it is worth an index.
+paymentSchema.index({ status: 1, type: 1, createdAt: 1 });
 
 // Inherit the test/archived flags from the parent application on creation, so
 // payments recorded against a test OR archived application are excluded from

@@ -20,11 +20,37 @@ const getMonthStart = (date = new Date()) => {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 };
 
-// "Paid" = money actually received on the application, not "advanced past the
-// payment stage" — an admin can move a student forward without a payment, and
-// counting those inflated every conversion figure. Mirrors the same rule in
-// ceoDashboardService (see the PAID_MATCH comment there); partials count.
-const PAID_MATCH = { $or: [{ paymentCompleted: true }, { partialPayment: true }] };
+// "Paid apps in period" = applications that RECEIVED MONEY in the period,
+// irrespective of when they signed up. Partials count — a deposit is money in
+// the door. Mirrors `paidApplicationIds` in ceoDashboardService.
+//
+// This used to be `{ paymentCompleted: true } OR { partialPayment: true }`
+// (which answers "has this application EVER paid?") bucketed on
+// `Application.updatedAt` — doubly wrong, because the Application schema has no
+// `timestamps: true` and writes `updatedAt` in exactly one unrelated place, so
+// the filter matched almost nothing and every agent's paid actual read near
+// zero. Bucketing on the payment is the only way to date this honestly:
+// `Payment.createdAt` IS the payment instant (there is no `paidAt`), and the
+// admin "Mark as Paid" screen deliberately backdates it to the day the money
+// actually arrived.
+
+/** Distinct application ids that received money inside the window. */
+const paidApplicationIdsInPeriod = async (periodStart, periodEnd) => {
+  const rows = await Payment.aggregate([
+    {
+      $match: {
+        status: 'completed',
+        type: { $in: ['upfront', 'plan', 'manualMarkPaid'] },
+        createdAt: { $gte: periodStart, $lt: periodEnd },
+        isTest: { $ne: true },
+        isArchived: { $ne: true },
+        applicationId: { $ne: null },
+      },
+    },
+    { $group: { _id: '$applicationId' } },
+  ]);
+  return rows.map((r) => r._id);
+};
 
 // ---------------------------------------------------------------------------
 // CRUD
@@ -142,6 +168,10 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
   // Calculate actuals for each agent
   const results = [];
 
+  // Applications that banked money in the period, resolved once for all agents —
+  // same basis as the per-agent revenue aggregation below.
+  const periodPaidIds = await paidApplicationIdsInPeriod(periodStart, periodEnd);
+
   for (const agent of agents) {
     const agentId = agent._id.toString();
     const target = targetMap.get(agentId) || {};
@@ -154,12 +184,11 @@ const getPerformanceVsTargets = async ({ period = 'weekly', date }) => {
       status: { $ne: 'Archived' },
     });
 
-    // Paid apps in period
+    // Paid apps in period — applications that received money in the period,
+    // irrespective of when they signed up.
     const paid = await Application.countDocuments({
+      _id: { $in: periodPaidIds },
       assignedAgentId: agent._id,
-      ...PAID_MATCH,
-      updatedAt: { $gte: periodStart, $lt: periodEnd },
-      isTest: { $ne: true }, isArchived: { $ne: true },
     });
 
     // Revenue in period
@@ -320,12 +349,13 @@ const getMyPerformance = async (agentId) => {
     status: { $ne: 'Archived' },
   });
 
-  // Paid this month
+  // Paid this month — applications that received money this month, irrespective
+  // of when they signed up. (Was bucketed on the never-maintained
+  // `Application.updatedAt`; see the note above PAID_MATCH.)
+  const monthPaidIds = await paidApplicationIdsInPeriod(monthStart, monthEnd);
   const paidThisMonth = await Application.countDocuments({
+    _id: { $in: monthPaidIds },
     assignedAgentId: agentObjId,
-    ...PAID_MATCH,
-    updatedAt: { $gte: monthStart, $lt: monthEnd },
-    isTest: { $ne: true }, isArchived: { $ne: true },
   });
 
   return {
