@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { HEAR_ABOUT_OPTIONS } = require('./ScreeningForm');
 
 /**
  * Marketing source registry — the single source of truth for the `?source=` keys
@@ -54,6 +55,27 @@ const marketingSourceSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: 'link',
+    },
+    /**
+     * The "How did you hear about us?" answer this link IMPLIES.
+     *
+     * A lead arriving on `?source=facebook` demonstrably came from Facebook, but the
+     * screening step asked them anyway and they were free to answer "TikTok" — which
+     * is exactly what the live data shows. When this is set, registration stops asking:
+     * the step is hidden and `authService.register` writes this value onto the
+     * ScreeningForm, so the self-reported answer can no longer contradict the link.
+     *
+     * EMPTY STRING means "ask the student", and it is the honest answer for a link
+     * that doesn't determine a channel — a Linktree bio hub, a printed QR code, a
+     * phone mainline, an EDM blast. Those still show the step.
+     *
+     * Constrained to the ScreeningForm enum because that is where the value lands;
+     * anything else would be silently dropped on save.
+     */
+    hearAbout: {
+      type: String,
+      enum: [...HEAR_ABOUT_OPTIONS, ''],
+      default: '',
     },
     /**
      * Alternate keys that roll UP into this source when ad spend was logged under them.

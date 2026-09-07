@@ -14,6 +14,21 @@ module.exports = {
     res.status(200).json({ items });
   }),
 
+  /**
+   * `{ key, label, hearAbout }` for every source, unauthenticated.
+   *
+   * The public RegisterPage is the caller: it needs to know, before the student ever
+   * reaches the screening step, whether the link they arrived on already answers
+   * "How did you hear about us?". No PII, no counts — just the label registry.
+   *
+   * `HEAR_ABOUT_OPTIONS` rides along so the register page can be told what a value
+   * means without a second round trip.
+   */
+  publicList: asyncHandler(async (req, res) => {
+    const items = await service.listPublic();
+    res.status(200).json({ items, hearAboutOptions: service.HEAR_ABOUT_OPTIONS });
+  }),
+
   create: asyncHandler(async (req, res) => {
     const item = await service.create(req.body, req.user?._id);
     res.status(201).json({ item });

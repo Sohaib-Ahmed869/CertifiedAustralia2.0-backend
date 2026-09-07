@@ -6,6 +6,7 @@ const Student = require('../models/Student');
 const Application = require('../models/Application');
 const ScreeningForm = require('../models/ScreeningForm');
 const AppError = require('../utils/AppError');
+const marketingSourceService = require('./marketingSourceService');
 const { sendTemplatedEmail } = require('./emailService');
 const {
   sendWelcomeEmail,
@@ -72,6 +73,29 @@ const register = async (data) => {
       }
     : undefined;
 
+  /**
+   * Where the link already proves the channel, the link wins.
+   *
+   * `?source=` is observed; `howDidYouHear` is self-reported, and the two contradicted
+   * each other in live data (a `facebook` lead who answered "TikTok", an EDM lead who
+   * answered "Google"). RegisterPage hides the question for these sources, but the
+   * decision is re-made here rather than trusted from the client: a stale tab, a
+   * pre-filled draft or a hand-rolled POST could still carry a conflicting answer, and
+   * the whole point is that the two fields can no longer disagree.
+   *
+   * A source that doesn't determine a channel resolves to '' — the student was asked,
+   * and whatever they said stands.
+   */
+  let resolvedHearAbout = howDidYouHear;
+  if (source) {
+    try {
+      const implied = await marketingSourceService.resolveHearAbout(source);
+      if (implied) resolvedHearAbout = implied;
+    } catch {
+      // The registry is a labelling convenience — never block a sign-up over it.
+    }
+  }
+
   // 1. Create student
   const student = await Student.create({
     firstName,
@@ -111,7 +135,7 @@ const register = async (data) => {
     state: state || undefined,
     hasFormalQualifications: hasFormalQualifications || false,
     formalQualifications: formalQualifications ? [formalQualifications] : [],
-    howDidYouHear: howDidYouHear || undefined,
+    howDidYouHear: resolvedHearAbout || undefined,
     status: 'submitted',
     submittedAt: new Date(),
   });

@@ -7,6 +7,7 @@
  * labels, colours, charts or rolls up a `?source=` key now reads from here.
  */
 const MarketingSource = require('../models/MarketingSource');
+const { HEAR_ABOUT_OPTIONS } = require('../models/ScreeningForm');
 const AppError = require('../utils/AppError');
 
 /**
@@ -15,41 +16,67 @@ const AppError = require('../utils/AppError');
  * lifted verbatim from the declarations these replaced so nothing re-renders differently.
  *
  * `aliases` carry the legacy ad-spend keys the old SPEND_KEY_TO_SOURCE mapped by hand.
+ *
+ * `hearAbout` is the screening answer the link implies — set where the link PROVES the
+ * channel, empty where it genuinely doesn't (a bio hub, a printed QR, a phone line, an
+ * email blast can each be reached from anywhere, so those still ask). These are only
+ * DEFAULTS: staff retune any of them from Marketing Links → Edit.
  */
 const BUILT_IN = [
   { key: 'referral', label: 'Refer a Friend', color: '#0a9d42', icon: 'gift', order: 10,
+    hearAbout: 'A friend or colleague',
     description: 'Share with current students to refer friends — every referral is auto-tagged for attribution' },
   { key: 'tiktok', label: 'TikTok', color: '#000000', icon: 'tiktok', order: 20,
+    hearAbout: 'TikTok',
     description: 'Use this link in TikTok ad campaigns and bio links' },
   { key: 'facebook', label: 'Facebook', color: '#1877F2', icon: 'facebook', order: 30, aliases: ['meta', 'meta_paid'],
+    hearAbout: 'Facebook',
     description: 'Use this link for organic Facebook traffic (posts, bio, groups)' },
   { key: 'facebook_ads', label: 'Facebook Ads', color: '#1877F2', icon: 'facebook', order: 40, aliases: ['meta_ads'],
+    hearAbout: 'Facebook',
     description: 'Use this link in paid Facebook ad campaigns for attribution' },
   { key: 'instagram', label: 'Instagram', color: '#E4405F', icon: 'instagram', order: 50,
+    hearAbout: 'Instagram',
     description: 'Use this link for organic Instagram traffic (bio, stories, reels)' },
   { key: 'instagram_ads', label: 'Instagram Ads', color: '#C13584', icon: 'instagram', order: 60,
+    hearAbout: 'Instagram',
     description: 'Use this link in paid Instagram ad campaigns for attribution' },
   { key: 'linkedin', label: 'LinkedIn', color: '#0A66C2', icon: 'linkedin', order: 70,
+    hearAbout: 'LinkedIn',
     description: 'Use this link in LinkedIn ad campaigns and posts' },
   { key: 'google', label: 'Google', color: '#EA4335', icon: 'google', order: 80,
+    hearAbout: 'Google',
     description: 'Use this link in Google Ads search & display campaigns' },
+  // A Linktree hub is shared from every social profile at once — the click proves
+  // nothing about which one they came from, so this one still asks.
   { key: 'linktree', label: 'Linktree', color: '#254F1A', icon: 'linktree', order: 90,
+    hearAbout: '',
     description: 'Use this link in the Linktree bio hub shared across all social profiles' },
   { key: 'seo', label: 'SEO / Organic Search', color: '#0EA5E9', icon: 'search', order: 100,
+    hearAbout: 'Google',
     description: 'Use this link for organic search traffic — blog posts, landing pages & directories' },
+  // A flyer is not a "Newspaper or magazine" and the enum has no closer answer, so ask.
   { key: 'print', label: 'QR Code / Print', color: '#7C3AED', icon: 'qr', order: 110, aliases: ['print_qr'],
+    hearAbout: '',
     description: 'For flyers, brochures & business cards — generate the QR code' },
+  // They phoned us; how they found the number is the very thing we don't know.
   { key: 'mainline', label: 'Incoming Calls (Mainline)', color: '#10B981', icon: 'phone-call', order: 120,
+    hearAbout: '',
     description: 'Share with leads from incoming calls on the main phone line' },
   { key: 'vip', label: 'VIP Line', color: '#F59E0B', icon: 'star', order: 130, aliases: ['vip_line'],
+    hearAbout: 'A friend or colleague',
     description: 'Exclusive link for leads from the VIP / personal number' },
   { key: 'gabby', label: "Gabby's Line", color: '#EC4899', icon: 'phone', order: 140, aliases: ['gabby_line'],
+    hearAbout: 'A friend or colleague',
     description: "Tracking link for leads from Gabby's phone number" },
   { key: 'rsg', label: 'Rehman Sheriff Group', color: '#6366F1', icon: 'building', order: 150,
+    hearAbout: '',
     description: 'Tracking link for leads from Rehman Sheriff Group' },
   { key: 'edm_campaign_floor_pricing', label: 'EDM Campaign — Floor Pricing', color: '#0D9488', icon: 'mail', order: 160,
+    hearAbout: '',
     description: 'Use this link in the floor-pricing EDM email campaign — every signup is attributed to this campaign' },
   { key: 'certified_now_pay_later', label: 'Certified Now. Pay Later', color: '#EA580C', icon: 'credit-card', order: 170,
+    hearAbout: '',
     description: 'Use this link for the "Certified Now. Pay Later" payment-plan promotion — every signup from the offer is attributed here' },
 ];
 
@@ -69,6 +96,24 @@ let cachePromise = null;
 function invalidate() {
   cache = null;
   cachePromise = null;
+}
+
+/**
+ * Stamp the shipped `hearAbout` defaults onto rows that predate the field.
+ *
+ * Filtered on `$exists: false`, never on a falsy value: an empty string is a real,
+ * deliberate choice ("ask the student"), and re-asserting the default over it would
+ * undo a staff edit on every boot.
+ */
+async function backfillHearAbout() {
+  const stale = await MarketingSource.find({ hearAbout: { $exists: false } }).select('key').lean();
+  if (!stale.length) return;
+
+  const defaults = Object.fromEntries(BUILT_IN.map((s) => [s.key, s.hearAbout || '']));
+  await Promise.all(stale.map((row) => MarketingSource.updateOne(
+    { _id: row._id },
+    { $set: { hearAbout: defaults[row.key] || '' } }
+  )));
 }
 
 async function loadAll() {
@@ -96,6 +141,7 @@ async function loadAll() {
           { ordered: false }
         ).catch((e) => { if (e.code !== 11000) throw e; });
       }
+      await backfillHearAbout();
     }
 
     cache = await MarketingSource.find().sort({ order: 1, label: 1 }).lean();
@@ -150,6 +196,32 @@ async function getSpendKeyMap() {
   return map;
 }
 
+/**
+ * The projection the PUBLIC register page reads — `/api/marketing-sources/public`.
+ *
+ * Trimmed to the three fields that page needs so an unauthenticated caller can't
+ * enumerate ad-spend aliases, ordering or who created a link. INACTIVE sources are
+ * included deliberately: a retired link is still live in someone's inbox or on a
+ * printed flyer, and a lead arriving on it must get the same treatment as before.
+ */
+async function listPublic() {
+  const all = await loadAll();
+  return all.map((s) => ({ key: s.key, label: s.label, hearAbout: s.hearAbout || '' }));
+}
+
+/**
+ * The screening answer a `?source=` key implies, or `''` when the link doesn't
+ * determine one and the student should still be asked. Legacy ad-spend aliases
+ * resolve too, so a stale link in the wild behaves like its canonical source.
+ */
+async function resolveHearAbout(sourceKey) {
+  if (!sourceKey) return '';
+  const all = await loadAll();
+  const row = all.find((s) => s.key === sourceKey)
+    || all.find((s) => (s.aliases || []).includes(String(sourceKey).toLowerCase()));
+  return row?.hearAbout || '';
+}
+
 /** Keys accepted by the ad-spend editor (canonical keys of active sources). */
 async function listSpendPlatforms() {
   const active = await listActive();
@@ -195,6 +267,19 @@ async function assertKeyUsable(key) {
   }
 }
 
+/**
+ * A `hearAbout` outside the ScreeningForm enum would be dropped on save and the link
+ * would quietly go back to asking, so it is refused at the edge instead.
+ */
+function normalizeHearAbout(value) {
+  const v = String(value ?? '').trim();
+  if (!v) return '';
+  if (!HEAR_ABOUT_OPTIONS.includes(v)) {
+    throw new AppError(`"${v}" is not a valid "How did you hear about us?" answer`, 400);
+  }
+  return v;
+}
+
 async function create(data, userId) {
   const label = String(data.label || '').trim();
   if (!label) throw new AppError('Label is required', 400);
@@ -209,6 +294,9 @@ async function create(data, userId) {
     description: String(data.description || '').trim(),
     color: String(data.color || '#0a9d42').trim(),
     icon: String(data.icon || 'link').trim(),
+    // Defaults to "ask the student" — a brand-new link's channel is only knowable
+    // by whoever created it, so silence here is the safe answer, not a guess.
+    hearAbout: normalizeHearAbout(data.hearAbout),
     aliases: [],
     isBuiltIn: false,
     isActive: data.isActive === undefined ? true : !!data.isActive,
@@ -244,6 +332,7 @@ async function update(id, data) {
   if (data.description !== undefined) doc.description = String(data.description).trim();
   if (data.color !== undefined) doc.color = String(data.color).trim();
   if (data.icon !== undefined) doc.icon = String(data.icon).trim();
+  if (data.hearAbout !== undefined) doc.hearAbout = normalizeHearAbout(data.hearAbout);
   if (data.isActive !== undefined) doc.isActive = !!data.isActive;
   if (data.order !== undefined && Number.isFinite(Number(data.order))) doc.order = Number(data.order);
 
@@ -288,10 +377,13 @@ async function remove(id) {
 
 module.exports = {
   BUILT_IN,
+  HEAR_ABOUT_OPTIONS,
   listAll,
   listActive,
+  listPublic,
   listPlatforms,
   listSpendPlatforms,
+  resolveHearAbout,
   getSpendKeyMap,
   assertValidSpendPlatform,
   slugifyKey,

@@ -13,6 +13,12 @@ const router = express.Router();
 // job this feature exists to hand them.
 const canWrite = [protect, authorize('Admin', 'CEOReportingManager', 'Marketing')];
 
+// PUBLIC — the sign-up page has no session and must resolve `?source=` → the implied
+// "How did you hear about us?" answer before it can decide whether to ask the question.
+// Trimmed projection (key/label/hearAbout only); declared before `/:id` per the
+// literal-before-param convention used across the route files.
+router.get('/public', controller.publicList);
+
 router.route('/')
   .get(protect, controller.list)
   .post(canWrite, controller.create);
