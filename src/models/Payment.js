@@ -26,10 +26,19 @@ const paymentSchema = new mongoose.Schema(
       min: 0,
     },
     discountReason: String,
-    // Payment method
+    /**
+     * How the money arrived.
+     *
+     * `paymentLink` is a real Square charge the STUDENT completed on Square's
+     * hosted checkout, settled into the portal by the webhook. It is a distinct
+     * method — never `square` — because `paymentService.createPaymentRecord`
+     * branches on `paymentMethod === 'square'` to raise a NEW charge against a
+     * card token. A link payment has already been taken; routing it down that
+     * branch would charge the student twice.
+     */
     paymentMethod: {
       type: String,
-      enum: ['square', 'manual', 'directDebit'],
+      enum: ['square', 'manual', 'directDebit', 'paymentLink'],
       required: true,
     },
     status: {
@@ -57,6 +66,13 @@ const paymentSchema = new mongoose.Schema(
       ref: 'PaymentPlan',
     },
     installmentIndex: Number,
+    // Set when this payment was settled from an emailed Square payment link.
+    // The `type` stays `manualMarkPaid` (so every existing revenue rollup keeps
+    // counting it with no changes); this ref is what distinguishes the two.
+    paymentLinkId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PaymentLink',
+    },
     // Denormalized from Application.isTest — payments of a test application are
     // excluded from all revenue/cashflow metrics. Set on creation from the app
     // and re-synced when the application's test flag is toggled.

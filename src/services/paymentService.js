@@ -126,8 +126,13 @@ const createPaymentRecord = async (data) => {
   const payment = await Payment.create({
     ...data,
     status: data.status || 'completed',
-    squareTransactionId: squarePayment?.id,
-    squarePaymentId: squarePayment?.id,
+    /* A charge raised HERE wins; otherwise keep whatever the caller supplied.
+       Payment-link settlement arrives with Square's ids already known (the
+       student paid on Square's hosted page, so there was no charge for us to
+       raise) — the unconditional `squarePayment?.id` used to blank them, which
+       would have cost the webhook its duplicate-payment guard. */
+    squareTransactionId: squarePayment?.id || data.squareTransactionId,
+    squarePaymentId: squarePayment?.id || data.squarePaymentId,
     xeroSyncStatus: data.xeroSyncStatus || 'pending',
     xeroSyncedAt: data.xeroSyncedAt || null,
   });
@@ -201,7 +206,12 @@ const createPaymentRecord = async (data) => {
       freshPayment.applicationId?.paymentCompleted === true;
 
     if (student?.email && application?.applicationId) {
-      if (freshPayment.type === 'manualMarkPaid') {
+      /* A payment-link payment is typed `manualMarkPaid` so it counts as
+         revenue everywhere without touching a dozen rollups — but the student
+         really did pay by card, so it must get the ordinary receipt. The
+         manual-confirmation email says "manually confirmed by our team", which
+         would be plainly wrong for money they just entered a card for. */
+      if (freshPayment.type === 'manualMarkPaid' && freshPayment.paymentMethod !== 'paymentLink') {
         // Manual mark paid — use the dedicated manual confirmation email
         appEmails
           .sendManualMarkPaidEmail(

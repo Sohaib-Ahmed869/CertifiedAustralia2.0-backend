@@ -581,6 +581,8 @@ const sendPaymentReceivedEmail = async (student, application, payment) => {
     const methodLabel =
       payment.paymentMethod === 'square'
         ? 'Card (Square)'
+        : payment.paymentMethod === 'paymentLink'
+        ? 'Card (Payment Link)'
         : payment.paymentMethod === 'directDebit'
         ? 'Direct Debit'
         : payment.paymentMethod === 'manual'
@@ -654,6 +656,8 @@ const sendAdminPaymentNotification = async (
     const methodLabel =
       payment.paymentMethod === 'square'
         ? 'Card (Square)'
+        : payment.paymentMethod === 'paymentLink'
+        ? 'Card (Payment Link)'
         : payment.paymentMethod === 'directDebit'
         ? 'Direct Debit'
         : 'Manual / Bank Transfer';
@@ -964,6 +968,86 @@ const sendManualMarkPaidEmail = async (student, application, amount, method) => 
     });
   } catch (err) {
     console.error('[applicationEmailService] sendManualMarkPaidEmail error:', err.message);
+    return { success: false };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// 9b. sendPaymentLinkEmail
+// ---------------------------------------------------------------------------
+
+/**
+ * Sent when staff raise a Square payment link for a student.
+ *
+ * THE BUTTON IS THE POINT. Everything else in this email exists to make the
+ * student confident enough to press it: what they are paying for, how much,
+ * and when it stops working. The raw URL is printed underneath as well —
+ * plenty of mail clients strip or rewrite buttons, and a payment request the
+ * student cannot act on is worse than no email.
+ *
+ * @param {{ firstName: string, email: string }} student
+ * @param {{ applicationId: string, qualificationId?: any, qualificationName?: string }} application
+ * @param {{ amount: number, url: string, description?: string, expiresAt?: Date,
+ *           installmentIndex?: number|null }} link
+ */
+const sendPaymentLinkEmail = async (student, application, link) => {
+  try {
+    const { qualificationName } = await resolveCatalogInfo(application);
+
+    const isInstallment =
+      link.installmentIndex !== null && link.installmentIndex !== undefined;
+
+    const rows = [
+      { label: 'Application ID', value: application.applicationId },
+      ...(qualificationName ? [{ label: 'Qualification', value: qualificationName }] : []),
+      ...(isInstallment
+        ? [{ label: 'For', value: `Installment #${link.installmentIndex + 1}` }]
+        : []),
+      { label: 'Amount Due', value: formatAUD(link.amount) },
+      ...(link.expiresAt ? [{ label: 'Pay By', value: formatDateTime(link.expiresAt) }] : []),
+    ];
+
+    const body =
+      greeting(student.firstName) +
+      paragraph(
+        isInstallment
+          ? `Your next installment of <strong>${formatAUD(link.amount)}</strong> is ready to pay. You can settle it securely online using the button below.`
+          : `A payment of <strong>${formatAUD(link.amount)}</strong> is due on your application. You can pay securely online using the button below.`
+      ) +
+      detailsTable('Payment Summary', rows) +
+      buttonGroup({ text: `Pay ${formatAUD(link.amount)} Now`, url: link.url }) +
+      // Buttons get stripped by some clients; never leave the student without
+      // a way to reach the checkout.
+      smallText(
+        `If the button does not work, copy and paste this link into your browser:<br />` +
+        `<a href="${link.url}" style="color:#0b8f43;word-break:break-all;">${link.url}</a>`
+      ) +
+      infoCard(
+        'Secure Payment',
+        'Payment is processed by Square. Certified Australia never sees or stores your card details. ' +
+        'Your payment will appear in the student portal automatically once it clears.'
+      ) +
+      (link.expiresAt
+        ? warningCard(
+            'This link expires',
+            `For your security this payment link stops working on <strong>${formatDateTime(link.expiresAt)}</strong>. ` +
+            'If it expires before you pay, just contact us and we will send you a new one.'
+          )
+        : '') +
+      signOff();
+
+    const html = buildEmail(
+      body,
+      `Pay ${formatAUD(link.amount)} securely online for ${application.applicationId}.`
+    );
+
+    return await sendEmail({
+      to: student.email,
+      subject: `Payment Request ${formatAUD(link.amount)} - ${application.applicationId}`,
+      html,
+    });
+  } catch (err) {
+    console.error('[applicationEmailService] sendPaymentLinkEmail error:', err.message);
     return { success: false };
   }
 };
@@ -1719,6 +1803,7 @@ module.exports = {
   sendDiscountAppliedEmail,
   sendPaymentPlanStatusEmail,
   sendManualMarkPaidEmail,
+  sendPaymentLinkEmail,
   sendApplicationCompleteEmail,
   sendRTOApplicationCompleteEmail,
   sendPaymentFailureEmail,

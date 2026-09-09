@@ -74,8 +74,26 @@ const handleSquarePaymentEvent = async (payload) => {
     ],
   });
 
+  /* No Payment row carries this Square id — so the portal did not raise this
+     charge. That is exactly what an emailed PAYMENT LINK looks like: the
+     student paid on Square's hosted page, and the only thread back to us is
+     `payment.order_id`, which we stored on the PaymentLink when it was created.
+     Hand it to the link service, which claims the link atomically and writes
+     the Payment.
+
+     Anything it still can't place is acknowledged, not failed — a 200 stops
+     Square retrying an event we simply have nothing to do with (a terminal
+     sale, a payment on another integration). Failing it would put the
+     subscription into permanent retry. */
   if (!paymentRecord) {
-    return { acknowledged: true, eventType, matchedPayment: false };
+    const { settleFromSquarePayment } = require('./paymentLinkService');
+    const linkResult = await settleFromSquarePayment(payment);
+
+    if (linkResult.matched) {
+      return { acknowledged: true, eventType, matchedPayment: true, paymentLink: linkResult };
+    }
+
+    return { acknowledged: true, eventType, matchedPayment: false, reason: linkResult.reason };
   }
 
   paymentRecord.squarePaymentId = payment.id;

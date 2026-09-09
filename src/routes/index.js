@@ -4,6 +4,7 @@ const userRoutes = require('./userRoutes');
 const catalogRoutes = require('./catalogRoutes');
 const applicationRoutes = require('./applicationRoutes');
 const paymentRoutes = require('./paymentRoutes');
+const paymentLinkRoutes = require('./paymentLinkRoutes');
 const taskRoutes = require('./taskRoutes');
 const rbacRoutes = require('./rbacRoutes');
 const ticketRoutes = require('./ticketRoutes');
@@ -44,6 +45,9 @@ router.use('/users', userRoutes);
 router.use('/', catalogRoutes);
 router.use('/applications', applicationRoutes);
 router.use('/payments', paymentRoutes);
+// Mounted as its own root, NOT under /payments — paymentRoutes has a '/:id'
+// catch-all that would swallow '/payments/links'.
+router.use('/payment-links', paymentLinkRoutes);
 router.use('/tasks', taskRoutes);
 router.use('/rbac', rbacRoutes);
 router.use('/tickets', ticketRoutes);
