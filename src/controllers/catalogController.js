@@ -9,7 +9,12 @@ const Qualification = require('../models/Qualification');
 const ReferenceLetterTemplate = require('../models/ReferenceLetterTemplate');
 const EmploymentLetterTemplate = require('../models/EmploymentLetterTemplate');
 const driveService = require('../services/googleDriveService');
-const { sanitizeFloor, assertCaPriceAllowed } = require('../services/priceFloorService');
+const {
+  sanitizeFloor,
+  sanitizeSweetSpot,
+  assertThresholdsCoherent,
+  assertCaPriceAllowed,
+} = require('../services/priceFloorService');
 
 const cleanupFile = (filePath) => {
   fs.unlink(filePath, () => {});
@@ -135,60 +140,100 @@ const empLetterHandlers = buildTemplateHandlers({
   qualificationField: 'employmentLetterTemplateId',
 });
 
-/* ── Qualification price floor ────────────────────────────────────
- * Qualification writes go through the generic CRUD factory, so the floor rule
- * is enforced in these two thin wrappers around it — the ONE gate every catalog
- * edit passes. Both strip `priceFloor` (and its audit fields) from the payload:
- * a floor writable by the request it constrains would not be a restriction at
- * all. It is set only by setPriceFloor below (Admin/CEO + feature_set_price_floor).
+/* ── Qualification price thresholds (floor + sweet spot) ──────────
+ * Qualification writes go through the generic CRUD factory, so the threshold
+ * rules are enforced in these two thin wrappers around it — the ONE gate every
+ * catalog edit passes. Both strip `priceFloor`, `sweetSpot` and their audit
+ * fields from the payload: a floor writable by the request it constrains would
+ * not be a restriction at all, and the sweet spot rides the same endpoint
+ * because it shares the floor's invariant. Both are set only by setPriceFloor
+ * below (Admin/CEO + feature_set_price_floor).
  *
- * `updateQualification` also refuses a `caPrice` under the floor — otherwise
- * the discount cap would be sidestepped by simply re-pricing the catalog.
+ * `updateQualification` also refuses a `caPrice` under either threshold —
+ * otherwise the discount cap would be sidestepped by simply re-pricing the
+ * catalog. `bulkAdjustPrices` applies the same rule per row, but skips rather
+ * than throws so one blocked row can't strand a whole run.
  */
 const qualificationCrud = createCrudController(services.qualifications);
 
-const stripFloorFields = (body) => {
+const stripThresholdFields = (body) => {
   delete body.priceFloor;
   delete body.priceFloorSetBy;
   delete body.priceFloorSetAt;
+  delete body.sweetSpot;
+  delete body.sweetSpotSetBy;
+  delete body.sweetSpotSetAt;
 };
 
 const createQualification = asyncHandler(async (req, res, next) => {
-  stripFloorFields(req.body);
+  stripThresholdFields(req.body);
   return qualificationCrud.create(req, res, next);
 });
 
 const updateQualification = asyncHandler(async (req, res, next) => {
-  stripFloorFields(req.body);
+  stripThresholdFields(req.body);
   if (req.body.caPrice !== undefined) {
     const existing = await Qualification.findById(req.params.id)
-      .select('caPrice priceFloor')
+      .select('caPrice priceFloor sweetSpot')
       .lean();
     assertCaPriceAllowed(existing, req.body.caPrice);
   }
   return qualificationCrud.update(req, res, next);
 });
 
+/**
+ * Write the executive price thresholds — floor and sweet spot — for one
+ * qualification. They share an endpoint because they share an invariant
+ * (`floor <= sweetSpot <= caPrice`): saving them separately would mean either
+ * order could transit through an incoherent state and be refused for it.
+ *
+ * Each field is optional in the payload; an omitted one keeps its stored value,
+ * and an explicit `null`/`''` clears it.
+ */
 const setPriceFloor = asyncHandler(async (req, res) => {
   const qualification = await Qualification.findById(req.params.id);
   if (!qualification) {
     throw new AppError('Qualification not found', 404);
   }
-  const floor = sanitizeFloor(req.body?.priceFloor);
-  // A floor above the current list price would make the qualification
-  // unsellable at its own price, so it is refused rather than silently stored.
-  if (floor !== null && Number(qualification.caPrice || 0) < floor) {
-    throw new AppError(
-      `The floor cannot be above this qualification's price of $${Number(qualification.caPrice || 0).toLocaleString('en-AU')}. Raise the price first, or set a lower floor.`,
-      400,
-    );
+
+  const floor = 'priceFloor' in (req.body || {})
+    ? sanitizeFloor(req.body.priceFloor)
+    : (qualification.priceFloor ?? null);
+  const sweetSpot = 'sweetSpot' in (req.body || {})
+    ? sanitizeSweetSpot(req.body.sweetSpot)
+    : (qualification.sweetSpot ?? null);
+
+  assertThresholdsCoherent({ caPrice: qualification.caPrice, priceFloor: floor, sweetSpot });
+
+  const now = new Date();
+  // Audit stamps only move when the value itself moved, so re-saving one
+  // threshold doesn't rewrite the other's "set by / set at".
+  if (floor !== (qualification.priceFloor ?? null)) {
+    qualification.priceFloor = floor;
+    qualification.priceFloorSetBy = floor === null ? undefined : req.user?._id;
+    qualification.priceFloorSetAt = floor === null ? undefined : now;
   }
-  qualification.priceFloor = floor;
-  qualification.priceFloorSetBy = floor === null ? undefined : req.user?._id;
-  qualification.priceFloorSetAt = floor === null ? undefined : new Date();
-  qualification.updatedAt = new Date();
+  if (sweetSpot !== (qualification.sweetSpot ?? null)) {
+    qualification.sweetSpot = sweetSpot;
+    qualification.sweetSpotSetBy = sweetSpot === null ? undefined : req.user?._id;
+    qualification.sweetSpotSetAt = sweetSpot === null ? undefined : now;
+  }
+  qualification.updatedAt = now;
   await qualification.save();
   res.json({ item: qualification });
+});
+
+/**
+ * Shift the LIST price of many qualifications at once (Pricing Controls'
+ * +$500 / −$500 buttons). Rows blocked by their own floor/sweet spot are
+ * skipped and reported — see the service for why partial is the right shape.
+ */
+const bulkAdjustPrices = asyncHandler(async (req, res) => {
+  const result = await services.bulkAdjustQualificationPrices({
+    qualificationIds: req.body?.qualificationIds,
+    amount: req.body?.amount,
+  });
+  res.json(result);
 });
 
 module.exports = {
@@ -203,6 +248,7 @@ module.exports = {
   createQualification,
   updateQualification,
   setPriceFloor,
+  bulkAdjustPrices,
   deleteQualification: createCrudController(services.qualifications).remove,
   createChecklist: createCrudController(services.checklists).create,
   updateChecklist: createCrudController(services.checklists).update,

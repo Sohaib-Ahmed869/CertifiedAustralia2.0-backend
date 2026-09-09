@@ -1,6 +1,7 @@
 /**
- * QUALIFICATION PRICE FLOORS — the executive minimum an application may be
- * closed for.
+ * QUALIFICATION PRICE THRESHOLDS — the executive minimum an application may be
+ * closed for (the FLOOR), and the price management is happy to close it at
+ * (the SWEET SPOT).
  *
  * The client's rule: an exec sets a floor on a qualification, and nobody can
  * discount an application for it below that number. So the floor is a CAP ON
@@ -13,6 +14,14 @@
  *    an application being discounted under the floor, the other stops the
  *    qualification's own list price being dropped under it (otherwise the floor
  *    would be trivially bypassed by re-pricing the catalog instead).
+ *
+ * THE SWEET SPOT ENFORCES NOTHING. It is a target: a sale at or above it is
+ * badged "Sweet Spot" on the student detail page, and that is its entire effect.
+ * What it does carry is an invariant — `priceFloor <= sweetSpot <= caPrice`
+ * (`assertThresholdsCoherent`) — because a sweet spot under the floor would
+ * badge every legal sale and one above the list price could never be reached.
+ * That invariant is why the two are written together through one endpoint, and
+ * why a caPrice change is checked against BOTH.
  *
  * PRICE MODEL: `Application` has no price field. The sale price is
  * `qualification.caPrice − Σ application.discounts[].amount`, and that total
@@ -49,6 +58,19 @@ const floorOf = (qualification) => {
   return n === null || n < 0 ? null : n;
 };
 
+/** The sweet-spot target on a qualification, or null when none is set. */
+const sweetSpotOf = (qualification) => {
+  const n = toNumber(qualification?.sweetSpot);
+  return n === null || n < 0 ? null : n;
+};
+
+/** True when this application's sale price has reached the qualification's target. */
+const isAtSweetSpot = (qualification, application) => {
+  const target = sweetSpotOf(qualification);
+  if (target === null) return false;
+  return effectivePrice(qualification, application) >= target;
+};
+
 /**
  * How much more may still be discounted before hitting the floor.
  * `null` when there is no floor (i.e. no cap beyond the price itself).
@@ -65,6 +87,46 @@ function sanitizeFloor(value) {
   const n = toNumber(value);
   if (n === null || n < 0) throw new AppError('Price floor must be a positive amount', 400);
   return n;
+}
+
+/** Normalise a sweet-spot payload: a non-negative number, or null to clear it. */
+function sanitizeSweetSpot(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = toNumber(value);
+  if (n === null || n < 0) throw new AppError('Sweet spot must be a positive amount', 400);
+  return n;
+}
+
+/**
+ * Enforce `floor <= sweetSpot <= caPrice` on a proposed set of numbers.
+ * Any of the three may be null/undefined — an absent threshold constrains
+ * nothing. Returns nothing; throws 400 with the reason that failed.
+ */
+function assertThresholdsCoherent({ caPrice, priceFloor, sweetSpot }) {
+  const price = toNumber(caPrice);
+  const floor = toNumber(priceFloor);
+  const target = toNumber(sweetSpot);
+
+  if (floor !== null && price !== null && floor > price) {
+    throw new AppError(
+      `The floor cannot be above this qualification's price of ${money(price)}. Raise the price first, or set a lower floor.`,
+      400,
+    );
+  }
+  if (target !== null && price !== null && target > price) {
+    throw new AppError(
+      `The sweet spot cannot be above this qualification's price of ${money(price)} — no sale could ever reach it.`,
+      400,
+    );
+  }
+  // Strictly greater: a sweet spot ON the floor would badge every sale the
+  // floor already allows, which tells an exec nothing.
+  if (target !== null && floor !== null && target <= floor) {
+    throw new AppError(
+      `The sweet spot must be above the ${money(floor)} minimum price. It marks a good sale, so it has to sit higher than the least you will accept.`,
+      400,
+    );
+  }
 }
 
 /**
@@ -88,29 +150,53 @@ function assertDiscountAllowed(qualification, application, amount) {
 }
 
 /**
- * Throw 400 if a qualification's list price would be saved under its own floor.
- * Only checked when caPrice is actually changing, so a floor raised above an
- * existing price doesn't block unrelated edits to the qualification.
+ * Why a qualification's list price may NOT move to `incomingCaPrice`, or null
+ * when it may. Non-throwing so a BULK adjust can skip the offending rows and
+ * report them instead of failing the whole run; `assertCaPriceAllowed` is the
+ * throwing wrapper the single-qualification PATCH uses.
+ *
+ * Only checked when caPrice is actually changing, so a threshold raised above
+ * an existing price doesn't block unrelated edits to the qualification.
  */
-function assertCaPriceAllowed(existing, incomingCaPrice) {
-  const floor = floorOf(existing);
-  if (floor === null) return;
+function caPriceChangeBlockedBecause(existing, incomingCaPrice) {
   const next = toNumber(incomingCaPrice);
-  if (next === null) return;
-  if (Number(existing?.caPrice) === next) return;
-  if (next >= floor) return;
+  if (next === null) return null;
+  if (Number(existing?.caPrice) === next) return null;
+
+  const floor = floorOf(existing);
+  if (floor !== null && next < floor) {
+    return `${money(next)} is below the ${money(floor)} minimum price set for this qualification.`;
+  }
+  // The sweet spot is only a target, but a target above the list price can
+  // never be reached — so a price drop under it is a config error either way.
+  const target = sweetSpotOf(existing);
+  if (target !== null && next < target) {
+    return `${money(next)} is below the ${money(target)} sweet spot set for this qualification.`;
+  }
+  return null;
+}
+
+/** Throw 400 if a qualification's list price would break either threshold. */
+function assertCaPriceAllowed(existing, incomingCaPrice) {
+  const reason = caPriceChangeBlockedBecause(existing, incomingCaPrice);
+  if (!reason) return;
   throw new AppError(
-    `Price ${money(next)} is below the ${money(floor)} minimum set by management for this qualification. Ask an executive to lower the floor first.`,
+    `${reason} Ask an executive to adjust the pricing thresholds first.`,
     400,
   );
 }
 
 module.exports = {
   sanitizeFloor,
+  sanitizeSweetSpot,
+  assertThresholdsCoherent,
   assertDiscountAllowed,
   assertCaPriceAllowed,
+  caPriceChangeBlockedBecause,
   remainingDiscountAllowance,
   effectivePrice,
   discountTotal,
   floorOf,
+  sweetSpotOf,
+  isAtSweetSpot,
 };

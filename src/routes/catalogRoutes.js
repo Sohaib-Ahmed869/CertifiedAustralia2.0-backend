@@ -24,11 +24,24 @@ router.route('/qualifications')
   .get(controller.qualifications.list)
   .post(requireStaff, controller.createQualification);
 
-// Executive price floor — a narrower gate than requireStaff on purpose: the
-// whole point is that the staff who price and discount from the Industries page
-// and the student detail page cannot move the floor those edits are checked
-// against. Declared before /qualifications/:id, per the house rule on literal
-// sub-paths.
+// Bulk list-price adjustment (Pricing Controls' +$500 / −$500). Repricing the
+// whole catalog in one click is a heavier action than the per-qualification
+// PATCH, so it drops Agent/Marketing from requireStaff and asks for the
+// qualification-management permission explicitly. Declared before
+// /qualifications/:id, per the house rule on literal sub-paths.
+router.post(
+  '/qualifications/bulk-price-adjust',
+  protect,
+  authorize('Admin', 'CEOReportingManager'),
+  requirePermission('feature_manage_qualifications'),
+  controller.bulkAdjustPrices,
+);
+
+// Executive price thresholds (floor + sweet spot) — a narrower gate than
+// requireStaff on purpose: the whole point is that the staff who price and
+// discount from the Industries page and the student detail page cannot move the
+// floor those edits are checked against. One endpoint writes both, because they
+// share the `floor <= sweetSpot <= caPrice` invariant.
 router.put(
   '/qualifications/:id/price-floor',
   protect,

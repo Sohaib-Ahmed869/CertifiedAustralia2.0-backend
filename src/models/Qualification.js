@@ -75,6 +75,32 @@ const qualificationSchema = new mongoose.Schema(
     priceFloorSetAt: {
       type: Date,
     },
+    // SWEET SPOT — the price management is HAPPY to sell this qualification at.
+    // Unlike the floor it enforces nothing: it is a target, not a limit, and its
+    // only job is to mark a sale as a good one. An application whose sale price
+    // (`caPrice - Σ discounts`) lands at or above this number is badged
+    // "Sweet Spot" on the student detail Overview and Payments tabs.
+    //
+    // INVARIANT: priceFloor <= sweetSpot <= caPrice. A sweet spot at or under
+    // the floor would badge every sale the floor already permits, and one above
+    // the list price could never be reached. Both are refused rather than stored
+    // (see priceFloorService.assertThresholdsCoherent).
+    //
+    // Written through the SAME executive endpoint as the floor
+    // (PUT /qualifications/:id/price-floor), stripped from the ordinary PATCH
+    // for the same reason. `null` means no target set — and then no badge.
+    sweetSpot: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+    sweetSpotSetBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    sweetSpotSetAt: {
+      type: Date,
+    },
     // Category for conditional document requirements (CA-05)
     category: {
       type: String,
