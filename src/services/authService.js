@@ -7,6 +7,7 @@ const Application = require('../models/Application');
 const ScreeningForm = require('../models/ScreeningForm');
 const AppError = require('../utils/AppError');
 const marketingSourceService = require('./marketingSourceService');
+const adCampaignService = require('./adCampaignService');
 const { sendTemplatedEmail } = require('./emailService');
 const {
   sendWelcomeEmail,
@@ -39,7 +40,7 @@ const generateApplicationId = async () => {
 const register = async (data) => {
   const {
     firstName, lastName, email, phone, password,
-    termsAccepted, source, referredBy,
+    termsAccepted, source, campaign, referredBy,
     industryId, qualificationId,
     yearsOfExperience, experienceLocation, state,
     hasFormalQualifications, formalQualifications,
@@ -65,9 +66,38 @@ const register = async (data) => {
       if (referrer) referrerId = referrer._id;
     } catch { /* invalid id — ignore */ }
   }
-  const attribution = (source || referrerId)
+  /**
+   * A CAMPAIGN OUTRANKS THE `?source=` IT ARRIVED WITH.
+   *
+   * An ad campaign belongs to exactly one platform and carries that platform on
+   * its own row, so it is the more specific claim: a recognised `?campaign=`
+   * decides the source, and a `?source=` that disagrees is overruled rather than
+   * stored. That is what stops a hand-edited or stale URL filing a TikTok lead
+   * under Facebook — the same "server decides" rule the screening answer below
+   * already follows.
+   *
+   * An unrecognised campaign key is KEPT, not dropped. Attribution has always
+   * been free-form here, and discarding a typo'd or not-yet-registered campaign
+   * would lose the only record of where the lead came from; it simply won't roll
+   * up until someone registers it. Never fatal — a labelling lookup must not be
+   * able to block a sign-up.
+   */
+  let resolvedSource = source;
+  let resolvedCampaign = '';
+  if (source || campaign) {
+    try {
+      const resolved = await adCampaignService.resolveAttribution({ source, campaign });
+      resolvedSource = resolved.source || source;
+      resolvedCampaign = resolved.campaign;
+    } catch {
+      resolvedCampaign = String(campaign || '').trim().toLowerCase();
+    }
+  }
+
+  const attribution = (resolvedSource || resolvedCampaign || referrerId)
     ? {
-        ...(source ? { source } : {}),
+        ...(resolvedSource ? { source: resolvedSource } : {}),
+        ...(resolvedCampaign ? { campaign: resolvedCampaign } : {}),
         ...(referrerId ? { referredBy: referrerId } : {}),
         timestamp: new Date(),
       }
@@ -85,11 +115,14 @@ const register = async (data) => {
    *
    * A source that doesn't determine a channel resolves to '' — the student was asked,
    * and whatever they said stands.
+   *
+   * Resolved from `resolvedSource`, so a campaign link implies its PLATFORM's
+   * answer — the campaign is a subdivision of the platform, not a separate channel.
    */
   let resolvedHearAbout = howDidYouHear;
-  if (source) {
+  if (resolvedSource) {
     try {
-      const implied = await marketingSourceService.resolveHearAbout(source);
+      const implied = await marketingSourceService.resolveHearAbout(resolvedSource);
       if (implied) resolvedHearAbout = implied;
     } catch {
       // The registry is a labelling convenience — never block a sign-up over it.

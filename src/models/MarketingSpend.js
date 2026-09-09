@@ -18,6 +18,28 @@ const marketingSpendSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    /**
+     * The `AdCampaign.key` this money was spent on, or NULL for platform-level
+     * spend that isn't attributed to a specific campaign.
+     *
+     * NULL IS A REAL, SUPPORTED VALUE, not a migration gap. Every row written
+     * before campaigns existed has no campaign and must keep counting toward its
+     * platform, and staff can still book untagged platform spend afterwards. So
+     * a platform's total is the sum of its campaign rows PLUS its untagged rows,
+     * and campaign rows are a strict subdivision — never a replacement.
+     *
+     * That is also why the uniqueness key is (platform, campaignKey, week) and
+     * why every write path scopes on campaignKey: without it, clearing a
+     * campaign's cell would delete the platform-level row sitting in the same
+     * week. A Mongo equality match on `null` matches missing fields too, which
+     * is exactly the back-compat behaviour the legacy rows need.
+     */
+    campaignKey: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: null,
+    },
     amount: {
       type: Number,
       required: true,
@@ -45,5 +67,10 @@ const marketingSpendSchema = new mongoose.Schema(
     },
   }
 );
+
+// One cell per (platform, campaign, week). Not unique — `upsertMarketingSpend`
+// already guarantees one row per cell via a range-matched upsert, and a unique
+// index across a nullable field plus a date RANGE cannot express that rule.
+marketingSpendSchema.index({ platform: 1, campaignKey: 1, weekOf: 1 });
 
 module.exports = mongoose.model('MarketingSpend', marketingSpendSchema);

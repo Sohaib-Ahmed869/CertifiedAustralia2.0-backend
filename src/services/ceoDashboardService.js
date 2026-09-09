@@ -6,6 +6,7 @@ const MarketingSpend = require('../models/MarketingSpend');
 const CallEvent = require('../models/CallEvent');
 const buildCrud = require('./commonCrud');
 const marketingSourceService = require('./marketingSourceService');
+const AppError = require('../utils/AppError');
 
 const marketingSpendCrud = buildCrud(MarketingSpend, {
   populate: ['createdBy'],
@@ -980,11 +981,14 @@ async function getMarketing(query = {}) {
   }
 
   // ── 1. Aggregate MarketingSpend by platform, then normalise to source keys ──
+  // Grouped by (platform, campaign) in one pass: the platform total is the sum
+  // of BOTH its campaign rows and its untagged rows, so a campaign breakdown can
+  // never disagree with the platform card above it.
   const spendAgg = await MarketingSpend.aggregate([
     { $match: spendFilter },
     {
       $group: {
-        _id: '$platform',
+        _id: { platform: '$platform', campaign: '$campaignKey' },
         spend: { $sum: '$amount' },
       },
     },
@@ -993,9 +997,13 @@ async function getMarketing(query = {}) {
   // Roll up spend into canonical source keys via each source's declared aliases
   const [sourcePlatforms, spendKeyMap] = await Promise.all([getSourcePlatforms(), getSpendKeyMap()]);
   const spendBySource = {};
+  const spendByCampaign = {};
   spendAgg.forEach((s) => {
-    const sourceKey = spendKeyMap[s._id] || s._id;
+    const sourceKey = spendKeyMap[s._id.platform] || s._id.platform;
     spendBySource[sourceKey] = (spendBySource[sourceKey] || 0) + s.spend;
+    if (s._id.campaign) {
+      spendByCampaign[s._id.campaign] = (spendByCampaign[s._id.campaign] || 0) + s.spend;
+    }
   });
   const totalSpend = Object.values(spendBySource).reduce((sum, v) => sum + v, 0);
 
@@ -1041,6 +1049,58 @@ async function getMarketing(query = {}) {
     leadsMap[r._id] = r.leads;
     paidMap[r._id] = r.paid;
   });
+
+  // ── 2b. The same counts split by ad campaign ──
+  // Deliberately a SEPARATE pass rather than a second $group key on the pipeline
+  // above: campaign attribution is sparse (most leads have none), so grouping
+  // both dimensions together would produce a mostly-null bucket that the
+  // platform rollup would then have to filter back out.
+  const campaignLeadsAgg = await Application.aggregate([
+    { $match: appFilter },
+    { $lookup: { from: 'users', localField: 'studentId', foreignField: '_id', as: 'student' } },
+    { $unwind: '$student' },
+    {
+      $addFields: {
+        marketingCampaign: {
+          $ifNull: ['$sourceAttribution.campaign', '$student.sourceAttribution.campaign'],
+        },
+      },
+    },
+    { $match: { marketingCampaign: { $nin: [null, ''] } } },
+    {
+      $group: {
+        _id: '$marketingCampaign',
+        leads: { $sum: 1 },
+        paid: { $sum: { $cond: [PAID_EXPR, 1, 0] } },
+      },
+    },
+  ]);
+
+  const campaignRevenueAgg = await Payment.aggregate([
+    { $match: { ...appFilter, status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } } },
+    { $lookup: { from: 'applications', localField: 'applicationId', foreignField: '_id', as: 'app' } },
+    { $unwind: '$app' },
+    { $lookup: { from: 'users', localField: 'app.studentId', foreignField: '_id', as: 'student' } },
+    { $unwind: '$student' },
+    {
+      $addFields: {
+        marketingCampaign: {
+          $ifNull: ['$app.sourceAttribution.campaign', '$student.sourceAttribution.campaign'],
+        },
+      },
+    },
+    { $match: { marketingCampaign: { $nin: [null, ''] } } },
+    { $group: { _id: '$marketingCampaign', revenue: { $sum: '$amount' } } },
+  ]);
+
+  const campaignLeadsMap = {};
+  const campaignPaidMap = {};
+  campaignLeadsAgg.forEach((r) => {
+    campaignLeadsMap[r._id] = r.leads;
+    campaignPaidMap[r._id] = r.paid;
+  });
+  const campaignRevenueMap = {};
+  campaignRevenueAgg.forEach((r) => { campaignRevenueMap[r._id] = r.revenue; });
 
   // ── 3. Revenue per source (Payment → Application → Student) ──
   const revenueAgg = await Payment.aggregate([
@@ -1105,6 +1165,67 @@ async function getMarketing(query = {}) {
     const roas = spend > 0 ? Math.round((revenue / spend) * 100) / 100 : 0;
     return { ...p, spend, leads, paid, revenue, cpa, roas };
   });
+
+  /* ── 4b. Per-campaign cards ────────────────────────────────────────────────
+   * A strict subdivision of the platform card above it: same metrics, same
+   * formulas, narrowed to one `?campaign=` key.
+   *
+   * Driven by the REGISTRY (every campaign row), not by what the data happens to
+   * contain, so a campaign that has spent money but produced nothing still shows
+   * — that is the one a CEO most needs to see. Any campaign key found in the
+   * data but missing from the registry is appended as an "unregistered" card
+   * rather than dropped, mirroring how an unregistered `?source=` degrades: the
+   * attribution was captured, it just has no label yet.
+   */
+  const AdCampaign = require('../models/AdCampaign');
+  const campaignRows = await AdCampaign.find().sort({ sourceKey: 1, order: 1, name: 1 }).lean();
+  const platformByKey = Object.fromEntries(sourcePlatforms.map((p) => [p.key, p]));
+
+  const buildCampaignCard = (key, name, sourceKey, extra = {}) => {
+    const spend = spendByCampaign[key] || 0;
+    const leads = campaignLeadsMap[key] || 0;
+    const paid = campaignPaidMap[key] || 0;
+    const revenue = campaignRevenueMap[key] || 0;
+    const parent = platformByKey[sourceKey];
+    return {
+      key,
+      name,
+      sourceKey,
+      sourceLabel: parent?.name || sourceKey,
+      color: parent?.color || '#64748b',
+      icon: parent?.icon || 'link',
+      spend,
+      leads,
+      paid,
+      revenue,
+      cpa: paid > 0 ? Math.round(spend / paid) : 0,
+      cpaLead: leads > 0 ? Math.round(spend / leads) : 0,
+      roas: spend > 0 ? Math.round((revenue / spend) * 100) / 100 : 0,
+      ...extra,
+    };
+  };
+
+  const campaignCards = campaignRows.map((c) => buildCampaignCard(c.key, c.name, c.sourceKey, {
+    isActive: c.isActive !== false,
+    description: c.description || '',
+    // The creative, so the Marketing tab and the spend cockpit can show the ad
+    // rather than another row of text. Only the id travels — the frontend builds
+    // the Drive thumbnail URL, exactly as document previews already do.
+    imageFileId: c.image?.fileId || '',
+    registered: true,
+  }));
+
+  const known = new Set(campaignRows.map((c) => c.key));
+  const orphanKeys = new Set([
+    ...Object.keys(campaignLeadsMap),
+    ...Object.keys(spendByCampaign),
+    ...Object.keys(campaignRevenueMap),
+  ].filter((k) => !known.has(k)));
+  orphanKeys.forEach((k) => campaignCards.push(
+    buildCampaignCard(k, k, '', { isActive: false, imageFileId: '', registered: false })
+  ));
+
+  campaignCards.sort((a, b) => b.spend - a.spend || b.leads - a.leads || a.name.localeCompare(b.name));
 
   // CPA breakdown with additional CPA-per-lead
   const cpaBreakdown = platforms.map((pc) => ({
@@ -1181,6 +1302,7 @@ async function getMarketing(query = {}) {
     {
       $addFields: {
         marketingSource: { $ifNull: ['$sourceAttribution.source', { $ifNull: ['$student.sourceAttribution.source', 'direct'] }] },
+        marketingCampaign: { $ifNull: ['$sourceAttribution.campaign', { $ifNull: ['$student.sourceAttribution.campaign', ''] }] },
         collected: { $ifNull: [{ $arrayElemAt: ['$pay.total', 0] }, 0] },
         discountTotal: { $sum: { $ifNull: ['$discounts.amount', []] } },
       },
@@ -1188,7 +1310,7 @@ async function getMarketing(query = {}) {
     { $match: { marketingSource: { $in: leadSourceKeys } } },
     {
       $project: {
-        applicationId: 1, status: 1, createdAt: 1, marketingSource: 1, collected: 1, discountTotal: 1,
+        applicationId: 1, status: 1, createdAt: 1, marketingSource: 1, marketingCampaign: 1, collected: 1, discountTotal: 1,
         // Carried through so the row's `paid` flag reads money received, not stage reached.
         paymentCompleted: 1, partialPayment: 1,
         price: { $ifNull: ['$qual.caPrice', 0] },
@@ -1198,13 +1320,27 @@ async function getMarketing(query = {}) {
     },
   ]);
 
+  // A campaign's own spend-per-lead is the sharper number, so it takes
+  // precedence; a lead with no campaign (or one with no spend booked) falls back
+  // to its platform's share, which is what every row used before campaigns.
+  const campaignSpendPerLead = {};
+  Object.keys(campaignLeadsMap).forEach((k) => {
+    campaignSpendPerLead[k] = campaignLeadsMap[k] > 0 ? (spendByCampaign[k] || 0) / campaignLeadsMap[k] : 0;
+  });
+  const campaignNameByKey = Object.fromEntries(campaignRows.map((c) => [c.key, c.name]));
+
   const applicationDetails = appDetailAgg.map((a) => {
-    const cpaShare = Math.round(spendPerLead[a.marketingSource] || 0);
+    const camp = a.marketingCampaign || '';
+    const cpaShare = Math.round(
+      (camp && campaignSpendPerLead[camp]) || spendPerLead[a.marketingSource] || 0
+    );
     const revenue = round2(a.collected);
     return {
       applicationId: a.applicationId || String(a._id),
       studentName: a.studentName || 'Unknown',
       source: a.marketingSource,
+      campaign: camp,
+      campaignName: camp ? (campaignNameByKey[camp] || camp) : '',
       date: a.createdAt,
       agent: a.agentName || '—',
       paid: isPaidApp(a),
@@ -1230,6 +1366,7 @@ async function getMarketing(query = {}) {
       revenueFromAds: totalRevenueFromAds,
     },
     platformCards,
+    campaignCards,
     cpaBreakdown,
     applicationDetails,
   };
@@ -1275,20 +1412,48 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
   const spendKeyMap = await getSpendKeyMap();
   const weekMap = {};
   const seenPlatforms = new Set();
+  const seenCampaigns = new Set();
   docs.forEach((doc) => {
     // `weekOf` is bucketed by the SYDNEY week it lands in, not compared for
     // equality — rows written before the boundaries moved to Sydney are stored
     // at the host's local midnight and still belong to this same Monday.
     const monday = weekStartInstant(doc.weekOf);
     const weekKey = mondayToWeekKey(monday);
-    if (!weekMap[weekKey]) weekMap[weekKey] = { weekKey, weekOf: monday, total: 0, platforms: {} };
+    if (!weekMap[weekKey]) {
+      weekMap[weekKey] = { weekKey, weekOf: monday, total: 0, platforms: {}, campaigns: {} };
+    }
     const canonical = spendKeyMap[doc.platform] || doc.platform;
     seenPlatforms.add(canonical);
-    const bucket = weekMap[weekKey].platforms[canonical] || { amount: 0, notes: '' };
+
+    // Every row counts toward its PLATFORM total, campaign-tagged or not — the
+    // platform figure is the sum of the whole column, so the existing cockpit
+    // keeps reading the same numbers it always did.
+    //
+    // `own` is the UNTAGGED portion, reported separately because the two are
+    // used for different things: `amount` is what the card DISPLAYS (the
+    // platform's real weekly spend), `own` is what its editor WRITES. Without
+    // the split, opening the editor on a platform with campaign spend would
+    // prefill the combined figure and saving it would add the campaigns' money
+    // a second time.
+    const bucket = weekMap[weekKey].platforms[canonical] || { amount: 0, own: 0, notes: '', ownNotes: '' };
     bucket.amount += doc.amount || 0;
     if (doc.notes) bucket.notes = doc.notes; // docs sorted asc by updatedAt → keep latest
+    if (!doc.campaignKey) {
+      bucket.own += doc.amount || 0;
+      if (doc.notes) bucket.ownNotes = doc.notes;
+    }
     weekMap[weekKey].platforms[canonical] = bucket;
     weekMap[weekKey].total += doc.amount || 0;
+
+    // Campaign cells are additionally reported on their own, keyed by campaign,
+    // so a cell can be edited independently of the platform-level row.
+    if (doc.campaignKey) {
+      seenCampaigns.add(doc.campaignKey);
+      const cb = weekMap[weekKey].campaigns[doc.campaignKey] || { amount: 0, notes: '', platform: canonical };
+      cb.amount += doc.amount || 0;
+      if (doc.notes) cb.notes = doc.notes;
+      weekMap[weekKey].campaigns[doc.campaignKey] = cb;
+    }
   });
 
   // Fill every week in the window so the trend chart is continuous.
@@ -1296,7 +1461,7 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
   for (let i = n - 1; i >= 0; i -= 1) {
     const m = addWeeks(currentMonday, -i);
     const wk = mondayToWeekKey(m);
-    weeksArr.push(weekMap[wk] || { weekKey: wk, weekOf: m, total: 0, platforms: {} });
+    weeksArr.push(weekMap[wk] || { weekKey: wk, weekOf: m, total: 0, platforms: {}, campaigns: {} });
   }
 
   // Active keys first (editor order), then any retired key that still holds spend in
@@ -1304,7 +1469,29 @@ async function getMarketingSpendHistory({ weeks = 12 } = {}) {
   const editable = await getSpendEditPlatforms();
   const platforms = [...editable, ...[...seenPlatforms].filter((k) => !editable.includes(k))];
 
-  return { weeks: weeksArr, platforms };
+  // Campaigns the editor should offer: the active ones, plus any campaign that
+  // already holds spend in this window (so a paused campaign's money stays
+  // editable rather than becoming stranded in a cell nothing renders).
+  const AdCampaign = require('../models/AdCampaign');
+  const campaignRows = await AdCampaign.find({
+    $or: [{ isActive: { $ne: false } }, { key: { $in: [...seenCampaigns] } }],
+  }).sort({ sourceKey: 1, order: 1, name: 1 }).lean();
+
+  const campaigns = campaignRows.map((c) => ({
+    key: c.key,
+    name: c.name,
+    sourceKey: c.sourceKey,
+    isActive: c.isActive !== false,
+    imageFileId: c.image?.fileId || '',
+  }));
+  // A campaign key holding spend but no longer in the registry still gets a row,
+  // or its money would vanish from the cockpit with no way to correct it.
+  const knownCampaigns = new Set(campaignRows.map((c) => c.key));
+  [...seenCampaigns].filter((k) => !knownCampaigns.has(k)).forEach((k) => campaigns.push({
+    key: k, name: k, sourceKey: '', isActive: false, imageFileId: '',
+  }));
+
+  return { weeks: weeksArr, platforms, campaigns };
 }
 
 /**
@@ -1327,18 +1514,39 @@ function spendWeekTarget(weekKey) {
  * Upsert a single (week, platform) ad-spend cell with optional notes.
  * amount <= 0 clears the cell. Guarantees one record per (week, platform).
  */
-async function upsertMarketingSpend({ weekKey, platform, amount, notes, userId }) {
+async function upsertMarketingSpend({ weekKey, platform, campaignKey, amount, notes, userId }) {
   // The MarketingSpend enum used to reject an unknown key at the schema layer; it had
   // to go so runtime-added sources could be saved, so the gate lives here now.
   await marketingSourceService.assertValidSpendPlatform(platform);
+
+  // A campaign cell is a subdivision of its OWN platform's row. Booking money
+  // against a campaign that belongs elsewhere would show spend on one platform
+  // card and the leads it bought on another, so the pairing is verified rather
+  // than trusted. `null` means platform-level spend, which is always allowed.
+  const campaign = campaignKey ? String(campaignKey).trim().toLowerCase() : null;
+  if (campaign) {
+    const AdCampaign = require('../models/AdCampaign');
+    const row = await AdCampaign.findOne({ key: campaign }).select('sourceKey name').lean();
+    if (!row) throw new AppError(`"${campaign}" is not a known ad campaign`, 400);
+    if (row.sourceKey !== platform) {
+      throw new AppError(`Campaign "${row.name}" runs on ${row.sourceKey}, not ${platform}`, 400);
+    }
+  }
+
   const { monday, range } = spendWeekTarget(weekKey);
+  // Scoping the filter on campaignKey is what keeps the cells independent —
+  // without it, clearing a campaign's cell deletes the platform-level row that
+  // shares its week. An equality match on `null` also matches the rows written
+  // before campaigns existed, which is how they keep being adopted in place.
+  const cell = { platform, campaignKey: campaign, weekOf: range };
+
   const amt = Number(amount) || 0;
   if (amt <= 0) {
-    await MarketingSpend.deleteMany({ platform, weekOf: range });
-    return { deleted: true, platform, weekKey };
+    await MarketingSpend.deleteMany(cell);
+    return { deleted: true, platform, campaignKey: campaign, weekKey };
   }
   const doc = await MarketingSpend.findOneAndUpdate(
-    { platform, weekOf: range },
+    cell,
     {
       $set: { amount: amt, notes: notes || '', updatedAt: new Date() },
       $setOnInsert: { createdBy: userId, weekOf: monday },
@@ -1349,9 +1557,19 @@ async function upsertMarketingSpend({ weekKey, platform, amount, notes, userId }
 }
 
 /** Delete an ad-spend cell for a (week, platform). */
-async function deleteMarketingSpend({ weekKey, platform }) {
+/**
+ * Clear one spend cell. `campaignKey` is part of the cell's identity: omitting
+ * it clears only the PLATFORM-LEVEL row (an equality match on `null` also
+ * catches the legacy rows written before campaigns existed), leaving each
+ * campaign's own row in that week untouched.
+ */
+async function deleteMarketingSpend({ weekKey, platform, campaignKey }) {
   const { range } = spendWeekTarget(weekKey);
-  const res = await MarketingSpend.deleteMany({ platform, weekOf: range });
+  const res = await MarketingSpend.deleteMany({
+    platform,
+    campaignKey: campaignKey ? String(campaignKey).trim().toLowerCase() : null,
+    weekOf: range,
+  });
   return { deleted: res.deletedCount };
 }
 

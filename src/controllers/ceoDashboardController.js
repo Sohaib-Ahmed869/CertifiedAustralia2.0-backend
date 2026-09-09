@@ -57,14 +57,17 @@ module.exports = {
       return res.status(400).json({ message: 'weekKey and platforms are required' });
     }
 
-    // Upsert each (week, platform) cell — one record per cell, notes preserved,
-    // amount 0 clears it. Prevents the duplicate rows the old create-only path made.
+    // Upsert each (week, platform, campaign) cell — one record per cell, notes
+    // preserved, amount 0 clears it. Prevents the duplicate rows the old
+    // create-only path made. `campaignKey` is optional: absent means the
+    // platform-level cell, which is every row that existed before campaigns.
     const items = [];
     for (const p of platforms) {
       if (!p.platform) continue;
       const r = await ceoDashboardService.upsertMarketingSpend({
         weekKey,
         platform: p.platform,
+        campaignKey: p.campaignKey || null,
         amount: p.amount,
         notes: p.notes,
         userId: req.user._id,
@@ -81,11 +84,13 @@ module.exports = {
   }),
 
   deleteMarketingSpend: asyncHandler(async (req, res) => {
-    const { weekKey, platform } = req.body;
+    const { weekKey, platform, campaignKey } = req.body;
     if (!weekKey || !platform) {
       return res.status(400).json({ message: 'weekKey and platform are required' });
     }
-    const result = await ceoDashboardService.deleteMarketingSpend({ weekKey, platform });
+    // Omitting campaignKey clears only the platform-level cell — each campaign's
+    // row in that week is a separate cell and is left alone.
+    const result = await ceoDashboardService.deleteMarketingSpend({ weekKey, platform, campaignKey });
     res.status(200).json(result);
   }),
 
