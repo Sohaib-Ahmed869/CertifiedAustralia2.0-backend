@@ -1936,17 +1936,76 @@ async function getWeeklyScorecard(query = {}) {
     })
   );
 
-  // Forecast revenue (new leads × avg conversion × avg revenue per paid app)
-  const allTimePaid = await Application.countDocuments({ isTest: { $ne: true }, isArchived: { $ne: true }, ...PAID_MATCH });
-  const allTimeTotal = await Application.countDocuments({ isTest: { $ne: true }, isArchived: { $ne: true }, status: { $ne: 'Archived' } });
-  const avgConvRate = allTimeTotal > 0 ? allTimePaid / allTimeTotal : 0;
+  /* ── Forecast Revenue (from New Leads) — the statistical projection ────────
+   *
+   *   forecast = new leads this period × conversion rate × average DEAL VALUE
+   *
+   * AVERAGE DEAL VALUE, NOT AVERAGE MONEY COLLECTED. This used to divide every
+   * completed payment ever taken by the number of converted applications, which
+   * is "average banked SO FAR per convert" — a different and systematically
+   * smaller number, for two compounding reasons: most students are on a payment
+   * plan, so a lead that converted last month has only a deposit against its
+   * name, and a growing book keeps adding fresh part-paid converts that pull the
+   * mean further below what a sale is actually worth. It also made this row
+   * incomparable with the Sales Pipeline row printed directly beneath it, which
+   * forecasts the FULL agreed price of each tagged lead.
+   *
+   * The value of a sale is `qualification.caPrice − Σ discounts` — the same
+   * definition `priceFloorService` enforces against and `priceFloorInfo` renders
+   * on student detail, so the forecast, the floor and the pipeline default all
+   * price a deal the same way.
+   *
+   * Both rates are ALL-TIME and are applied unchanged to the previous period's
+   * lead count, so the Prev column differs from Actual only by lead volume. That
+   * is deliberate: re-deriving the rates as they stood weeks ago would make the
+   * two columns move for reasons the CEO can't see.
+   */
+  const leadCohortMatch = { isTest: { $ne: true }, status: { $ne: 'Archived' } };
 
-  const allRevenueAgg = await Payment.aggregate([
-    { $match: { isTest: { $ne: true }, isArchived: { $ne: true }, status: 'completed', type: { $in: REVENUE_PAYMENT_TYPES } } },
-    { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
+  const [allTimePaid, allTimeTotal, dealValueAgg] = await Promise.all([
+    Application.countDocuments({ ...leadCohortMatch, ...PAID_MATCH }),
+    Application.countDocuments(leadCohortMatch),
+    Application.aggregate([
+      { $match: { ...leadCohortMatch, ...PAID_MATCH } },
+      { $lookup: { from: 'qualifications', localField: 'qualificationId', foreignField: '_id', as: 'q' } },
+      { $unwind: '$q' },
+      // An application whose qualification carries no list price cannot be
+      // valued. It is dropped from BOTH sides of the average rather than
+      // counted as a $0 sale, which would silently drag the mean down.
+      { $match: { 'q.caPrice': { $gt: 0 } } },
+      {
+        $project: {
+          value: {
+            $max: [0, { $subtract: ['$q.caPrice', { $ifNull: [{ $sum: '$discounts.amount' }, 0] }] }],
+          },
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$value' }, count: { $sum: 1 } } },
+    ]),
   ]);
-  const avgRevenuePerPaid = allTimePaid > 0 ? (allRevenueAgg[0]?.total || 0) / allTimePaid : 0;
-  const forecastRevenue = Math.round(newLeads * avgConvRate * avgRevenuePerPaid);
+
+  const avgConvRate = allTimeTotal > 0 ? allTimePaid / allTimeTotal : 0;
+  const valuedPaid = dealValueAgg[0]?.count || 0;
+  const avgDealValue = valuedPaid > 0 ? (dealValueAgg[0]?.total || 0) / valuedPaid : 0;
+  const forecastPerLead = avgConvRate * avgDealValue;
+  const forecastRevenue = Math.round(newLeads * forecastPerLead);
+  const prevForecastRevenue = Math.round(prevNewLeads * forecastPerLead);
+
+  // The inputs behind the number, returned so the row can show its own working
+  // ("1 lead x 26% x $4,000"). A projection nobody can reproduce gets ignored —
+  // this is what makes the figure checkable without reading the source.
+  const forecastBasis = {
+    newLeads,
+    prevNewLeads,
+    convertedLeads: allTimePaid,
+    cohortLeads: allTimeTotal,
+    convRate: avgConvRate,
+    avgDealValue: Math.round(avgDealValue),
+    // Converted applications that could actually be priced — below
+    // `convertedLeads` when a qualification is missing its caPrice.
+    valuedLeads: valuedPaid,
+    perLead: Math.round(forecastPerLead),
+  };
 
   // ── Sales pipeline forecast — what the SALES TEAM committed to this period ──
   // The statistical forecast above multiplies this period's lead count by an
@@ -2070,7 +2129,14 @@ async function getWeeklyScorecard(query = {}) {
       leads: withOverride('leads', { actual: newLeads, target: targets.leads, prev: prevNewLeads }),
       leadsBySource,
       proceededBySource,
-      forecastRevenue,
+      // Shaped like every other metric ({ actual, target, prev }) rather than a
+      // bare number, so it carries a previous period and honours a manual pin
+      // the same way. FE consumers fall back to the bare number for a frontend
+      // deployed ahead of this backend.
+      forecastRevenue: {
+        ...withOverride('forecastRevenue', { actual: forecastRevenue, target: null, prev: prevForecastRevenue }),
+        basis: forecastBasis,
+      },
       // Sales-committed forecast. `withOverride` applies here too, so the CEO
       // can still pin a number manually the way every other metric allows.
       pipelineForecast: {
