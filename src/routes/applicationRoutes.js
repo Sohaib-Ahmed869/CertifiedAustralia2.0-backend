@@ -49,6 +49,12 @@ router.get('/admin-list', authorize(...STAFF_ROLES), controller.adminList);
 router.get('/admin-export', authorize(...STAFF_ROLES), controller.adminExportCsv);
 router.get('/notes/search', controller.searchNotes);
 
+// Scorecard pipeline tagging (sales team). Marketing is deliberately absent —
+// it reads the forecast on the dashboard but does not commit leads into it.
+const SALES_ROLES = ['Admin', 'CEOReportingManager', 'Agent'];
+// Literal path, so it must stay above /:id like the routes above it.
+router.get('/scorecard-forecast/weeks', authorize(...SALES_ROLES), controller.getScorecardForecastWeeks);
+
 // Optimized student detail — full app + lightweight siblings
 router.get('/student/:studentId/detail/:id', controller.getStudentDetail);
 
@@ -64,6 +70,10 @@ router.patch('/:id/source', controller.updateSource);
 // a staff action — the student answered it once at sign-up and can't edit it.
 router.patch('/:id/hear-about', authorize(...STAFF_ROLES), controller.updateHearAbout);
 router.patch('/:id/lead-status', controller.updateLeadStatus);
+// Staff only — the `:id` ownership guard lets a Student through on their own
+// application, and a student must never be able to write the sales forecast.
+router.patch('/:id/scorecard-forecast', authorize(...SALES_ROLES), controller.setScorecardForecast);
+router.delete('/:id/scorecard-forecast', authorize(...SALES_ROLES), controller.clearScorecardForecast);
 router.patch('/:id/assign-rto', controller.assignRTO);
 router.post('/:id/send-to-rto-portal', controller.sendToRTOPortal);
 // Staff only — the ownership guard above lets a Student through on their own :id,

@@ -432,6 +432,35 @@ const applicationSchema = new mongoose.Schema(
         changedByName: { type: String },
       },
     ],
+    /**
+     * SCORECARD PIPELINE TAG — the sales team's own forecast for this lead.
+     *
+     * An agent tags a HOT lead into the scorecard week they expect the money to
+     * land in, with the amount of the agreed price they expect to collect. The
+     * Weekly Scorecard sums these into "Forecast Revenue (Sales Pipeline)",
+     * alongside (not replacing) the statistical forecast.
+     *
+     * `weekKey` is the identity an agent picks; `weekStart` is derived from it
+     * server-side and is what the scorecard actually queries on — a range match
+     * is the only thing that works for both the weekly and the monthly view,
+     * where a month spans four or five week keys. Never write one without the
+     * other, and never let a client supply `weekStart`.
+     *
+     * Eligibility is re-checked at READ time against the application's CURRENT
+     * `color`, so a lead that cools off drops out of the forecast on its own.
+     * The tag is deliberately left in place when that happens — the agent needs
+     * to see why their number moved.
+     */
+    scorecardForecast: {
+      weekKey: { type: String, default: null },    // ISO week, e.g. '2026-W38'
+      weekStart: { type: Date, default: null },    // Monday 00:00 Sydney, derived
+      amount: { type: Number, default: 0 },        // expected collection, AUD
+      note: { type: String, default: '' },
+      colorAtTag: { type: String, default: '' },   // lead colour when tagged (audit)
+      taggedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      taggedByName: { type: String, default: '' },
+      taggedAt: { type: Date, default: null },
+    },
     // Reference letter template request tracking
     refLetterRequested: {
       type: Boolean,
@@ -484,6 +513,9 @@ applicationSchema.index({ assignedRTOId: 1 });
 applicationSchema.index({ studentId: 1, status: 1 });
 // Subdocument _ids are not indexed by default — RTO document links resolve by this.
 applicationSchema.index({ 'rtoSubmissions._id': 1 });
+// Scorecard pipeline lookup: the forecast reads one week (or a month of weeks)
+// of HOT tagged leads. Colour leads because it is the more selective of the two.
+applicationSchema.index({ color: 1, 'scorecardForecast.weekStart': 1 });
 
 // ── Status history tracking ──────────────────────────────────────────
 // Record every journey-stage transition (used by the Timeline tab to show

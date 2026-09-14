@@ -13,7 +13,7 @@ const scorecardTargetSchema = new mongoose.Schema({
   // Weekly/monthly review notes (EOS scorecard meeting notes)
   notes: { type: String, default: '' },
   // Per-metric manual overrides: { [metricKey]: { actual: Number|null, status: String|null } }
-  // metricKey ∈ revenue|leads|appsPaid|appsCompleted|certsReleased|forecastRevenue
+  // metricKey ∈ revenue|leads|appsPaid|appsCompleted|certsReleased|forecastRevenue|pipelineForecast
   // status ∈ on_track|close|off_track|not_scored
   metricOverrides: { type: mongoose.Schema.Types.Mixed, default: {} },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

@@ -11,6 +11,7 @@ const Payment = require('../models/Payment');
 const appEmails = require('./applicationEmailService');
 const rtoDocAccess = require('./rtoDocAccessService');
 const { SIGNUP_DISCOUNT_AMOUNT } = require('../config/pricing');
+const { currentIsoWeekLabel, addIsoWeeks, isoWeekStartUtc } = require('../utils/aestTime');
 
 // ── Journey stage ordering ───────────────────────────────────────────────
 // Mirrors the `status` enum in models/Application.js, in journey order.
@@ -259,6 +260,105 @@ const updateHearAbout = async (applicationId, value) => {
 };
 
 const LEAD_COLORS = ['red', 'orange', 'purple', 'yellow', 'gray', 'green', 'pink', 'lightblue', 'turquoise', ''];
+
+/* ── Scorecard pipeline tagging ──────────────────────────────────────
+ * An agent nominates the scorecard week a HOT lead's money is expected in, and
+ * how much of the agreed price they expect. See the `scorecardForecast` note on
+ * the Application model for why the tag stores both a week key and a derived
+ * week-start instant, and why eligibility is re-checked on read.
+ * ────────────────────────────────────────────────────────────────── */
+
+// The lead colour that may be forecast. Only Hot — the client's rule is that a
+// pipeline number means something precisely because it is not everything.
+const FORECASTABLE_COLOR = 'red';
+
+// How many weeks ahead of the current one may be tagged. Four buckets total
+// (this week + 3), so nothing can be parked in a week nobody will review.
+const FORECAST_WEEKS_AHEAD = 3;
+
+/** The week keys an agent may tag right now: this Sydney week and the next 3. */
+const forecastableWeekKeys = () => {
+  const current = currentIsoWeekLabel();
+  const keys = [current];
+  for (let i = 1; i <= FORECAST_WEEKS_AHEAD; i += 1) keys.push(addIsoWeeks(current, i));
+  return keys;
+};
+
+/**
+ * Tag (or re-tag) an application into a scorecard week.
+ *
+ * Refuses a lead that is not currently Hot: the tag is a claim about a lead the
+ * agent is actively closing, and letting a cold lead in is how the old
+ * statistical forecast lost the client's trust in the first place.
+ */
+const setScorecardForecast = async (applicationId, { weekKey, amount, note } = {}, actor = {}) => {
+  const key = (weekKey ?? '').toString().trim().toUpperCase();
+  const allowed = forecastableWeekKeys();
+  if (!allowed.includes(key)) {
+    throw new AppError(
+      `Scorecard week must be the current week or one of the next ${FORECAST_WEEKS_AHEAD} (${allowed.join(', ')})`,
+      400
+    );
+  }
+
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new AppError('Forecast amount must be a positive number', 400);
+  }
+
+  const current = await Application.findById(applicationId).select('color').lean();
+  if (!current) throw new AppError('Application not found', 404);
+  if ((current.color || '') !== FORECASTABLE_COLOR) {
+    throw new AppError('Only Hot leads can be added to the scorecard pipeline', 400);
+  }
+
+  // `weekStart` is derived here and never accepted from the caller — it is what
+  // the scorecard aggregation matches on, so it must agree with `weekKey`.
+  const application = await Application.findByIdAndUpdate(
+    applicationId,
+    {
+      $set: {
+        scorecardForecast: {
+          weekKey: key,
+          weekStart: isoWeekStartUtc(key),
+          amount: Math.round(value * 100) / 100,
+          note: (note ?? '').toString().trim().slice(0, 300),
+          colorAtTag: current.color || '',
+          taggedBy: actor.userId || undefined,
+          taggedByName: actor.userName || '',
+          taggedAt: new Date(),
+        },
+      },
+    },
+    { new: true, runValidators: true }
+  )
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .lean();
+
+  if (!application) throw new AppError('Application not found', 404);
+  return application;
+};
+
+/** Remove an application from the scorecard pipeline entirely. */
+const clearScorecardForecast = async (applicationId) => {
+  const application = await Application.findByIdAndUpdate(
+    applicationId,
+    {
+      $set: {
+        scorecardForecast: {
+          weekKey: null, weekStart: null, amount: 0, note: '',
+          colorAtTag: '', taggedBy: undefined, taggedByName: '', taggedAt: null,
+        },
+      },
+    },
+    { new: true, runValidators: true }
+  )
+    .populate('studentId industryId qualificationId assignedAgentId assignedRTOId paymentPlanId certificateId')
+    .lean();
+
+  if (!application) throw new AppError('Application not found', 404);
+  return application;
+};
 
 const updateLeadStatus = async (applicationId, color, actor = {}) => {
   const next = (color ?? '').toString().trim().toLowerCase();
@@ -2168,6 +2268,10 @@ module.exports = {
   updateSource,
   updateHearAbout,
   updateLeadStatus,
+  setScorecardForecast,
+  clearScorecardForecast,
+  forecastableWeekKeys,
+  FORECASTABLE_COLOR,
   markPaymentProceeded,
   sendToRTOPortal,
   sendRTOSubmission,

@@ -78,6 +78,24 @@ module.exports = {
     });
     res.status(200).json({ item: result });
   }),
+  setScorecardForecast: asyncHandler(async (req, res) => {
+    const userName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email;
+    const result = await service.setScorecardForecast(
+      req.params.id,
+      { weekKey: req.body.weekKey, amount: req.body.amount, note: req.body.note },
+      { userId: req.user._id, userName }
+    );
+    res.status(200).json({ item: result });
+  }),
+  clearScorecardForecast: asyncHandler(async (req, res) => {
+    const result = await service.clearScorecardForecast(req.params.id);
+    res.status(200).json({ item: result });
+  }),
+  // The weeks currently open for tagging — the picker renders exactly these, so
+  // it can never offer a week the service would reject.
+  getScorecardForecastWeeks: asyncHandler(async (req, res) => {
+    res.status(200).json({ weeks: service.forecastableWeekKeys() });
+  }),
   sendToRTOPortal: asyncHandler(async (req, res) => {
     const result = await service.sendToRTOPortal(req.params.id, req.body.rtoUserId);
     res.status(200).json({ item: result });

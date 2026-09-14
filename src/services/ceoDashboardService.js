@@ -224,7 +224,10 @@ function dateFilter(dateFrom, dateTo) {
  * Mirrors `utils/aestTime.js`, which owns the DST-aware conversion itself.
  * ────────────────────────────────────────────────────────────────── */
 
-const { AEST_TZ, aestDateKey, aestWallToUtc } = require('../utils/aestTime');
+const {
+  AEST_TZ, aestDateKey, aestWallToUtc,
+  isoWeekLabel, isoWeekStartUtc,
+} = require('../utils/aestTime');
 
 /** The Sydney civil date an instant falls on, as a UTC-midnight Date. */
 function civilOf(date) {
@@ -272,15 +275,12 @@ function monthStartInstant(year, month) {
 
 /**
  * Get ISO week label (e.g. '2026-W24') for the SYDNEY week an instant falls in.
+ * Delegates to `utils/aestTime` — the same helper an agent's scorecard-week tag
+ * is validated against, so a tagged week and a reported week are always the
+ * same week.
  */
 function getISOWeekLabel(date) {
-  // Thursday of this ISO week decides the year the week is numbered in.
-  const thursday = addCivilDays(civilOf(date), 3 - ((civilOf(date).getUTCDay() + 6) % 7));
-  const week1 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
-  const weekNum = 1 + Math.round(
-    ((thursday - week1) / 86400000 - 3 + ((week1.getUTCDay() + 6) % 7)) / 7
-  );
-  return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+  return isoWeekLabel(date);
 }
 
 /** Sydney month key ('2026-09') for an instant. */
@@ -1377,11 +1377,10 @@ async function getMarketing(query = {}) {
  * (Monday 00:00 Australia/Sydney). Inverse of `getISOWeekLabel`.
  */
 function getWeekStartFromLabel(weekLabel) {
-  const [year, weekNum] = String(weekLabel).split('-W').map(Number);
-  // Jan 4 is always in ISO week 1, so its Monday anchors the year.
-  const jan4 = new Date(Date.UTC(year, 0, 4));
-  const monday = addCivilDays(jan4, -((jan4.getUTCDay() + 6) % 7) + (weekNum - 1) * 7);
-  return civilToInstant(monday);
+  // `weekKey` reaches here straight off the query string, so a malformed label
+  // is reachable from the client. Falling back to the current week beats the
+  // Invalid Date this used to return, which poisoned every downstream $match.
+  return isoWeekStartUtc(weekLabel) || weekStartInstant(new Date());
 }
 
 /** Monday instant → ISO week key like '2026-W29'. */
@@ -1949,6 +1948,75 @@ async function getWeeklyScorecard(query = {}) {
   const avgRevenuePerPaid = allTimePaid > 0 ? (allRevenueAgg[0]?.total || 0) / allTimePaid : 0;
   const forecastRevenue = Math.round(newLeads * avgConvRate * avgRevenuePerPaid);
 
+  // ── Sales pipeline forecast — what the SALES TEAM committed to this period ──
+  // The statistical forecast above multiplies this period's lead count by an
+  // all-time conversion rate; this one sums the amounts agents actually tagged
+  // onto named leads. They answer different questions and both are reported.
+  //
+  // Matched on `scorecardForecast.weekStart` (a Date) rather than the week key,
+  // because a MONTH view spans four or five week keys and a range match covers
+  // both period modes with one query. `color: 'red'` is re-asserted here, not
+  // trusted from tag time — a lead that has cooled since being tagged drops out
+  // of the number on its own, which is the whole point of checking on read.
+  const pipelineMatch = {
+    isTest: { $ne: true },
+    isArchived: { $ne: true },
+    status: { $ne: 'Archived' },
+    color: 'red',
+    'scorecardForecast.weekStart': { $gte: weekStart, $lt: weekEnd },
+    'scorecardForecast.amount': { $gt: 0 },
+  };
+
+  const [pipelineAgg, prevPipelineAgg, pipelineRows] = await Promise.all([
+    Application.aggregate([
+      { $match: pipelineMatch },
+      { $group: { _id: null, total: { $sum: '$scorecardForecast.amount' }, count: { $sum: 1 } } },
+    ]),
+    Application.aggregate([
+      {
+        $match: {
+          ...pipelineMatch,
+          'scorecardForecast.weekStart': { $gte: prevStart, $lt: prevEnd },
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$scorecardForecast.amount' }, count: { $sum: 1 } } },
+    ]),
+    // The named leads behind the number. The CEO's first question about a
+    // forecast is always "which deals?", so the card lists them rather than
+    // making someone cross-reference the Students page.
+    Application.find(pipelineMatch)
+      .select('applicationId scorecardForecast qualificationId studentId assignedAgentId')
+      .populate('studentId', 'firstName lastName')
+      .populate('qualificationId', 'name caPrice')
+      .populate('assignedAgentId', 'firstName lastName')
+      .sort({ 'scorecardForecast.amount': -1 })
+      .limit(100)
+      .lean(),
+  ]);
+
+  const nameOf = (u) => (u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : '');
+  const pipelineForecast = {
+    total: Math.round(pipelineAgg[0]?.total || 0),
+    count: pipelineAgg[0]?.count || 0,
+    prev: Math.round(prevPipelineAgg[0]?.total || 0),
+    prevCount: prevPipelineAgg[0]?.count || 0,
+    // `items` is capped; `count` above is the true total, so a 101st tagged
+    // lead still counts toward the money even though it isn't listed.
+    truncated: (pipelineAgg[0]?.count || 0) > pipelineRows.length,
+    items: pipelineRows.map((a) => ({
+      id: String(a._id),
+      applicationId: a.applicationId,
+      studentName: nameOf(a.studentId) || '—',
+      qualification: a.qualificationId?.name || '',
+      agentName: nameOf(a.assignedAgentId),
+      amount: a.scorecardForecast?.amount || 0,
+      weekKey: a.scorecardForecast?.weekKey || '',
+      note: a.scorecardForecast?.note || '',
+      taggedByName: a.scorecardForecast?.taggedByName || '',
+      taggedAt: a.scorecardForecast?.taggedAt || null,
+    })),
+  };
+
   // Load targets: week-specific first, then 'default', then hardcoded fallback
   const weekLabel = getISOWeekLabel(weekStart);
   const weekTargetDoc = await ScorecardTarget.findOne({ weekKey: weekLabel }).lean();
@@ -2003,6 +2071,12 @@ async function getWeeklyScorecard(query = {}) {
       leadsBySource,
       proceededBySource,
       forecastRevenue,
+      // Sales-committed forecast. `withOverride` applies here too, so the CEO
+      // can still pin a number manually the way every other metric allows.
+      pipelineForecast: {
+        ...pipelineForecast,
+        ...withOverride('pipelineForecast', { actual: pipelineForecast.total, target: null, prev: pipelineForecast.prev }),
+      },
       appsPaid: withOverride('appsPaid', { actual: appsPaid, target: targets.appsPaid, prev: prevAppsPaid }),
       appsCompleted: withOverride('appsCompleted', { actual: appsCompleted, target: targets.appsCompleted, prev: prevAppsCompleted }),
       certsReleased: withOverride('certsReleased', { actual: certsReleased, target: targets.certsReleased, prev: prevCerts }),
