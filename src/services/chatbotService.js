@@ -361,15 +361,20 @@ const handleDocsNeeded = async (ctx) => {
     return response;
   }
 
-  // SWMS and Visual Evidence share the same trade-industry gate
+  // SWMS and Visual Evidence are both industry-gated, but on DIFFERENT lists —
+  // SWMS is a trade/site WHS document, so beauty therapy & hairdressing is
+  // asked for photos/videos only. Mirrors `lib/documentRequirements.js`.
   const VISUAL_EVIDENCE_INDUSTRIES = ['automotive', 'building & construction', 'hospitality', 'information & communications technology', 'beauty therapy & hairdressing'];
-  const isTradeIndustry = VISUAL_EVIDENCE_INDUSTRIES.some((n) => (ctx.industryName || '').toLowerCase().includes(n));
+  const SWMS_INDUSTRIES = ['automotive', 'building & construction', 'hospitality', 'information & communications technology'];
+  const industryName = (ctx.industryName || '').toLowerCase();
+  const isTradeIndustry = VISUAL_EVIDENCE_INDUSTRIES.some((n) => industryName.includes(n));
+  const needsSWMS = SWMS_INDUSTRIES.some((n) => industryName.includes(n));
 
   // Generic document list
   const docs = [
     '**Identity Documents** (100+ points required) — combine from: Driver\'s Licence (40pts), Passport (70pts), Birth Certificate (70pts), Medicare Card (25pts), ID Card (40pts), Credit Card (15pts), Australian Citizenship (70pts)',
     '**Educational Documents** — USI VET Transcript, USI Portal Screenshot, Previous Qualifications',
-    `**Employment Evidence** — Resume, Employment Letter, Reference One, Reference Two, ${isTradeIndustry ? 'SWMS (Safe Work Method Statement), ' : ''}Payslips/Invoices (at least 3)`,
+    `**Employment Evidence** — Resume, Employment Letter, Reference One, Reference Two, ${needsSWMS ? 'SWMS (Safe Work Method Statement), ' : ''}Payslips/Invoices (at least 3)`,
   ];
 
   let response = `For your **${ctx.qualificationName}** application, you'll need:\n\n${docs.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n\n`;

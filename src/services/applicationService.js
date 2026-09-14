@@ -910,19 +910,26 @@ const updateStatus = async (applicationId, status) => {
     eduRequired.push('Previous Qualifications');
     eduRequired.forEach((name) => { if (!uploadedFields.has(name)) missing.push(name); });
 
-    // Trade-industry gate — drives both the SWMS and the Visual Evidence requirements.
+    // Industry gates for the two conditional requirements. SWMS is a trade/site
+    // WHS document, so its list is NARROWER than Visual Evidence's — beauty
+    // therapy & hairdressing (Barbering) supplies photos/videos but no SWMS.
     // Mirrored on the frontend in `lib/documentRequirements.js`.
     const VISUAL_EVIDENCE_INDUSTRIES = [
       'automotive', 'building & construction', 'hospitality',
       'information & communications technology', 'beauty therapy & hairdressing',
     ];
+    const SWMS_INDUSTRIES = [
+      'automotive', 'building & construction', 'hospitality',
+      'information & communications technology',
+    ];
     const industryName = (typeof app.industryId === 'object' ? app.industryId?.name : '').toLowerCase();
     const isTradeIndustry = VISUAL_EVIDENCE_INDUSTRIES.some((n) => industryName.includes(n));
+    const needsSWMS = SWMS_INDUSTRIES.some((n) => industryName.includes(n));
 
     // 3. Employment Details
     const empRequired = [
       { name: 'Resume' }, { name: 'Employment Letter' }, { name: 'Reference One' },
-      ...(isTradeIndustry ? [{ name: 'SWMS' }] : []),
+      ...(needsSWMS ? [{ name: 'SWMS' }] : []),
       { name: 'Payslips/Invoices', min: 3 },
     ];
     empRequired.forEach((d) => {
