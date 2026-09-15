@@ -40,10 +40,13 @@ function escapeRegex(v) {
 // (not an inflow), refund/reversed, and rtoPayable/rtoPayment (money OUT to RTOs).
 const INCOME_TYPES = ['upfront', 'plan', 'manualMarkPaid'];
 
-// "Ready for Assessment" — student obligations done, in or past RTO handoff.
+// "Ready for Assessment" — student obligations done, at or past RTO handoff but
+// NOT yet certified. Certificate stages are deliberately excluded: assessment is
+// finished by then, so a certified student sitting in this filter reads as
+// outstanding work that no longer exists.
 const READY_STATUSES = [
   'StudentCompleted', 'SentToRTO', 'WaitingForVerification',
-  'ReadyForRTOPayment', 'RTOInvoiceUploaded', 'CertificateGenerated', 'CertificateIssued',
+  'ReadyForRTOPayment', 'RTOInvoiceUploaded',
 ];
 
 /**
