@@ -25,9 +25,19 @@ const TTL_DAYS = () => {
   return Number.isFinite(raw) && raw > 0 ? raw : 30;
 };
 
-/** Public base URL of THIS backend — the links are opened from the RTO's inbox. */
+/**
+ * Public base URL of THIS backend — the links are opened from the RTO's inbox.
+ *
+ * Whatever this resolves to is BAKED INTO EVERY EMAIL AT SEND TIME and cannot be
+ * repaired afterwards: if the backend later moves host, every link already in an
+ * RTO's inbox points at the old one. `BACKEND_URL` is honoured as a fallback so
+ * this agrees with the campaign/sequence pixels, Xero's redirect URI and the
+ * Square webhook URL — all of which read the same pair. Setting only one of them
+ * used to leave RTO links on `localhost` while the rest of the app looked fine.
+ */
 const publicBase = () =>
-  (process.env.API_PUBLIC_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  (process.env.API_PUBLIC_URL || process.env.BACKEND_URL || 'http://localhost:5000')
+    .replace(/\/+$/, '');
 
 const linkExpiryFrom = (sentAt = new Date()) =>
   new Date(sentAt.getTime() + TTL_DAYS() * 24 * 60 * 60 * 1000);
