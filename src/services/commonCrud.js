@@ -106,7 +106,11 @@ const buildCrud = (Model, options = {}) => {
       const searchTerm = filter.search;
       delete filter.search;
       if (searchTerm) {
-        const regex = { $regex: searchTerm, $options: 'i' };
+        // Escape regex metacharacters — a search box is a literal-text field, and
+        // an unescaped term like a phone number ("+61...") is an invalid regex,
+        // which Mongo rejects with a 500 rather than an empty result.
+        const escaped = String(searchTerm).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = { $regex: escaped, $options: 'i' };
         const orConditions = [
           { name: regex },
           { title: regex },
@@ -115,6 +119,18 @@ const buildCrud = (Model, options = {}) => {
           { lastName: regex },
           { applicationId: regex },
         ];
+
+        // Phone is how staff most often identify a caller, so search it where the
+        // model has one (User/Student). Guarded by the schema path so a model
+        // without the field never gets a filter it can't match.
+        if (Model.schema.path('phone')) {
+          orConditions.push({ phone: regex });
+          // Staff type a number the way it was read to them ("0412 345 678")
+          // while it is stored E.164 ("+61412345678"), so also match on the
+          // digits alone, minus the national trunk '0'.
+          const digits = String(searchTerm).replace(/\D/g, '').replace(/^0/, '');
+          if (digits.length >= 4) orConditions.push({ phone: { $regex: digits, $options: 'i' } });
+        }
 
         // For models with studentId field: also search by student name/email
         if (Model.schema.path('studentId')) {
