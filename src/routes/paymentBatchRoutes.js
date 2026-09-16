@@ -91,6 +91,18 @@ router.post('/:id/items/:itemId/unpay', asyncHandler(async (req, res) => {
   res.json({ item });
 }));
 
+// Delete a row. `scope` picks how far it reaches — queue | payable | invoice.
+// POST, not DELETE: it carries a body (scope + reason) and the widest scope
+// deletes the RTO invoice, not just the row addressed in the path.
+router.post('/:id/items/:itemId/remove', asyncHandler(async (req, res) => {
+  const result = await paymentBatchService.removeItem(req.params.id, req.params.itemId, {
+    scope: req.body.scope,
+    reason: req.body.reason,
+    userId: req.user._id,
+  });
+  res.json(result);
+}));
+
 router.post('/:id/items/:itemId/move', asyncHandler(async (req, res) => {
   const item = await paymentBatchService.moveItem(req.params.id, req.params.itemId, req.body.weekKey);
   res.json({ item });

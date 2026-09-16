@@ -83,6 +83,23 @@ const rtoInvoiceSchema = new mongoose.Schema({
   },
   // Batch scheduling
   batchWeekKey: String,
+  // Set when an admin deletes this invoice's row out of a pay-run week.
+  //
+  // THIS FLAG IS WHAT MAKES THE DELETE STICK. `paymentBatchService.reconcile()`
+  // re-queues every invoice it finds unqueued — on the nightly 1:30 AM cron and
+  // on every "Refresh Queue" click — so pulling the batch row on its own is
+  // undone by morning. `buildItemSnapshot` returns null for a flagged invoice,
+  // which is the same door a rejected invoice leaves by.
+  excludedFromBatch: {
+    type: Boolean,
+    default: false,
+  },
+  excludedFromBatchAt: Date,
+  excludedFromBatchBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  excludedFromBatchReason: String,
   // Audit
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,

@@ -91,6 +91,8 @@ const updateConfig = async (payload = {}, userId = null) => {
  */
 const buildItemSnapshot = async (invoice) => {
   if (!invoice || EXCLUDED_INVOICE_STATUSES.includes(invoice.status)) return null;
+  // Deleted out of the queue by an admin — reconcile() must not put it back.
+  if (invoice.excludedFromBatch) return null;
 
   const app = invoice.applicationId
     ? await Application.findById(invoice.applicationId)
@@ -865,6 +867,140 @@ const moveItem = async (batchId, itemId, targetWeekKeyInput) => {
 };
 
 // ---------------------------------------------------------------------------
+// Deleting a row
+// ---------------------------------------------------------------------------
+
+const REMOVE_SCOPES = ['queue', 'payable', 'invoice'];
+
+/**
+ * Void the payable the upload raised — but only when nothing else justifies it.
+ *
+ * THE PAYABLE IS RAISED ONCE, AND NOT BY THIS SERVICE. `applicationService`
+ * creates it on the transition to RTOInvoiceUploaded, so a second invoice for an
+ * application already sitting at that status raises no second payable: two
+ * duplicate rows sit above a SINGLE debt. Reversing it while the twin row is
+ * still queued would zero out money that really is owed and leave the surviving
+ * row unpayable. Hence the count — and hence the boolean this returns, which the
+ * UI reports so a skipped reversal is never silent.
+ *
+ * Reversed, never deleted: it is a financial record.
+ */
+async function reverseAutoPayable({ applicationId, invoiceId, weekKey, reason }) {
+  if (!applicationId) return false;
+
+  const remaining = await RTOInvoice.countDocuments({
+    ...(invoiceId ? { _id: { $ne: invoiceId } } : {}),
+    applicationId,
+    status: { $ne: 'rejected' },
+    // An already-excluded invoice has no row to be paid from, so it can't be
+    // what keeps the debt alive.
+    excludedFromBatch: { $ne: true },
+  });
+  if (remaining > 0) return false;
+
+  const payable = await Payment.findOne({
+    applicationId,
+    type: 'rtoPayable',
+    status: 'pending',
+  }).sort('-createdAt');
+  if (!payable) return false;
+
+  payable.status = 'reversed';
+  payable.notes = `${payable.notes || ''}\nReversed — row deleted from batch week ${formatWeekKey(weekKey)}${reason ? `: ${reason}` : ''}.`.trim();
+  payable.updatedAt = new Date();
+  await payable.save();
+  return true;
+}
+
+/**
+ * Delete a row an admin says shouldn't be in the pay run.
+ *
+ * THE ROW IS NOT THE RECORD — it is the pay-run view of an RTOInvoice, and the
+ * invoice is what reconcile() rebuilds from. So every scope below stamps
+ * `excludedFromBatch` on the invoice; pulling the row alone is undone by the
+ * nightly cron.
+ *
+ * Three scopes, because "this is wrong" means three different things and they
+ * are not degrees of the same action:
+ *   queue   — wrong week, or not to be paid from here. Invoice and payable stand,
+ *             so the money still reads as owed in Supplier Liability.
+ *   payable — a duplicate row. Also voids the pending payable, subject to the
+ *             guard in reverseAutoPayable above.
+ *   invoice — the upload itself was a mistake. Delegates to rtoInvoiceService,
+ *             which owns the full unwind (status revert, 21-day timer resume,
+ *             statusHistory $pull, Drive file) and pulls the batch row itself.
+ *
+ * A PAID row is refused outright in every scope — undoing settled money is
+ * markItemUnpaid's job, and routing it through a delete would lose the audit
+ * trail that reversal deliberately keeps.
+ */
+const removeItem = async (batchId, itemId, { scope = 'queue', reason, userId } = {}) => {
+  if (!REMOVE_SCOPES.includes(scope)) {
+    throw new AppError(`Unknown delete scope "${scope}"`, 400);
+  }
+
+  const batch = await PaymentBatch.findById(batchId);
+  if (!batch) throw new AppError('Batch not found', 404);
+  const item = findItem(batch, itemId);
+
+  if (item.paymentStatus === 'paid') {
+    throw new AppError('This row is already paid. Reverse the payment before deleting it.', 400);
+  }
+
+  const invoiceId = item.rtoInvoiceId || null;
+  const { weekKey } = batch;
+
+  // Full unwind — rtoInvoiceService owns it and calls removeInvoice() itself, so
+  // the row is pulled there rather than here.
+  if (scope === 'invoice') {
+    if (!invoiceId) {
+      throw new AppError('This row has no RTO invoice behind it — remove it from the pay run instead', 400);
+    }
+    const actor = userId
+      ? await require('../models/User').findById(userId).select('firstName lastName role').lean()
+      : null;
+    await require('./rtoInvoiceService').remove(String(invoiceId), { reason, actor });
+    return { item: await getById(batchId), scope, payableReversed: true };
+  }
+
+  batch.items.pull(item._id);
+  recalcTotals(batch);
+  batch.updatedAt = new Date();
+  await batch.save();
+
+  let payableReversed = false;
+
+  if (invoiceId) {
+    // `scheduled` means "queued into a pay run", which stops being true here —
+    // leaving it would badge the invoice as scheduled on the Invoices page with
+    // no row anywhere behind it. Same downgrade markItemUnpaid applies.
+    const inv = await RTOInvoice.findById(invoiceId).select('status verifiedAt').lean();
+    const status = inv?.status === 'scheduled' ? (inv.verifiedAt ? 'verified' : 'extracted') : inv?.status;
+
+    await RTOInvoice.findByIdAndUpdate(invoiceId, {
+      excludedFromBatch: true,
+      excludedFromBatchAt: new Date(),
+      excludedFromBatchBy: userId || null,
+      excludedFromBatchReason: reason || null,
+      batchWeekKey: null,
+      ...(status ? { status } : {}),
+      updatedAt: new Date(),
+    });
+
+    if (scope === 'payable') {
+      payableReversed = await reverseAutoPayable({
+        applicationId: item.applicationId,
+        invoiceId,
+        weekKey,
+        reason,
+      });
+    }
+  }
+
+  return { item: await getById(batchId), scope, payableReversed };
+};
+
+// ---------------------------------------------------------------------------
 // Xero
 // ---------------------------------------------------------------------------
 
@@ -953,6 +1089,7 @@ module.exports = {
   markItemPaid,
   markItemUnpaid,
   moveItem,
+  removeItem,
   // xero
   pushToXero,
 };
